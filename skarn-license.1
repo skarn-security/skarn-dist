@@ -1,0 +1,31 @@
+.TH "SKARN-LICENSE" "1" "2026-06-23" "skarn 0.17.0" "Skarn Manual"
+.SH NAME
+skarn\-license \- Show the active license, or install one from a file (or
+stdin)
+.SH SYNOPSIS
+\fBskarn\fR \fBlicense\fR [<file>|\-] [options]
+.SH DESCRIPTION
+Show the active license, or install one from a file (or stdin).
+.PP
+Show the active license, or install one. With no argument it reports what
+license this machine is using, where it came from, and when it expires. With a
+file argument (or \- to read stdin) it validates the license and installs it
+to the config directory, backing up any license already there. It never prints
+the license token itself, and it works without a license, so it never exits 5.
+.SH OPTIONS
+.TP
+\fB\-y\fR, \fB\-\-yes\fR
+Replace an already\-installed license without asking. Required when installing
+over an existing license from a script or from stdin, where there is no
+terminal to confirm on.
+.TP
+\fB\-\-json\fR
+Print the license status as a single JSON object (state, tier, licensee, org,
+seats, license id, issue and expiry dates, days remaining, and the source it
+was resolved from). The license token is never included.
+.SH "SEE ALSO"
+skarn(1)
+.SH COPYRIGHT
+Copyright (c) 2026 Srdjan Markovic. All rights reserved. Skarn is proprietary
+software; see the LICENSE distributed with the binary and
+https://getskarn.com.

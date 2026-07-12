@@ -1,0 +1,85 @@
+.TH "SKARN-SETUP" "1" "2026-06-23" "skarn 0.17.0" "Skarn Manual"
+.SH NAME
+skarn\-setup \- Wire the skarn guard hook into detected AI coding agents
+(merge\-based, reversible), then verify it with the guard self\-test
+.SH SYNOPSIS
+\fBskarn\fR \fBsetup\fR [options]
+.SH DESCRIPTION
+Wire the skarn guard hook into detected AI coding agents (merge\-based,
+reversible), then verify it with the guard self\-test.
+.PP
+Guided onboarding: detect installed AI coding agents (Claude Code, Cursor,
+Codex CLI), merge the skarn guard hook into each one's native config in audit
+mode, and prove the wiring with the guard self\-test. Existing foreign hooks
+are never touched; every modified file is backed up first
+(*.skarn\-bak.<timestamp>) and rewritten atomically; a target file that does
+not parse as JSON is refused, never overwritten. On a terminal it runs an
+interactive wizard with default\-yes prompts; \-\-yes accepts everything,
+\-\-print writes nothing.
+.SH OPTIONS
+.TP
+\fB\-\-agent\fR \fIname\fR
+Target agents, repeatable or comma\-separated. Default: all detected (an agent
+is detected when its config directory exists or its CLI is on PATH); naming an
+agent explicitly also targets it when undetected. One of: claude, cursor,
+codex, all.
+.TP
+\fB\-\-mode\fR \fImode\fR
+Guard mode written into the hook commands. Audit records would\-be verdicts to
+the guard log without blocking; start there, review the log, then flip to
+enforce. Enforce needs a license to actually block; an unlicensed guard runs
+audit\-only regardless. One of: audit, enforce. The default is audit.
+.TP
+\fB\-\-strict\fR
+Add \-\-strict to the generated guard commands (also gates Read operations;
+fail\-closed semantics on Codex).
+.TP
+\fB\-\-log\fR \fIpath\fR
+Guard log path wired into the hook commands as the SKARN_GUARD_LOG prefix;
+pass none to disable logging. The Codex commandWindows form carries no prefix
+(set the variable in the environment on Windows). The default is
+~/.cache/skarn/guard\-<agent>\-audit.jsonl.
+.TP
+\fB\-\-command\fR \fIpath\fR
+The guard executable invoked by the hook commands. The default resolves this
+binary's absolute path (preferring the stable Homebrew <prefix>/bin symlink
+over the versioned Cellar path) because GUI\-launched hosts like Cursor do not
+inherit brew's PATH; pass skarn to opt into PATH\-relative. The default is
+this binary's absolute path.
+.TP
+\fB\-\-scope\fR \fIscope\fR
+Write user\-level configs (~/.claude/settings.json, ~/.cursor/hooks.json,
+~/.codex/hooks.json) or project\-level ones (./.claude, ./.cursor, ./.codex
+relative to the working directory). One of: user, project. The default is
+user.
+.TP
+\fB\-\-print\fR
+Print the final per\-agent config to stdout and write nothing; the
+paste\-it\-yourself and fleet\-template path.
+.TP
+\fB\-\-format\fR \fIfmt\fR
+With \-\-print: json emits one {agent, path, content} envelope per agent for
+machine consumption. One of: text, json. The default is text.
+.TP
+\fB\-y\fR, \fB\-\-yes\fR
+Non\-interactive: accept every prompt's default. Required when running without
+a terminal.
+.TP
+\fB\-\-update\fR
+Only touch agents whose config already carries skarn entries; the
+audit\-to\-enforce flip is skarn setup \-\-update \-\-mode enforce.
+.TP
+\fB\-\-remove\fR
+Surgically remove skarn\-owned hook entries, dropping any matcher groups and
+event arrays they leave empty. Foreign hooks are untouched, the file itself is
+never deleted, and backups from earlier runs are kept.
+.TP
+\fB\-\-json\fR
+Print a machine\-readable result summary (per agent: path, action, backup,
+self\-test result) instead of the text report.
+.SH "SEE ALSO"
+skarn(1)
+.SH COPYRIGHT
+Copyright (c) 2026 Srdjan Markovic. All rights reserved. Skarn is proprietary
+software; see the LICENSE distributed with the binary and
+https://getskarn.com.

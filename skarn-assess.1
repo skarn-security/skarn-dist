@@ -1,0 +1,65 @@
+.TH "SKARN-ASSESS" "1" "2026-06-23" "skarn 0.17.0" "Skarn Manual"
+.SH NAME
+skarn\-assess \- Scan every AI session on this machine and print a friendly
+risk summary, with an optional shareable redacted report. Free, no config, no
+license
+.SH SYNOPSIS
+\fBskarn\fR \fBassess\fR [options]
+.SH DESCRIPTION
+Scan every AI session on this machine and print a friendly risk summary, with
+an optional shareable redacted report. Free, no config, no license.
+.PP
+The zero\-config machine\-scan wedge: scan every AI coding session on the
+machine and print a friendly risk summary, no flags and no license. \-o writes
+a shareable redacted report (HTML or Markdown); \-\-json emits the redacted
+scan for scripting. The scan is scoped by the same filters as check.
+.SH OPTIONS
+.TP
+\fB\-o\fR, \fB\-\-out\fR \fIfile\fR
+Write a self\-contained, redacted share report to this file; .md or .markdown
+renders Markdown, any other extension renders HTML.
+.TP
+\fB\-\-json\fR
+Emit the redacted scan as JSON (the same shape as the serve /api/scan view)
+for scripting, instead of the friendly summary.
+.TP
+\fB\-\-offline\fR
+Disable all network access. Assess is already egress\-free; this is the
+belt\-and\-suspenders guarantee.
+.TP
+\fB\-\-hours\fR \fIn\fR
+Scan window in hours; 0 (the default) scans every session on the machine. The
+default is 0.
+.TP
+\fB\-\-severity\fR \fIlevel\fR
+Only summarize findings at or above this severity; the default (low) scans
+everything and curates the display. One of: low, medium, high, critical. The
+default is low.
+.TP
+\fB\-\-cli\fR \fIname\fR
+Restrict the scan to one assistant's sessions. One of: claude, gemini, codex,
+cursor, copilot.
+.TP
+\fB\-\-project\fR \fIpath\fR
+Restrict the scan to sessions under this project path.
+.TP
+\fB\-\-session\fR \fIid\fR
+Assess a single session by id.
+.TP
+\fB\-\-rules\fR \fIpath\fR
+Load a custom TOML rules file in addition to the bundled rules.
+.TP
+\fB\-\-baseline\fR \fIpath\fR
+Suppress findings recorded in this accepted\-findings baseline. Without this
+flag, ~/.config/skarn/baseline.json is applied automatically when it exists. A
+directory of baselines requires a Team license; assess never gates, so an
+unlicensed directory degrades to a warning and an unsuppressed scan.
+.TP
+\fB\-\-no\-color\fR
+Disable colored output.
+.SH "SEE ALSO"
+skarn(1)
+.SH COPYRIGHT
+Copyright (c) 2026 Srdjan Markovic. All rights reserved. Skarn is proprietary
+software; see the LICENSE distributed with the binary and
+https://getskarn.com.

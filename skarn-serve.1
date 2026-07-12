@@ -1,0 +1,34 @@
+.TH "SKARN-SERVE" "1" "2026-06-23" "skarn 0.17.0" "Skarn Manual"
+.SH NAME
+skarn\-serve \- Start the local web UI (search, recent, stats, and a redacted
+scan view) bound to 127.0.0.1
+.SH SYNOPSIS
+\fBskarn\fR \fBserve\fR [options]
+.SH DESCRIPTION
+Start the local web UI (search, recent, stats, and a redacted scan view) bound
+to 127.0.0.1.
+.PP
+Control the localhost web UI. Access requires the per\-run token embedded in
+the URL the command prints at startup; opening that URL sets a session cookie,
+and scripts may pass it as a token= query parameter instead.
+.SH OPTIONS
+.TP
+\fB\-\-port\fR \fIn\fR
+Port to listen on; 0 asks the OS to assign one. Always binds 127.0.0.1 only.
+The default is 7777.
+.TP
+\fB\-\-rules\fR \fIpath\fR
+Load a custom TOML rules file in addition to the bundled rules; the web
+Security scan then also surfaces its findings.
+.TP
+\fB\-\-baseline\fR \fIpath\fR
+Suppress findings recorded in this accepted\-findings baseline; the Security
+view hides them by default behind a show/hide toggle. Without this flag,
+~/.config/skarn/baseline.json is applied automatically when it exists. A
+directory of baselines (the org form) requires a Team license.
+.SH "SEE ALSO"
+skarn(1)
+.SH COPYRIGHT
+Copyright (c) 2026 Srdjan Markovic. All rights reserved. Skarn is proprietary
+software; see the LICENSE distributed with the binary and
+https://getskarn.com.

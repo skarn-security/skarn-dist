@@ -1,0 +1,274 @@
+.TH "SKARN-GUARD" "1" "2026-06-23" "skarn 0.17.0" "Skarn Manual"
+.SH NAME
+skarn\-guard \- Real\-time pre\-execution hook for editor/agent integration;
+reads an event on stdin and emits a verdict
+.SH SYNOPSIS
+\fBskarn\fR \fBguard\fR [options]
+.SH DESCRIPTION
+Real\-time pre\-execution hook for editor/agent integration; reads an event on
+stdin and emits a verdict.
+.PP
+Control the real\-time pre\-execution hook used for editor/agent integration
+(Claude Code, Cursor, Codex CLI, and Copilot CLI).
+.SH OPTIONS
+.TP
+\fB\-\-guard\-mode\fR \fImode\fR
+audit reports only; enforce emits a deny or ask verdict. Enforce needs a
+license; an unlicensed guard runs audit\-only. One of: audit, enforce. The
+default is audit.
+.TP
+\fB\-\-strict\fR
+Also gate Read operations (credential\-file reconnaissance).
+.TP
+\fB\-\-agent\fR \fIname\fR
+Hook host (default: auto\-detect from the event shape; pass codex explicitly
+for Codex CLI, which shares Claude's event names, and copilot explicitly for
+Copilot CLI, whose Claude\-compat payloads are indistinguishable from
+Claude's). With \-\-self\-test, all (the default) tests the claude, cursor,
+and codex adapters. One of: claude, cursor, codex, copilot, all.
+.TP
+\fB\-\-self\-test\fR
+Verify the guard wiring instead of reading an event: feed two synthetic
+fixture events (one benign, one carrying a fake credential) through each
+adapter's real code path and report the verdicts, latency, and a guard\-log
+write probe. The fake credential is only ever printed redacted. Exit 0 when
+every adapter passes, 1 otherwise; works unlicensed (audit semantics).
+.SH "HOOK EVENTS"
+.SS "Claude Code"
+Claude Code fires PascalCase events with a JSON envelope on stdin. Five events
+are wired by default; the two output\-scanning events are supported but
+opt\-in because they fire on every tool result.
+.PP
+Routing: Codex shares Claude's PreToolUse and PermissionRequest names, so
+auto\-detection keys on a Codex\-only tell (turn_id, or the
+apply_patch/spawn_agent tools); a Claude event carries none of them and routes
+to the Claude adapter. VS Code Copilot also shares the envelope, so its own
+tool\-name vocabulary routes it to the Copilot adapter. The shipped Claude
+PermissionRequest hooks pass \-\-agent claude explicitly anyway.
+.PP
+Fail mode: A non\-zero guard exit fails closed on the blocking events. An
+unparseable event asks in enforce mode.
+.TP
+\fBPreToolUse\fR
+Scans tool_name plus the flattened tool_input; a Bash command is also carried
+raw so a tool description cannot poison the package parse. Enforce:
+hookSpecificOutput.permissionDecision = deny or ask, with the redacted reason
+in permissionDecisionReason. Audit: hookSpecificOutput.additionalContext.
+Wired by the shipped configs. A deny blocks the call even under
+bypassPermissions: hooks run before permission\-mode checks.
+.TP
+\fBPermissionRequest\fR
+Scans the same tool_name plus tool_input as PreToolUse, at the
+permission\-decision step. Enforce: hookSpecificOutput.decision.behavior =
+deny, with the redacted reason on the universal systemMessage. Audit:
+systemMessage. Wired by the shipped configs. A second chokepoint for a call
+PreToolUse deferred or allowed. The decision has only allow/deny and no reason
+field, so a would\-be ask degrades to deny and additionalContext is invalid
+here.
+.TP
+\fBUserPromptSubmit\fR
+Scans prompt. The channel ships content off the machine, so a secret on it is
+exfiltration. Enforce: top\-level decision = block, with the redacted reason
+in reason. Audit: hookSpecificOutput.additionalContext. Wired by the shipped
+configs. A lone secret is enough to deny here \- the destination is not
+ambiguous. The block is recoverable: the user edits and resubmits.
+.TP
+\fBUserPromptExpansion\fR
+Scans command_name and expanded_prompt. The channel ships content off the
+machine, so a secret on it is exfiltration. Enforce: top\-level decision =
+block, with the redacted reason in reason. Audit:
+hookSpecificOutput.additionalContext. Wired by the shipped configs. The
+post\-expansion text of a slash or custom command \- content UserPromptSubmit
+never sees \- gated before it reaches the model.
+.TP
+\fBTaskCreated\fR
+Scans task_title and task_description. The channel ships content off the
+machine, so a secret on it is exfiltration. Enforce: continue = false, with
+the redacted reason in stopReason (rolls the task creation back). Audit:
+systemMessage. Wired by the shipped configs. A task is subagent fan\-out, so
+it is modeled as the canonical spawn_agent tool. The event has no decision
+channel and does not support additionalContext.
+.TP
+\fBPostToolUse\fR
+Scans tool_output (falling back to tool_response) of an in\-scope tool.
+Enforce: top\-level decision = block, with the redacted reason in reason.
+Audit: hookSpecificOutput.additionalContext. Supported but opt\-in: not wired
+by the shipped configs. Output scanning: catches a secret in a tool RESULT
+before the model sees it. Opt\-in \- it fires on every tool result. Prefer
+PostToolBatch, which sees the same content once per batch.
+.TP
+\fBPostToolBatch\fR
+Scans tool_output and tool_error of every in\-scope call in tool_calls[].
+Enforce: top\-level decision = block, with the redacted reason in reason.
+Audit: hookSpecificOutput.additionalContext. Supported but opt\-in: not wired
+by the shipped configs. The batch analog of PostToolUse: one invocation per
+resolved parallel batch, so the cheaper of the two output gates. Opt\-in. The
+batch is scanned as one synthetic interaction named after its first in\-scope
+call.
+.TP
+\fBStop\fR
+Scans nothing from the event: it triggers a throttled, scoped, offline scan of
+recent sessions on this machine. Enforce: never blocks (advisory only). Audit:
+systemMessage with suppressOutput. Wired by the shipped configs. The
+session\-end advisory. At most once an hour it reports a redacted count and
+the highest severity of credential exposures found in recent sessions, and
+points at skarn assess. Never egresses, never prints a secret value.
+.SS "Cursor"
+Cursor fires camelCase events, each with its own stdin shape and its own
+verdict schema \- unlike Claude's single envelope. All four blocking events
+are wired by default.
+.PP
+Routing: The camelCase event names are unique to Cursor, so auto\-detection is
+unambiguous.
+.PP
+Fail mode: Fail\-open by default; \-\-strict plus enforce exits 2 (Cursor's
+schema\-agnostic hard block) on an unparseable event.
+.TP
+\fBbeforeShellExecution\fR
+Scans command (mapped to the canonical Bash tool). Enforce: permission = deny
+or ask, with the redacted reason in user_message and agent_message. Audit:
+none \- Cursor's blocking events carry no non\-deciding channel, so audit
+stays silent and relies on the guard log. Wired by the shipped configs.
+.TP
+\fBbeforeReadFile\fR
+Scans file_path as the input and content as the result (credential\-file recon
+and dotenv contents). Enforce: permission = deny (allow/deny only, so a
+would\-be ask degrades to deny). Audit: none (see beforeShellExecution). Wired
+by the shipped configs. Gated only under \-\-strict, exactly like Claude's
+Read; the shipped Cursor config passes \-\-strict on this event alone.
+.TP
+\fBbeforeMCPExecution\fR
+Scans tool_input, under the canonical mcp__<server>__<tool> name. Enforce:
+permission = deny or ask, with the redacted reason in user_message and
+agent_message. Audit: none (see beforeShellExecution). Wired by the shipped
+configs.
+.TP
+\fBbeforeSubmitPrompt\fR
+Scans prompt. The channel ships content off the machine, so a secret on it is
+exfiltration. Enforce: continue = false, with the redacted reason in
+user_message. Audit: none (see beforeShellExecution). Wired by the shipped
+configs. No permission channel, so a would\-be ask blocks too. The block is
+recoverable: the user edits and resubmits.
+.SS "Codex CLI"
+Codex's hook system mirrors Claude's \- PascalCase events and a
+near\-identical PreToolUse JSON \- but its verdict semantics differ:
+permissionDecision ask and a bare allow both FAIL OPEN, so a would\-be ask
+degrades to deny.
+.PP
+Routing: Codex shares Claude's event names, so pass \-\-agent codex
+explicitly. Auto\-detection falls back to a Codex\-only tell: turn_id (on
+every turn\-scoped event, PermissionRequest included) or the
+apply_patch/spawn_agent tools.
+.PP
+Fail mode: Fail\-open by default; \-\-strict plus enforce emits an explicit
+deny JSON on an unparseable event.
+.TP
+\fBPreToolUse\fR
+Scans tool_name plus the flattened tool_input; only Bash carries a raw shell
+command (apply_patch's command field is patch text). Enforce:
+hookSpecificOutput.permissionDecision = deny, with the redacted reason in
+permissionDecisionReason. Audit: continue = true plus systemMessage (Codex
+PreToolUse has no additionalContext). Wired by the shipped configs.
+.TP
+\fBPermissionRequest\fR
+Scans the same tool_name plus tool_input as PreToolUse. Enforce:
+hookSpecificOutput.decision.behavior = deny, with the redacted reason in
+message. Audit: systemMessage. Wired by the shipped configs. The
+approval\-flow gate: any deny wins, closing PreToolUse's updatedInput and ask
+fail\-open edges.
+.TP
+\fBUserPromptSubmit\fR
+Scans prompt. The channel ships content off the machine, so a secret on it is
+exfiltration. Enforce: top\-level decision = block, with the redacted reason
+in reason. Audit: systemMessage. Wired by the shipped configs.
+.TP
+\fBPostToolUse\fR
+Scans tool_response of an in\-scope tool. Enforce: top\-level decision =
+block, with the redacted reason in reason. Audit: systemMessage. Supported but
+opt\-in: not wired by the shipped configs. Output scanning. Opt\-in \- it
+fires on every tool result.
+.SS "GitHub Copilot CLI"
+The Copilot CLI's native payload is camelCase (toolName / toolArgs /
+sessionId) and carries no event\-name field, so the event is inferred from the
+field shape. Only preToolUse can actually block; the other events run full
+detection and write the audit log but cannot decide.
+.PP
+Routing: The camelCase field set is the CLI tell. A Copilot payload in
+Claude\-compat mode is byte\-indistinguishable from a real Claude event (field
+names AND tool names), so the shipped Copilot configs always pass \-\-agent
+copilot explicitly.
+.PP
+Fail mode: preToolUse fails CLOSED on a non\-zero exit, but a hook TIMEOUT
+fails OPEN (the shipped configs set timeoutSec 10).
+.TP
+\fBpreToolUse\fR
+Scans toolName plus toolArgs (an object, or a JSON string that is parsed and
+flattened). Enforce: top\-level permissionDecision = deny or ask, with the
+redacted reason in permissionDecisionReason. Audit: additionalContext. Wired
+by the shipped configs. The only enforcing gate on this host, and the only one
+where ask is a real interactive prompt rather than a degraded deny.
+.TP
+\fBpermissionRequest\fR
+Scans the same shape as preToolUse. Enforce: nothing is emitted \- detection
+and the audit log only. Audit: none. Wired by the shipped configs.
+Byte\-identical to preToolUse with no discriminator, so it cannot
+independently block. It is wired for detection coverage and the audit log.
+.TP
+\fBuserPromptSubmitted\fR
+Scans prompt. The channel ships content off the machine, so a secret on it is
+exfiltration. Enforce: nothing is emitted \- the CLI ignores this event's hook
+output. Audit: none. Wired by the shipped configs. A secret typed into a
+Copilot CLI prompt is detected and logged but NOT blocked before it reaches
+the provider \- unlike Claude Code and Codex, whose prompt\-submit hooks can
+block. A host limitation, not a Skarn one.
+.TP
+\fBpreMcpToolCall\fR
+Scans arguments, under the canonical mcp__<server>__<tool> name. Enforce:
+nothing is emitted \- this event's output controls only MCP request metadata.
+Audit: none. Supported but opt\-in: not wired by the shipped configs.
+Supported but not wired in the shipped configs: it cannot block or advise, so
+it buys detection coverage in the guard log only.
+.TP
+\fBpostToolUse\fR
+Scans toolResult. Enforce: advisory only \- never blocks. Audit:
+additionalContext. Supported but opt\-in: not wired by the shipped configs.
+Output scanning. Opt\-in \- it fires on every tool result.
+.SS "GitHub Copilot (VS Code agent mode)"
+VS Code agent mode speaks a second Copilot dialect: PascalCase event names in
+a Claude\-shaped envelope, camelCase tool_input keys, and VS Code's own
+tool\-name vocabulary (run_in_terminal, create_file, ...), which Skarn maps to
+canonical names. MCP calls arrive as PreToolUse with an mcp_<server>_<tool>
+name.
+.PP
+Routing: VS Code discovers hooks from ~/.claude/settings.json
+(chat.hookFilesLocations), so a machine already running Skarn's Claude guard
+receives VS Code Copilot events. The VS Code tool\-name vocabulary routes them
+to the Copilot adapter instead of a silent Claude fast\-allow; the shipped
+configs pin \-\-agent copilot.
+.PP
+Fail mode: VS Code blocks only on exit 2; any other non\-zero exit fails OPEN.
+.TP
+\fBPreToolUse\fR
+Scans tool_name (VS Code vocabulary, mapped to canonical) plus the flattened
+tool_input. Enforce: hookSpecificOutput.permissionDecision = deny or ask \-
+both fully honored (the exact inverse of the CLI, where the decision is
+top\-level). Audit: systemMessage. Wired by the shipped configs.
+.TP
+\fBUserPromptSubmit\fR
+Scans prompt. The channel ships content off the machine, so a secret on it is
+exfiltration. Enforce: top\-level decision = block, with the redacted reason
+in reason. Audit: systemMessage. Wired by the shipped configs. Unlike the
+Copilot CLI, the VS Code host honors a prompt\-submit block. On the cloud
+agent an ask degrades to deny (non\-interactive).
+.TP
+\fBPostToolUse\fR
+Scans tool_response. Enforce: top\-level decision = block, with the redacted
+reason in reason. Audit: systemMessage. Supported but opt\-in: not wired by
+the shipped configs. Output scanning. Opt\-in \- it fires on every tool
+result.
+.SH "SEE ALSO"
+skarn(1)
+.SH COPYRIGHT
+Copyright (c) 2026 Srdjan Markovic. All rights reserved. Skarn is proprietary
+software; see the LICENSE distributed with the binary and
+https://getskarn.com.

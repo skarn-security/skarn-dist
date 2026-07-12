@@ -1,0 +1,171 @@
+.TH "SKARN-CHECK" "1" "2026-06-23" "skarn 0.17.0" "Skarn Manual"
+.SH NAME
+skarn\-check \- Scan AI sessions for leaked credentials and attack patterns
+.SH SYNOPSIS
+\fBskarn\fR \fBcheck\fR [options]
+.SH DESCRIPTION
+Scan AI sessions for leaked credentials and attack patterns.
+.PP
+Control the security scan: which rules run, the scan window, output format,
+and CI gating.
+.SH OPTIONS
+.TP
+\fB\-\-rules\fR \fIpath\fR
+Load a custom TOML rules file in addition to the bundled rules.
+.TP
+\fB\-\-ai\-rules\fR \fIpath\fR
+Load an AI\-specific rules file.
+.TP
+\fB\-\-no\-ai\-rules\fR
+Disable the AI\-specific rules.
+.TP
+\fB\-\-no\-default\-rules\fR
+Disable the bundled detection rules.
+.TP
+\fB\-\-feed\fR \fIpath\fR
+Apply a signed maintained\-feed bundle over the baseline rules. Requires a
+Team license.
+.TP
+\fB\-\-update\-rules\fR
+Fetch and verify the latest feed from the subscriber channel, then scan.
+Requires a Team license.
+.TP
+\fB\-\-feed\-url\fR \fIurl\fR
+Feed channel URL for \-\-update\-rules; falls back to $SKARN_FEED_URL.
+Requires a Team license.
+.TP
+\fB\-\-offline\fR
+Disable all network access (the maintained\-feed fetch).
+.TP
+\fB\-\-severity\fR \fIlevel\fR
+Report only findings at or above this severity. One of: low, medium, high,
+critical. The default is medium.
+.TP
+\fB\-\-canary\-file\fR \fIpath\fR
+File of planted canary tokens, one per line; a match is a proven breach.
+.TP
+\fB\-\-check\-packages\fR
+Flag typosquatted or URL\-sourced package installs found in sessions
+(offline).
+.TP
+\fB\-\-check\-code\fR
+Flag insecure code written by the assistant during the session.
+.TP
+\fB\-\-hours\fR \fIn\fR
+Scan window in hours; 0 means no time limit. The default is 720.
+.TP
+\fB\-\-cli\fR \fIname\fR
+Restrict the scan to one assistant's sessions. One of: claude, gemini, codex,
+cursor, copilot.
+.TP
+\fB\-\-project\fR \fIpath\fR
+Restrict the scan to sessions under this project path.
+.TP
+\fB\-\-session\fR \fIid\fR
+Scan a single session by id.
+.TP
+\fB\-\-format\fR \fIfmt\fR
+Output format. ndjson is an ECS\-shaped event stream (one redacted finding per
+line) for SIEM ingest. One of: text, json, sarif, ndjson. The default is text.
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+Verbose output.
+.TP
+\fB\-\-no\-redact\fR
+Show secrets in full instead of redacting them. Use with caution.
+.TP
+\fB\-\-no\-color\fR
+Disable colored output.
+.TP
+\fB\-\-policy\fR \fIpath\fR
+Load a declarative TOML policy file (fail thresholds, required/forbidden
+rules, baseline enforcement, profile); the \-\-fail\-on\-* and \-\-profile
+flags override it. Requires a Team license.
+.TP
+\fB\-\-profile\fR \fIpreset\fR
+Output profile. enterprise keeps high\-confidence findings and dedups them.
+One of: enterprise. Requires an Enterprise license.
+.TP
+\fB\-\-fail\-on\-severity\fR \fIlevel\fR
+Exit 1 if any finding is at or above this severity. One of: low, medium, high,
+critical.
+.TP
+\fB\-\-fail\-on\-risk\fR \fI0\-100\fR
+Exit 2 if the session risk score exceeds this threshold.
+.TP
+\fB\-\-fail\-on\-scan\-error\fR
+Fail closed (exit 6) when the scan was incomplete: a tool source errored out
+of discovery, or a session's parse failed. Off by default (a partial scan
+still reports, with a stderr warning).
+.TP
+\fB\-\-baseline\fR \fIpath\fR
+Suppress findings recorded in this baseline; fail only on new findings. A
+single file is free; a directory unions every .json baseline inside it (an
+org\-shared accepted set) and requires a Team license. Without this flag,
+~/.config/skarn/baseline.json is applied automatically when it exists
+(suppression only; \-\-baseline\-create and \-\-baseline\-merge targets stay
+explicit).
+.TP
+\fB\-\-baseline\-create\fR
+Write the current findings to the \-\-baseline file as the accepted set and
+exit.
+.TP
+\fB\-\-baseline\-merge\fR \fIfile\fR
+Consolidate the \-\-baseline input (a file or a directory of per\-member
+baselines) into one distributable file and exit. Requires a Team license.
+.TP
+\fB\-\-audit\-log\fR \fIfile\fR
+Append a hash\-chained record of this scan (timestamp, policy, finding counts,
+verdict; no secrets) to this local log; detects in\-place edits and reordering
+of recorded history. Requires a Team license.
+.TP
+\fB\-\-audit\-verify\fR \fIfile\fR
+Verify an audit log's hash chain and exit (no scan). Exits non\-zero if the
+chain is broken. Needs no license.
+.SH "EXIT STATUS"
+.TP
+\fB0\fR
+Clean, or informational output only.
+.TP
+\fB1\fR
+A finding at or above the \-\-fail\-on\-severity threshold was reported. For
+setup and guard \-\-self\-test: a target was refused or a verification failed.
+For doctor: at least one check FAILED (a warning never exits nonzero, and
+\-\-json always exits 0).
+.TP
+\fB2\fR
+The session risk score exceeded the \-\-fail\-on\-risk threshold. For setup:
+no terminal to prompt on and no \-\-yes; the exact non\-interactive command is
+printed.
+.TP
+\fB3\fR
+A canary token was triggered (a proven breach). This overrides every other
+gate.
+.TP
+\fB4\fR
+A policy precondition was not met: a required rule is missing, or the policy
+requires a baseline and none was supplied.
+.TP
+\fB5\fR
+A requested paid feature is not covered by the license (a Team or Enterprise
+flag without a matching license). Refused before any scan; the free core does
+not exit 5.
+.TP
+\fB6\fR
+The scan could not complete: session discovery or the scan itself failed.
+Fail\-closed \- the result is not trustworthy, so it is never reported as
+clean.
+.SH SECURITY
+Skarn scans locally and makes no network connection by default. Secrets are
+redacted in every output format unless \-\-no\-redact is given.
+.PP
+The only feature that transmits anything off the machine is the maintained
+feed: \-\-update\-rules and \-\-feed\-url fetch a signed feed bundle from the
+subscriber channel. No secret ever leaves the machine. It is off by default
+and is disabled by \-\-offline.
+.SH "SEE ALSO"
+skarn(1)
+.SH COPYRIGHT
+Copyright (c) 2026 Srdjan Markovic. All rights reserved. Skarn is proprietary
+software; see the LICENSE distributed with the binary and
+https://getskarn.com.

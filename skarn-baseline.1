@@ -1,0 +1,50 @@
+.TH "SKARN-BASELINE" "1" "2026-06-23" "skarn 0.17.0" "Skarn Manual"
+.SH NAME
+skarn\-baseline \- Interactively triage findings into a committed baseline
+(audit), or record a false\-positive fingerprint (accept)
+.SH SYNOPSIS
+\fBskarn\fR \fBbaseline\fR \fIaudit|accept\fR \fIfile\fR [<fingerprint>] [options]
+.SH DESCRIPTION
+Interactively triage findings into a committed baseline (audit), or record a
+false\-positive fingerprint (accept).
+.PP
+Interactive baseline triage. audit walks each new finding and records a
+true/false\-positive decision with a reason into the committed baseline;
+accept records a single false\-positive fingerprint non\-interactively. The
+audit scan is scoped by the same filters as check.
+.SH OPTIONS
+.TP
+\fB\-\-reason\fR \fItext\fR
+Reason recorded with an accepted finding (audit prompts for one; accept takes
+it as a flag).
+.TP
+\fB\-\-identity\fR \fIid\fR
+Override the accepted\-by identity stamped on the decision; defaults to
+$SKARN_IDENTITY.
+.TP
+\fB\-\-cli\fR \fIname\fR
+Restrict the audit scan to one assistant's sessions. One of: claude, gemini,
+codex, cursor, copilot.
+.TP
+\fB\-\-project\fR \fIpath\fR
+Restrict the audit scan to sessions under this project path.
+.TP
+\fB\-\-session\fR \fIid\fR
+Audit a single session by id.
+.TP
+\fB\-\-rules\fR \fIpath\fR
+Load a custom TOML rules file for the audit scan in addition to the bundled
+rules.
+.TP
+\fB\-\-hours\fR \fIn\fR
+Audit scan window in hours; 0 means no time limit. The default is 720.
+.TP
+\fB\-\-severity\fR \fIlevel\fR
+Only audit findings at or above this severity. One of: low, medium, high,
+critical. The default is medium.
+.SH "SEE ALSO"
+skarn(1)
+.SH COPYRIGHT
+Copyright (c) 2026 Srdjan Markovic. All rights reserved. Skarn is proprietary
+software; see the LICENSE distributed with the binary and
+https://getskarn.com.

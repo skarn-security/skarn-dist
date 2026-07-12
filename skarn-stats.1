@@ -1,0 +1,61 @@
+.TH "SKARN-STATS" "1" "2026-06-23" "skarn 0.17.0" "Skarn Manual"
+.SH NAME
+skarn\-stats \- Session analytics: tokens, models, tools, and timing (text,
+json, csv, or html)
+.SH SYNOPSIS
+\fBskarn\fR \fBstats\fR [options]
+.SH DESCRIPTION
+Session analytics: tokens, models, tools, and timing (text, json, csv, or
+html).
+.PP
+Session analytics. A positional session id switches to a per\-session view.
+.SH OPTIONS
+.TP
+\fB\-\-cli\fR \fIname\fR
+Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
+copilot.
+.TP
+\fB\-\-project\fR \fIpath\fR
+Restrict to sessions whose project path contains this substring.
+.TP
+\fB\-\-worktree\fR \fIpath\fR
+Restrict to sessions whose working directory is under this path.
+.TP
+\fB\-\-since\fR \fIdate\fR
+Lower bound of the time window; takes priority over \-\-hours.
+.TP
+\fB\-\-until\fR \fIdate\fR
+Upper bound of the time window.
+.TP
+\fB\-\-tz\-offset\fR \fIminutes\fR
+Timezone offset in minutes for date grouping and display. The default is 0.
+.TP
+\fB\-\-hours\fR \fIn\fR
+Time window in hours; 0 means no limit. The default is 168.
+.TP
+\fB\-\-session\fR \fIid\fR
+Restrict to a single session by id (prefix\-matched).
+.TP
+\fB\-\-format\fR \fIfmt\fR
+Output format. csv requires \-\-by; html writes a file (\-o). One of: text,
+json, csv, html. The default is text.
+.TP
+\fB\-\-by\fR \fIaxis\fR
+Group the aggregate by date or project; required for \-\-format csv. One of:
+date, project.
+.TP
+\fB\-\-show\fR \fIlist\fR
+Comma list of content blocks to render (default: overview,tokens). text and
+html only. One of: overview, tokens, models, tools, timing, all.
+.TP
+\fB\-\-open\fR
+Open the HTML report in a browser after writing it (\-\-format html only).
+.TP
+\fB\-o\fR, \fB\-\-out\fR \fIfile\fR
+Destination file for \-\-format html. The default is skarn\-report.html.
+.SH "SEE ALSO"
+skarn(1)
+.SH COPYRIGHT
+Copyright (c) 2026 Srdjan Markovic. All rights reserved. Skarn is proprietary
+software; see the LICENSE distributed with the binary and
+https://getskarn.com.

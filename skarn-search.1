@@ -1,0 +1,79 @@
+.TH "SKARN-SEARCH" "1" "2026-06-23" "skarn 0.17.0" "Skarn Manual"
+.SH NAME
+skarn\-search \- Search past AI sessions (literal text, or \-\-regex)
+.SH SYNOPSIS
+\fBskarn\fR \fBsearch\fR \fIquery\fR [options]
+.SH DESCRIPTION
+Search past AI sessions (literal text, or \-\-regex).
+.PP
+Search past sessions. The query is positional and flag order is free.
+.SH OPTIONS
+.TP
+\fB\-\-cli\fR \fIname\fR
+Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
+copilot.
+.TP
+\fB\-\-project\fR \fIpath\fR
+Restrict to sessions whose project path contains this substring.
+.TP
+\fB\-\-worktree\fR \fIpath\fR
+Restrict to sessions whose working directory is under this path.
+.TP
+\fB\-\-since\fR \fIdate\fR
+Lower bound of the time window; takes priority over \-\-hours.
+.TP
+\fB\-\-until\fR \fIdate\fR
+Upper bound of the time window.
+.TP
+\fB\-\-tz\-offset\fR \fIminutes\fR
+Timezone offset in minutes for date grouping and display. The default is 0.
+.TP
+\fB\-\-session\fR \fIid\fR
+Restrict to a single session by id (prefix\-matched).
+.TP
+\fB\-\-hours\fR \fIn\fR
+Time window in hours; 0 searches all history (the default). The default is 0.
+.TP
+\fB\-\-all\fR
+Search all history (explicit alias for the default).
+.TP
+\fB\-\-context\fR \fIn\fR
+Lines of context to show around each match. The default is 2.
+.TP
+\fB\-\-role\fR \fIrole\fR
+Restrict matches to one message role. One of: user, assistant, all. The
+default is all.
+.TP
+\fB\-\-source\fR \fIsrc\fR
+Restrict matches by content source kind. One of: content, tool\-input,
+tool\-result, all. The default is content.
+.TP
+\fB\-\-max\-results\fR \fIn\fR
+Cap how many match rows are rendered; 0 means no cap. The default is 50.
+.TP
+\fB\-\-max\-line\-length\fR \fIn\fR
+Cap rendered snippet length per row; 0 means no cap. The default is 200.
+.TP
+\fB\-\-list\fR
+Print one matching session per line instead of per\-match rows.
+.TP
+\fB\-\-count\fR
+Print one matching session per line with its hit count.
+.TP
+\fB\-\-output\fR \fIfmt\fR
+Output format for the active mode. One of: text, json. The default is text.
+.TP
+\fB\-\-json\fR
+Shorthand for \-\-output json.
+.TP
+\fB\-\-regex\fR
+Treat the query as a PCRE2 regular expression.
+.TP
+\fB\-\-case\-sensitive\fR
+Case\-sensitive matching (default: case\-insensitive).
+.SH "SEE ALSO"
+skarn(1)
+.SH COPYRIGHT
+Copyright (c) 2026 Srdjan Markovic. All rights reserved. Skarn is proprietary
+software; see the LICENSE distributed with the binary and
+https://getskarn.com.
