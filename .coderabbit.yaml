@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: "en-US"
+tone_instructions: "Direct and terse. No praise, filler, or diff narration. Plain ASCII only: no emoji, no em or en dashes, no smart quotes. Never suggest adding code comments or docstrings; prefer renaming or restructuring for clarity."
+
+reviews:
+  profile: "chill"
+  poem: false
+  sequence_diagrams: false
+  in_progress_fortune: false
+  high_level_summary: false
+  changed_files_summary: false
+  path_filters:
+    - "**/*.md"
+  auto_review:
+    enabled: true
+    drafts: false
+  finishing_touches:
+    docstrings:
+      enabled: false
+  tools:
+    markdownlint:
+      enabled: false
+
+chat:
+  auto_reply: true
