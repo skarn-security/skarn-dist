@@ -1,15 +1,23 @@
-.TH "SKARN-GUARD" "1" "2026-06-23" "skarn 0.17.0" "Skarn Manual"
+.TH "SKARN-GUARD" "1" "2026-06-23" "skarn 0.17.2" "Skarn Manual"
 .SH NAME
 skarn\-guard \- Real\-time pre\-execution hook for editor/agent integration;
-reads an event on stdin and emits a verdict
+reads an event on stdin and emits a verdict. guard report summarizes the audit
+log and prints the enforce flip when the window is clean
 .SH SYNOPSIS
-\fBskarn\fR \fBguard\fR [options]
+\fBskarn\fR \fBguard\fR [report] [options]
 .SH DESCRIPTION
 Real\-time pre\-execution hook for editor/agent integration; reads an event on
-stdin and emits a verdict.
+stdin and emits a verdict. guard report summarizes the audit log and prints
+the enforce flip when the window is clean.
 .PP
 Control the real\-time pre\-execution hook used for editor/agent integration
-(Claude Code, Cursor, Codex CLI, and Copilot CLI).
+(Claude Code, Cursor, Codex CLI, and Copilot CLI). The report subverb reads
+the guard's own audit log instead of an event: it summarizes the flagged calls
+per agent (verdicts, top rules, latency, the most recent denies) and, when the
+window spans at least five days with zero denies, prints the exact command
+that flips the wired hooks to enforce. The guard logs only flagged calls, so
+every count report prints is a count of flagged actions, never a rate over all
+traffic. Report is ungated and reads nothing but the log.
 .SH OPTIONS
 .TP
 \fB\-\-guard\-mode\fR \fImode\fR
@@ -25,7 +33,8 @@ Hook host (default: auto\-detect from the event shape; pass codex explicitly
 for Codex CLI, which shares Claude's event names, and copilot explicitly for
 Copilot CLI, whose Claude\-compat payloads are indistinguishable from
 Claude's). With \-\-self\-test, all (the default) tests the claude, cursor,
-and codex adapters. One of: claude, cursor, codex, copilot, all.
+and codex adapters. With report, it restricts the summary to one agent
+(repeatable or comma\-separated). One of: claude, cursor, codex, copilot, all.
 .TP
 \fB\-\-self\-test\fR
 Verify the guard wiring instead of reading an event: feed two synthetic
@@ -33,6 +42,21 @@ fixture events (one benign, one carrying a fake credential) through each
 adapter's real code path and report the verdicts, latency, and a guard\-log
 write probe. The fake credential is only ever printed redacted. Exit 0 when
 every adapter passes, 1 otherwise; works unlicensed (audit semantics).
+.TP
+\fB\-\-log\fR \fIpath\fR
+With report: guard log to summarize, repeatable. Default: $SKARN_GUARD_LOG
+when set, otherwise the log skarn setup wires for each agent
+($XDG_CACHE_HOME/skarn/guard\-<agent>\-audit.jsonl). A log that does not exist
+is named in the output with the command that wires it, never silently counted
+as zero.
+.TP
+\fB\-\-window\fR \fIspan\fR
+With report: how far back to summarize, as <N>d or all. The default is 7d.
+.TP
+\fB\-\-format\fR \fIfmt\fR
+With report: text renders the summary and the recommendation; json emits the
+whole aggregate as one object with stable field names for fleet scripts. One
+of: text, json. The default is text.
 .SH "HOOK EVENTS"
 .SS "Claude Code"
 Claude Code fires PascalCase events with a JSON envelope on stdin. Five events

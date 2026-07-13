@@ -1,4 +1,4 @@
-.TH "SKARN-CHECK" "1" "2026-06-23" "skarn 0.17.0" "Skarn Manual"
+.TH "SKARN-CHECK" "1" "2026-06-23" "skarn 0.17.2" "Skarn Manual"
 .SH NAME
 skarn\-check \- Scan AI sessions for leaked credentials and attack patterns
 .SH SYNOPSIS
@@ -152,9 +152,11 @@ flag without a matching license). Refused before any scan; the free core does
 not exit 5.
 .TP
 \fB6\fR
-The scan could not complete: session discovery or the scan itself failed.
-Fail\-closed \- the result is not trustworthy, so it is never reported as
-clean.
+The scan could not complete: session discovery or the scan itself failed. For
+vet: the home directory could not be resolved (so the configuration was never
+located at all), or a config file that exists could not be read, so the
+configuration was only partly seen. Fail\-closed \- the result is not
+trustworthy, so it is never reported as clean.
 .SH SECURITY
 Skarn scans locally and makes no network connection by default. Secrets are
 redacted in every output format unless \-\-no\-redact is given.
@@ -163,6 +165,12 @@ The only feature that transmits anything off the machine is the maintained
 feed: \-\-update\-rules and \-\-feed\-url fetch a signed feed bundle from the
 subscriber channel. No secret ever leaves the machine. It is off by default
 and is disabled by \-\-offline.
+.PP
+skarn vet reads the AI assistant configuration files listed under FILES
+read\-only: it opens each one for reading, never writes, rewrites, or removes
+one, and makes no network call. It reports what it finds and leaves every
+decision about the configuration to you. \-\-offline is accepted for parity
+and changes nothing.
 .SH "SEE ALSO"
 skarn(1)
 .SH COPYRIGHT

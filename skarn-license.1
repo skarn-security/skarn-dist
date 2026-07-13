@@ -1,18 +1,40 @@
-.TH "SKARN-LICENSE" "1" "2026-06-23" "skarn 0.17.0" "Skarn Manual"
+.TH "SKARN-LICENSE" "1" "2026-06-23" "skarn 0.17.2" "Skarn Manual"
 .SH NAME
-skarn\-license \- Show the active license, or install one from a file (or
-stdin)
+skarn\-license \- Show the active license, install one from a file (or stdin),
+or renew it from the license service
 .SH SYNOPSIS
-\fBskarn\fR \fBlicense\fR [<file>|\-] [options]
+\fBskarn\fR \fBlicense\fR [<file>|\-|renew] [options]
 .SH DESCRIPTION
-Show the active license, or install one from a file (or stdin).
+Show the active license, install one from a file (or stdin), or renew it from
+the license service.
 .PP
-Show the active license, or install one. With no argument it reports what
-license this machine is using, where it came from, and when it expires. With a
-file argument (or \- to read stdin) it validates the license and installs it
-to the config directory, backing up any license already there. It never prints
-the license token itself, and it works without a license, so it never exits 5.
+Show the active license, install one, or renew it. With no argument it reports
+what license this machine is using, where it came from, and when it expires.
+With a file argument (or \- to read stdin) it validates the license and
+installs it to the config directory, backing up any license already there.
+With renew it asks the license service for a fresh license for the current
+subscription, verifies the reply against the signing keys built into this
+binary BEFORE writing a single byte, and installs it; a reply that does not
+verify is discarded and nothing is written. Verification is not
+signature\-only: the reply must carry the same license id and move the expiry
+forward, so a valid artifact belonging to another subscription is refused too.
+Renewal happens only when you type it \- check, the recall verbs, serve, and
+guard never renew on their own \- and it is the only network call skarn makes
+besides the opt\-in maintained\-feed fetch. The endpoint defaults to
+https://api.getskarn.com and is overridable with $SKARN_LICENSE_RENEW_URL; it
+must be https (plain http is accepted only against loopback), so a poisoned
+environment cannot send the license anywhere in cleartext. Renew exits 0 when
+the new license is installed, 1 when the service cannot be reached, 2 when the
+service declines (its reason is printed verbatim), and 3 when the reply fails
+verification. It never prints the license token itself, and it works without a
+license \- and with an expired one \- so it never exits 5.
 .SH OPTIONS
+.TP
+\fB\-o\fR, \fB\-\-output\fR \fIpath\fR
+Write the renewed license to this path instead of the config directory. Only
+applies to `skarn license renew`; the file is written with owner\-only
+permissions, and an existing file that is not a readable Skarn license is
+never overwritten.
 .TP
 \fB\-y\fR, \fB\-\-yes\fR
 Replace an already\-installed license without asking. Required when installing

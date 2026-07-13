@@ -1,6 +1,6 @@
 # Skarn editions - the free/paid boundary
 
-Generated from docs/cli-model.toml by docs/build_manpage.py (regenerate with `zig build man`); do not edit by hand. skarn 0.17.0.
+Generated from docs/cli-model.toml by docs/build_manpage.py (regenerate with `zig build man`); do not edit by hand. skarn 0.17.2.
 
 One binary for every tier. The free tier is the full local product, not a trial: the entire detection engine, every output format, and redaction are free for an individual on their own machines. Paid tiers unlock org capabilities: distributing policy and accepted-findings baselines across a team, compliance evidence, the maintained feed, and real-time enforcement.
 
@@ -11,6 +11,7 @@ A paid flag requested without a covering license refuses fail-closed (exit 5) be
 | Capability | Why it is free |
 |---|---|
 | skarn assess - the zero-config machine-scan wedge | One command scans every AI session on the machine and prints a friendly risk summary plus an optional shareable redacted report; no flags, no config, no license. |
+| skarn vet - static vetting of the local AI assistant configuration | A read-only, offline pass over the operator's own hooks, MCP servers, permission grants, and installed extensions. The entire local detection engine is free; the paid asset is org distribution and the maintained feed, not the engine. |
 | skarn check - the full local scan | Every bundled detection rule, behavioral attack-chain correlation, the risk score, decode-then-rescan, canary checks. The scanner is not crippled. |
 | All output formats: text, json, sarif, ndjson | Output formats are not a paid line; CI and SIEM ingest work on the free tier. |
 | Redaction, in every format | Safety is not a tier. |

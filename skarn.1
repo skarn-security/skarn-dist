@@ -1,10 +1,11 @@
-.TH "SKARN" "1" "2026-06-23" "skarn 0.17.0" "Skarn Manual"
+.TH "SKARN" "1" "2026-06-23" "skarn 0.17.2" "Skarn Manual"
 .SH NAME
 skarn \- AI coding session security scanner with built\-in session search
 .SH SYNOPSIS
 .nf
 \fBskarn\fR \fBcheck\fR [options]
 \fBskarn\fR \fBassess\fR [options]
+\fBskarn\fR \fBvet\fR [options]
 \fBskarn\fR \fBbaseline\fR \fIaudit|accept\fR \fIfile\fR [<fingerprint>] [options]
 \fBskarn\fR \fBsearch\fR \fIquery\fR [options]
 \fBskarn\fR \fBrecent\fR [options]
@@ -15,13 +16,13 @@ skarn \- AI coding session security scanner with built\-in session search
 \fBskarn\fR \fBmcps\fR [options]
 \fBskarn\fR \fBcmds\fR [options]
 \fBskarn\fR \fBexport\fR [options]
-\fBskarn\fR \fBguard\fR [options]
+\fBskarn\fR \fBguard\fR [report] [options]
 \fBskarn\fR \fBsetup\fR [options]
 \fBskarn\fR \fBdoctor\fR [options]
 \fBskarn\fR \fBcompletion\fR \fIshell\fR
 \fBskarn\fR \fBserve\fR [options]
 \fBskarn\fR \fBtaxonomies\fR
-\fBskarn\fR \fBlicense\fR [<file>|\-] [options]
+\fBskarn\fR \fBlicense\fR [<file>|\-|renew] [options]
 skarn \fB\-\-version\fR
 skarn \fB\-\-help\fR
 .fi
@@ -51,6 +52,11 @@ Scan AI sessions for leaked credentials and attack patterns.
 \fBassess\fR [options]
 Scan every AI session on this machine and print a friendly risk summary, with
 an optional shareable redacted report. Free, no config, no license.
+.TP
+\fBvet\fR [options]
+Statically vet the local AI assistant configuration (hooks, MCP servers,
+permission grants, plugins and skills) for risky patterns. Read\-only and
+offline; free, no license.
 .TP
 \fBbaseline\fR \fIaudit|accept\fR \fIfile\fR [<fingerprint>] [options]
 Interactively triage findings into a committed baseline (audit), or record a
@@ -84,9 +90,10 @@ Show the shell commands run across sessions.
 \fBexport\fR [options]
 Export sessions as text, json, ndjson, or html (redacted by default).
 .TP
-\fBguard\fR [options]
+\fBguard\fR [report] [options]
 Real\-time pre\-execution hook for editor/agent integration; reads an event on
-stdin and emits a verdict.
+stdin and emits a verdict. guard report summarizes the audit log and prints
+the enforce flip when the window is clean.
 .TP
 \fBsetup\fR [options]
 Wire the skarn guard hook into detected AI coding agents (merge\-based,
@@ -106,8 +113,9 @@ to 127.0.0.1.
 \fBtaxonomies\fR
 Print the standards crosswalk (MITRE ATLAS, OWASP LLM Top 10, CWE).
 .TP
-\fBlicense\fR [<file>|\-] [options]
-Show the active license, or install one from a file (or stdin).
+\fBlicense\fR [<file>|\-|renew] [options]
+Show the active license, install one from a file (or stdin), or renew it from
+the license service.
 .SH OPTIONS
 .SS "Check options"
 Control the security scan: which rules run, the scan window, output format,
@@ -273,6 +281,42 @@ unlicensed directory degrades to a warning and an unsuppressed scan.
 .TP
 \fB\-\-no\-color\fR
 Disable colored output.
+.SS "Vet options"
+Statically vet this machine's AI assistant configuration \- hook commands, MCP
+server definitions, permission grants, and installed plugins and skills across
+Claude Code, Codex CLI, Cursor, Copilot, and Gemini CLI \- and report the
+risky patterns it finds: hooks that exfiltrate local content or
+fetch\-and\-execute remote code, hooks that rewrite an assistant's own config,
+MCP endpoints on remote hosts, MCP launchers with no pinned version or digest,
+permission grants that approve a whole class of actions, and extensions
+installed from a remote source or carrying no integrity marker. Vet is
+read\-only and offline: it opens each config file for reading, never writes
+one, and makes no network call. A config file that does not exist is skipped;
+a config file that exists but cannot be read is a coverage gap that fails
+closed under a \-\-fail\-on flag. Vet surfaces risky configuration and does
+not change it.
+.TP
+\fB\-\-format\fR \fIfmt\fR
+Output format. json and sarif carry the same rule ids, severities, config
+paths, and locators as the text list. One of: text, json, sarif. The default
+is text.
+.TP
+\fB\-\-fail\-on\-severity\fR \fIlevel\fR
+Exit 1 if any finding is at or above this severity. Without it, vet always
+exits 0: it surfaces, it does not gate. One of: low, medium, high, critical.
+.TP
+\fB\-\-fail\-on\-scan\-error\fR
+Fail closed (exit 6) when a config file that exists could not be read, so a
+partial view of the configuration is never reported as clean. Implied by
+\-\-fail\-on\-severity. A home directory that cannot be resolved at all exits
+6 regardless of this flag, since nothing was examined.
+.TP
+\fB\-\-offline\fR
+Disable all network access. Vet never makes a network call; this is the
+belt\-and\-suspenders guarantee.
+.TP
+\fB\-\-no\-color\fR
+Disable colored output.
 .SS "Baseline options"
 Interactive baseline triage. audit walks each new finding and records a
 true/false\-positive decision with a reason into the committed baseline;
@@ -309,7 +353,13 @@ Only audit findings at or above this severity. One of: low, medium, high,
 critical. The default is medium.
 .SS "Guard options"
 Control the real\-time pre\-execution hook used for editor/agent integration
-(Claude Code, Cursor, Codex CLI, and Copilot CLI).
+(Claude Code, Cursor, Codex CLI, and Copilot CLI). The report subverb reads
+the guard's own audit log instead of an event: it summarizes the flagged calls
+per agent (verdicts, top rules, latency, the most recent denies) and, when the
+window spans at least five days with zero denies, prints the exact command
+that flips the wired hooks to enforce. The guard logs only flagged calls, so
+every count report prints is a count of flagged actions, never a rate over all
+traffic. Report is ungated and reads nothing but the log.
 .TP
 \fB\-\-guard\-mode\fR \fImode\fR
 audit reports only; enforce emits a deny or ask verdict. Enforce needs a
@@ -324,7 +374,8 @@ Hook host (default: auto\-detect from the event shape; pass codex explicitly
 for Codex CLI, which shares Claude's event names, and copilot explicitly for
 Copilot CLI, whose Claude\-compat payloads are indistinguishable from
 Claude's). With \-\-self\-test, all (the default) tests the claude, cursor,
-and codex adapters. One of: claude, cursor, codex, copilot, all.
+and codex adapters. With report, it restricts the summary to one agent
+(repeatable or comma\-separated). One of: claude, cursor, codex, copilot, all.
 .TP
 \fB\-\-self\-test\fR
 Verify the guard wiring instead of reading an event: feed two synthetic
@@ -332,6 +383,21 @@ fixture events (one benign, one carrying a fake credential) through each
 adapter's real code path and report the verdicts, latency, and a guard\-log
 write probe. The fake credential is only ever printed redacted. Exit 0 when
 every adapter passes, 1 otherwise; works unlicensed (audit semantics).
+.TP
+\fB\-\-log\fR \fIpath\fR
+With report: guard log to summarize, repeatable. Default: $SKARN_GUARD_LOG
+when set, otherwise the log skarn setup wires for each agent
+($XDG_CACHE_HOME/skarn/guard\-<agent>\-audit.jsonl). A log that does not exist
+is named in the output with the command that wires it, never silently counted
+as zero.
+.TP
+\fB\-\-window\fR \fIspan\fR
+With report: how far back to summarize, as <N>d or all. The default is 7d.
+.TP
+\fB\-\-format\fR \fIfmt\fR
+With report: text renders the summary and the recommendation; json emits the
+whole aggregate as one object with stable field names for fleet scripts. One
+of: text, json. The default is text.
 .SS "Setup options"
 Guided onboarding: detect installed AI coding agents (Claude Code, Cursor,
 Codex CLI), merge the skarn guard hook into each one's native config in audit
@@ -799,11 +865,32 @@ Collapse duplicates, keeping the latest occurrence.
 \fB\-\-tool\fR \fIname\fR
 Substring filter on the tool name.
 .SS "License options"
-Show the active license, or install one. With no argument it reports what
-license this machine is using, where it came from, and when it expires. With a
-file argument (or \- to read stdin) it validates the license and installs it
-to the config directory, backing up any license already there. It never prints
-the license token itself, and it works without a license, so it never exits 5.
+Show the active license, install one, or renew it. With no argument it reports
+what license this machine is using, where it came from, and when it expires.
+With a file argument (or \- to read stdin) it validates the license and
+installs it to the config directory, backing up any license already there.
+With renew it asks the license service for a fresh license for the current
+subscription, verifies the reply against the signing keys built into this
+binary BEFORE writing a single byte, and installs it; a reply that does not
+verify is discarded and nothing is written. Verification is not
+signature\-only: the reply must carry the same license id and move the expiry
+forward, so a valid artifact belonging to another subscription is refused too.
+Renewal happens only when you type it \- check, the recall verbs, serve, and
+guard never renew on their own \- and it is the only network call skarn makes
+besides the opt\-in maintained\-feed fetch. The endpoint defaults to
+https://api.getskarn.com and is overridable with $SKARN_LICENSE_RENEW_URL; it
+must be https (plain http is accepted only against loopback), so a poisoned
+environment cannot send the license anywhere in cleartext. Renew exits 0 when
+the new license is installed, 1 when the service cannot be reached, 2 when the
+service declines (its reason is printed verbatim), and 3 when the reply fails
+verification. It never prints the license token itself, and it works without a
+license \- and with an expired one \- so it never exits 5.
+.TP
+\fB\-o\fR, \fB\-\-output\fR \fIpath\fR
+Write the renewed license to this path instead of the config directory. Only
+applies to `skarn license renew`; the file is written with owner\-only
+permissions, and an existing file that is not a readable Skarn license is
+never overwritten.
 .TP
 \fB\-y\fR, \fB\-\-yes\fR
 Replace an already\-installed license without asking. Required when installing
@@ -844,9 +931,11 @@ flag without a matching license). Refused before any scan; the free core does
 not exit 5.
 .TP
 \fB6\fR
-The scan could not complete: session discovery or the scan itself failed.
-Fail\-closed \- the result is not trustworthy, so it is never reported as
-clean.
+The scan could not complete: session discovery or the scan itself failed. For
+vet: the home directory could not be resolved (so the configuration was never
+located at all), or a config file that exists could not be read, so the
+configuration was only partly seen. Fail\-closed \- the result is not
+trustworthy, so it is never reported as clean.
 .SH ENVIRONMENT
 .TP
 \fBSKARN_SCAN_THREADS\fR
@@ -867,6 +956,13 @@ by time.
 Suppress the dim "Scanned N sessions" timing line that recall commands print
 after a text run on a terminal. Already auto\-suppressed for json/sarif/csv
 output and for non\-TTY stdout.
+.TP
+\fBSKARN_LICENSE_RENEW_URL\fR
+License\-service endpoint `skarn license renew` posts to. Defaults to
+https://api.getskarn.com/v1/license/renew; set it to route renewals through an
+enterprise proxy. It must be https \- plain http is accepted only against
+loopback \- so a poisoned environment cannot redirect the license token to a
+cleartext endpoint. No other command reads it.
 .TP
 \fBSKARN_GUARD_LOG\fR
 Path to append a redacted JSONL verdict log for guard (opt\-in; off when
@@ -920,6 +1016,31 @@ $XDG_CACHE_HOME.
 \fB~/.claude/\fR
 Default Claude Code session root. Scanned automatically; extend with
 $SKARN_CLAUDE_DIRS or $CLAUDE_CONFIG_DIR.
+.TP
+\fB~/.claude/settings.json, ~/.claude/settings.local.json\fR
+Claude Code hooks and permission grants. Read (never written) by vet, and by
+the project\-local ./.claude/settings.json and ./.claude/settings.local.json
+when one exists.
+.TP
+\fB~/.claude.json, ~/.mcp.json\fR
+Claude Code MCP server definitions. Read by vet, along with a project\-local
+\&./.mcp.json when one exists.
+.TP
+\fB~/.claude/plugins/, ~/.claude/skills/\fR
+Installed Claude Code plugins and skills. Vet reads each plugin.json and
+skill.json manifest for its install source and integrity marker.
+.TP
+\fB~/.codex/config.toml, ~/.codex/hooks.json\fR
+Codex CLI MCP server definitions and hooks. Read by vet.
+.TP
+\fB~/.cursor/mcp.json, ~/.cursor/hooks.json\fR
+Cursor MCP server definitions and hooks. Read by vet.
+.TP
+\fB~/.copilot/mcp\-config.json, ~/.copilot/config.json\fR
+Copilot CLI MCP server definitions and configuration. Read by vet.
+.TP
+\fB~/.gemini/settings.json\fR
+Gemini CLI MCP server definitions. Read by vet.
 .SH EXAMPLES
 Show which license this machine is using, where it came from, and when it
 expires.
@@ -937,6 +1058,14 @@ skarn license ~/Downloads/team.skarnlicense
 .EE
 .RE
 .PP
+Fetch a fresh license for this subscription, verify it against the keys built
+into this binary, and install it; nothing is written unless it verifies.
+.RS 4
+.EX
+skarn license renew
+.EE
+.RE
+.PP
 Scan every AI coding session on this machine and print a friendly risk summary
 in one command; no flags, no license.
 .RS 4
@@ -950,6 +1079,24 @@ Write a self\-contained, redacted security report to share with a colleague;
 .RS 4
 .EX
 skarn assess \-o report.html
+.EE
+.RE
+.PP
+Statically vet this machine's AI assistant configuration \- hooks, MCP
+servers, permission grants, plugins and skills \- and list the risky patterns
+found. Read\-only, offline, no license.
+.RS 4
+.EX
+skarn vet
+.EE
+.RE
+.PP
+Emit the config findings as SARIF for a code\-scanning pipeline and exit 1 on
+anything high or above; an unreadable config file exits 6 rather than
+reporting a partial view as clean.
+.RS 4
+.EX
+skarn vet \-\-format sarif \-\-fail\-on\-severity high
 .EE
 .RE
 .PP
@@ -992,6 +1139,23 @@ leaving everything else alone.
 .RS 4
 .EX
 skarn setup \-\-update \-\-mode enforce
+.EE
+.RE
+.PP
+Summarize the last 30 days of flagged calls per agent (verdicts, top rules,
+latency, the most recent denies) and, when the window is clean, print the
+exact command that flips the hooks to enforce.
+.RS 4
+.EX
+skarn guard report \-\-window 30d
+.EE
+.RE
+.PP
+The same aggregate as one JSON object for fleet scripts: counts are over
+flagged actions, since the guard does not log clean calls.
+.RS 4
+.EX
+skarn guard report \-\-format json
 .EE
 .RE
 .PP
@@ -1088,12 +1252,18 @@ The only feature that transmits anything off the machine is the maintained
 feed: \-\-update\-rules and \-\-feed\-url fetch a signed feed bundle from the
 subscriber channel. No secret ever leaves the machine. It is off by default
 and is disabled by \-\-offline.
+.PP
+skarn vet reads the AI assistant configuration files listed under FILES
+read\-only: it opens each one for reading, never writes, rewrites, or removes
+one, and makes no network call. It reports what it finds and leaves every
+decision about the configuration to you. \-\-offline is accepted for parity
+and changes nothing.
 .SH "SEE ALSO"
-skarn\-check(1), skarn\-assess(1), skarn\-baseline(1), skarn\-search(1),
-skarn\-recent(1), skarn\-restore(1), skarn\-messages(1), skarn\-stats(1),
-skarn\-tools(1), skarn\-mcps(1), skarn\-cmds(1), skarn\-export(1),
-skarn\-guard(1), skarn\-setup(1), skarn\-doctor(1), skarn\-serve(1),
-skarn\-license(1), https://getskarn.com, gitleaks(1)
+skarn\-check(1), skarn\-assess(1), skarn\-vet(1), skarn\-baseline(1),
+skarn\-search(1), skarn\-recent(1), skarn\-restore(1), skarn\-messages(1),
+skarn\-stats(1), skarn\-tools(1), skarn\-mcps(1), skarn\-cmds(1),
+skarn\-export(1), skarn\-guard(1), skarn\-setup(1), skarn\-doctor(1),
+skarn\-serve(1), skarn\-license(1), https://getskarn.com, gitleaks(1)
 .SH AUTHOR
 Skarn is developed by the Skarn project. See https://getskarn.com.
 .SH "REPORTING BUGS"

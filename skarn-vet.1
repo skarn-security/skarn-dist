@@ -1,0 +1,54 @@
+.TH "SKARN-VET" "1" "2026-06-23" "skarn 0.17.2" "Skarn Manual"
+.SH NAME
+skarn\-vet \- Statically vet the local AI assistant configuration (hooks, MCP
+servers, permission grants, plugins and skills) for risky patterns. Read\-only
+and offline; free, no license
+.SH SYNOPSIS
+\fBskarn\fR \fBvet\fR [options]
+.SH DESCRIPTION
+Statically vet the local AI assistant configuration (hooks, MCP servers,
+permission grants, plugins and skills) for risky patterns. Read\-only and
+offline; free, no license.
+.PP
+Statically vet this machine's AI assistant configuration \- hook commands, MCP
+server definitions, permission grants, and installed plugins and skills across
+Claude Code, Codex CLI, Cursor, Copilot, and Gemini CLI \- and report the
+risky patterns it finds: hooks that exfiltrate local content or
+fetch\-and\-execute remote code, hooks that rewrite an assistant's own config,
+MCP endpoints on remote hosts, MCP launchers with no pinned version or digest,
+permission grants that approve a whole class of actions, and extensions
+installed from a remote source or carrying no integrity marker. Vet is
+read\-only and offline: it opens each config file for reading, never writes
+one, and makes no network call. A config file that does not exist is skipped;
+a config file that exists but cannot be read is a coverage gap that fails
+closed under a \-\-fail\-on flag. Vet surfaces risky configuration and does
+not change it.
+.SH OPTIONS
+.TP
+\fB\-\-format\fR \fIfmt\fR
+Output format. json and sarif carry the same rule ids, severities, config
+paths, and locators as the text list. One of: text, json, sarif. The default
+is text.
+.TP
+\fB\-\-fail\-on\-severity\fR \fIlevel\fR
+Exit 1 if any finding is at or above this severity. Without it, vet always
+exits 0: it surfaces, it does not gate. One of: low, medium, high, critical.
+.TP
+\fB\-\-fail\-on\-scan\-error\fR
+Fail closed (exit 6) when a config file that exists could not be read, so a
+partial view of the configuration is never reported as clean. Implied by
+\-\-fail\-on\-severity. A home directory that cannot be resolved at all exits
+6 regardless of this flag, since nothing was examined.
+.TP
+\fB\-\-offline\fR
+Disable all network access. Vet never makes a network call; this is the
+belt\-and\-suspenders guarantee.
+.TP
+\fB\-\-no\-color\fR
+Disable colored output.
+.SH "SEE ALSO"
+skarn(1)
+.SH COPYRIGHT
+Copyright (c) 2026 Srdjan Markovic. All rights reserved. Skarn is proprietary
+software; see the LICENSE distributed with the binary and
+https://getskarn.com.
