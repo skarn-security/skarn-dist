@@ -1,4 +1,4 @@
-.TH "SKARN-CHECK" "1" "2026-06-23" "skarn 0.17.2" "Skarn Manual"
+.TH "SKARN-CHECK" "1" "2026-06-23" "skarn 0.18.0" "Skarn Manual"
 .SH NAME
 skarn\-check \- Scan AI sessions for leaked credentials and attack patterns
 .SH SYNOPSIS
@@ -7,7 +7,11 @@ skarn\-check \- Scan AI sessions for leaked credentials and attack patterns
 Scan AI sessions for leaked credentials and attack patterns.
 .PP
 Control the security scan: which rules run, the scan window, output format,
-and CI gating.
+and CI gating. check requires a license and refuses with exit 7 before any
+scan without a usable one; the free license is issued at
+https://getskarn.com/free after a quick email confirmation and is verified
+offline. Only \-\-audit\-verify is exempt: verifying an audit log's hash chain
+needs no license.
 .SH OPTIONS
 .TP
 \fB\-\-rules\fR \fIpath\fR
@@ -59,7 +63,9 @@ Restrict the scan to one assistant's sessions. One of: claude, gemini, codex,
 cursor, copilot.
 .TP
 \fB\-\-project\fR \fIpath\fR
-Restrict the scan to sessions under this project path.
+Restrict the scan to matching projects: a comma\-separated list of names or
+paths, each matched case\-insensitively against a session's project display
+name, its canonical root path, or a parent directory of that root.
 .TP
 \fB\-\-session\fR \fIid\fR
 Scan a single session by id.
@@ -131,7 +137,8 @@ Clean, or informational output only.
 A finding at or above the \-\-fail\-on\-severity threshold was reported. For
 setup and guard \-\-self\-test: a target was refused or a verification failed.
 For doctor: at least one check FAILED (a warning never exits nonzero, and
-\-\-json always exits 0).
+\-\-json always exits 0). Also: the first\-run EULA prompt was declined, so
+the invoked operation was not performed.
 .TP
 \fB2\fR
 The session risk score exceeded the \-\-fail\-on\-risk threshold. For setup:
@@ -147,9 +154,9 @@ A policy precondition was not met: a required rule is missing, or the policy
 requires a baseline and none was supplied.
 .TP
 \fB5\fR
-A requested paid feature is not covered by the license (a Team or Enterprise
-flag without a matching license). Refused before any scan; the free core does
-not exit 5.
+A requested paid feature is not covered by the active license (a Team or
+Enterprise flag without a matching license). Refused before any scan. With no
+usable license at all, check exits 7 before this gate is consulted.
 .TP
 \fB6\fR
 The scan could not complete: session discovery or the scan itself failed. For
@@ -157,6 +164,15 @@ vet: the home directory could not be resolved (so the configuration was never
 located at all), or a config file that exists could not be read, so the
 configuration was only partly seen. Fail\-closed \- the result is not
 trustworthy, so it is never reported as clean.
+.TP
+\fB7\fR
+No usable license is present \- none was found via SKARN_LICENSE,
+SKARN_LICENSE_FILE, or the installed file \- so check refused before scanning.
+The free license is issued at https://getskarn.com/free after a quick email
+confirmation and is verified offline. Also used when a license IS present but
+cannot be used at all (revoked, tampered, or signed by an untrusted key).
+assess, the recall commands, guard, setup, doctor, vet, license, taxonomies
+and check \-\-audit\-verify never exit 7.
 .SH SECURITY
 Skarn scans locally and makes no network connection by default. Secrets are
 redacted in every output format unless \-\-no\-redact is given.

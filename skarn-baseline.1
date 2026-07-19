@@ -1,4 +1,4 @@
-.TH "SKARN-BASELINE" "1" "2026-06-23" "skarn 0.17.2" "Skarn Manual"
+.TH "SKARN-BASELINE" "1" "2026-06-23" "skarn 0.18.0" "Skarn Manual"
 .SH NAME
 skarn\-baseline \- Interactively triage findings into a committed baseline
 (audit), or record a false\-positive fingerprint (accept)
@@ -11,7 +11,12 @@ false\-positive fingerprint (accept).
 Interactive baseline triage. audit walks each new finding and records a
 true/false\-positive decision with a reason into the committed baseline;
 accept records a single false\-positive fingerprint non\-interactively. The
-audit scan is scoped by the same filters as check.
+audit scan is scoped by the same filters as check. A false positive is
+suppressed on every later scan, while a finding labeled a true positive is
+recorded and keeps firing until the credential is rotated \- the same labels
+the real\-time guard honors. To accept a finding the guard flagged, use `skarn
+guard accept <fingerprint>`: it takes the fingerprint straight from the
+guard's audit record and defaults to the personal baseline the guard reads.
 .SH OPTIONS
 .TP
 \fB\-\-reason\fR \fItext\fR
@@ -27,7 +32,9 @@ Restrict the audit scan to one assistant's sessions. One of: claude, gemini,
 codex, cursor, copilot.
 .TP
 \fB\-\-project\fR \fIpath\fR
-Restrict the audit scan to sessions under this project path.
+Restrict the audit scan to matching projects: a comma\-separated list of names
+or paths, each matched case\-insensitively against a session's project display
+name, its canonical root path, or a parent directory of that root.
 .TP
 \fB\-\-session\fR \fIid\fR
 Audit a single session by id.

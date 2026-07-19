@@ -1,4 +1,4 @@
-.TH "SKARN-EXPORT" "1" "2026-06-23" "skarn 0.17.2" "Skarn Manual"
+.TH "SKARN-EXPORT" "1" "2026-06-23" "skarn 0.18.0" "Skarn Manual"
 .SH NAME
 skarn\-export \- Export sessions as text, json, ndjson, or html (redacted by
 default)
@@ -15,7 +15,9 @@ Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
 copilot.
 .TP
 \fB\-\-project\fR \fIpath\fR
-Restrict to sessions whose project path contains this substring.
+Restrict to matching projects: a comma\-separated list of names or paths, each
+matched case\-insensitively against a session's project display name, its
+canonical root path, or a parent directory of that root.
 .TP
 \fB\-\-worktree\fR \fIpath\fR
 Restrict to sessions whose working directory is under this path.

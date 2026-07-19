@@ -1,0 +1,36 @@
+.TH "SKARN-EULA" "1" "2026-06-23" "skarn 0.18.0" "Skarn Manual"
+.SH NAME
+skarn\-eula \- Print the Skarn End User License Agreement, or record
+acceptance of the current version (accept)
+.SH SYNOPSIS
+\fBskarn\fR \fBeula\fR [accept]
+.SH DESCRIPTION
+Print the End User License Agreement embedded in the binary (the same text
+distributed as EULA.md and published at https://getskarn.com/terms/), or
+record acceptance of the current agreement version with `skarn eula accept`.
+Skarn presents the agreement on first run: on a terminal it asks for
+acceptance before the invoked command runs (declining exits 1 and performs no
+operation; the next run asks again), and in a non\-interactive run (CI, pipes,
+containers) it prints a one\-line notice on stderr and proceeds \- running
+Skarn constitutes acceptance, and recording it with `skarn eula accept`
+silences the notice. Acceptance is recorded locally in
+~/.config/skarn/eula\-accepted.json (honoring $XDG_CONFIG_HOME) and never
+transmitted; installing a License Token with `skarn license <file>` records it
+too, mirroring the acceptance given on the registration form. A record that
+cannot be written never blocks the run \- Skarn proceeds and asks again next
+time. Reading the agreement never requires accepting it first: `skarn eula`,
+`\-\-help`, `\-\-version`, bare `skarn`, `skarn completion`, `skarn doctor`,
+and every form of `skarn guard` run without the acceptance interaction. When a
+new agreement version is published, a changed major version re\-prompts; a
+minor change prints a one\-line notice and continues. SKARN_EULA_ACCEPTED=1
+suppresses the interaction for a run without recording anything.
+.PP
+The agreement surface takes no flags: `skarn eula` prints the embedded
+agreement text, `skarn eula accept` records acceptance of the current version.
+Both work before acceptance.
+.SH "SEE ALSO"
+skarn(1)
+.SH COPYRIGHT
+Copyright (c) 2026 Srdjan Markovic. All rights reserved. Skarn is proprietary
+software; see the LICENSE distributed with the binary and
+https://getskarn.com.

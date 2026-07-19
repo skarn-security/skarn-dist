@@ -78,7 +78,7 @@ function Install-Skarn {
     Write-Host "  3. Wire the AI-agent guard:  skarn setup"
     Write-Host "  4. Verify it's working:      skarn doctor"
     Write-Host ""
-    Write-Host "The core scan is free and needs no license."
+    Write-Host "skarn assess needs no license. skarn check scans need the free license from https://getskarn.com/free"
 }
 
 Install-Skarn -Tag $Version -Dir $InstallDir

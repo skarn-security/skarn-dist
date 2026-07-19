@@ -1,4 +1,4 @@
-.TH "SKARN-SETUP" "1" "2026-06-23" "skarn 0.17.2" "Skarn Manual"
+.TH "SKARN-SETUP" "1" "2026-06-23" "skarn 0.18.0" "Skarn Manual"
 .SH NAME
 skarn\-setup \- Wire the skarn guard hook into detected AI coding agents
 (merge\-based, reversible), then verify it with the guard self\-test
@@ -9,20 +9,25 @@ Wire the skarn guard hook into detected AI coding agents (merge\-based,
 reversible), then verify it with the guard self\-test.
 .PP
 Guided onboarding: detect installed AI coding agents (Claude Code, Cursor,
-Codex CLI), merge the skarn guard hook into each one's native config in audit
-mode, and prove the wiring with the guard self\-test. Existing foreign hooks
-are never touched; every modified file is backed up first
-(*.skarn\-bak.<timestamp>) and rewritten atomically; a target file that does
-not parse as JSON is refused, never overwritten. On a terminal it runs an
-interactive wizard with default\-yes prompts; \-\-yes accepts everything,
-\-\-print writes nothing.
+Codex CLI, Copilot CLI), merge the skarn guard hook into each one's native
+config in audit mode, and prove the wiring with the guard self\-test.
+\-\-scope project writes committed, shareable configs whose commands are
+portable by construction (a PATH\-guarded invocation and a literal $HOME log
+path, never this machine's absolute paths); \-\-plugin commits the claude
+plugin requirement instead of hook entries, and the two project routes are
+mutually exclusive \- each removes the other's skarn\-owned entries so the
+guard can never fire twice. Existing foreign hooks are never touched; every
+modified file is backed up first (*.skarn\-bak.<timestamp>) and rewritten
+atomically; a target file that does not parse as JSON is refused, never
+overwritten. On a terminal it runs an interactive wizard with default\-yes
+prompts; \-\-yes accepts everything, \-\-print writes nothing.
 .SH OPTIONS
 .TP
 \fB\-\-agent\fR \fIname\fR
 Target agents, repeatable or comma\-separated. Default: all detected (an agent
 is detected when its config directory exists or its CLI is on PATH); naming an
 agent explicitly also targets it when undetected. One of: claude, cursor,
-codex, all.
+codex, copilot, all.
 .TP
 \fB\-\-mode\fR \fImode\fR
 Guard mode written into the hook commands. Audit records would\-be verdicts to
@@ -36,22 +41,44 @@ fail\-closed semantics on Codex).
 .TP
 \fB\-\-log\fR \fIpath\fR
 Guard log path wired into the hook commands as the SKARN_GUARD_LOG prefix;
-pass none to disable logging. The Codex commandWindows form carries no prefix
-(set the variable in the environment on Windows). The default is
-~/.cache/skarn/guard\-<agent>\-audit.jsonl.
+pass none to disable logging. The Codex commandWindows and Copilot powershell
+forms carry their own Windows path (set the variable in the environment on
+Windows). The default is ~/.cache/skarn/guard\-<agent>\-audit.jsonl.
 .TP
 \fB\-\-command\fR \fIpath\fR
-The guard executable invoked by the hook commands. The default resolves this
-binary's absolute path (preferring the stable Homebrew <prefix>/bin symlink
-over the versioned Cellar path) because GUI\-launched hosts like Cursor do not
-inherit brew's PATH; pass skarn to opt into PATH\-relative. The default is
-this binary's absolute path.
+The guard executable invoked by the hook commands. At user scope the default
+resolves this binary's absolute path (preferring the stable Homebrew
+<prefix>/bin symlink over the versioned Cellar path) because GUI\-launched
+hosts like Cursor do not inherit brew's PATH; pass skarn to opt into
+PATH\-relative. At project scope the default is the bare name skarn, and a
+value containing a path separator is refused: a committed config must resolve
+skarn from PATH on every machine. The default is this binary's absolute path.
 .TP
 \fB\-\-scope\fR \fIscope\fR
 Write user\-level configs (~/.claude/settings.json, ~/.cursor/hooks.json,
-~/.codex/hooks.json) or project\-level ones (./.claude, ./.cursor, ./.codex
-relative to the working directory). One of: user, project. The default is
-user.
+~/.codex/hooks.json, ~/.copilot/hooks/skarn.json) or project\-level ones
+(./.claude, ./.cursor, ./.codex, ./.github/hooks/skarn.json relative to the
+working directory), meant to be committed and shared. The two scopes
+deliberately write different command shapes: user scope bakes this binary's
+absolute path (immune to a GUI host's missing PATH), project scope emits a
+portable PATH\-guarded command (if command \-v skarn ...; then ...; else exit
+0; fi) with a literal $HOME log path, so the committed file runs unmodified on
+every teammate's machine and exits 0 where skarn is not installed. Copilot
+honors $COPILOT_HOME as its user\-scope root. One of: user, project. The
+default is user.
+.TP
+\fB\-\-plugin\fR
+With \-\-scope project, claude only: write the committed plugin requirement
+(the skarn entry in extraKnownMarketplaces plus
+enabledPlugins["skarn\-guard@skarn"]) instead of hook entries, so every
+contributor who opens the repo installs the skarn\-guard plugin from the
+public marketplace. Mutually exclusive with the hooks route in both
+directions: \-\-plugin removes any skarn\-owned hook entries it previously
+wrote, and a later hooks\-route run removes the plugin keys, so the guard can
+never fire twice per event. Refused at user scope, for non\-claude agents, and
+combined with \-\-update, \-\-mode, \-\-strict, \-\-log, or \-\-command (the
+plugin ships its own hook files). Foreign marketplaces and plugins are never
+touched.
 .TP
 \fB\-\-print\fR
 Print the final per\-agent config to stdout and write nothing; the
@@ -77,6 +104,14 @@ never deleted, and backups from earlier runs are kept.
 \fB\-\-json\fR
 Print a machine\-readable result summary (per agent: path, action, backup,
 self\-test result) instead of the text report.
+.SH FILES
+.TP
+\fB./.claude/settings.json, ./.cursor/hooks.json, ./.codex/hooks.json, ./.github/hooks/skarn.json\fR
+A repo's committed project\-scope hook configs (claude, cursor, codex,
+copilot), written by skarn setup \-\-scope project and read by doctor as each
+host's project precedence layer whenever it runs in that directory. Portable
+by construction: the committed command resolves skarn from PATH at run time
+and exits 0 where skarn is not installed.
 .SH "SEE ALSO"
 skarn(1)
 .SH COPYRIGHT

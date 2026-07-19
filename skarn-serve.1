@@ -1,4 +1,4 @@
-.TH "SKARN-SERVE" "1" "2026-06-23" "skarn 0.17.2" "Skarn Manual"
+.TH "SKARN-SERVE" "1" "2026-06-23" "skarn 0.18.0" "Skarn Manual"
 .SH NAME
 skarn\-serve \- Start the local web UI (search, recent, stats, and a redacted
 scan view) bound to 127.0.0.1
@@ -10,7 +10,16 @@ to 127.0.0.1.
 .PP
 Control the localhost web UI. Access requires the per\-run token embedded in
 the URL the command prints at startup; opening that URL sets a session cookie,
-and scripts may pass it as a token= query parameter instead.
+and scripts may pass it as a token= query parameter instead. The recall views
+(search, recent, stats) need no license; the security view (/api/scan) is the
+same engine as check and requires one the same way \- without it the endpoint
+answers 403 and the Security tab shows how to register free. Opening a finding
+in the Security view shows a detail drawer (severity, taxonomy crosswalk,
+attack\-chain context, and the redacted code context) from which you can
+accept the finding into your baseline as a false positive \- the same write
+path as skarn baseline accept, recording only the finding's fingerprint, never
+its secret. The license is resolved once at startup, so installing one while
+the server is running needs a restart.
 .SH OPTIONS
 .TP
 \fB\-\-port\fR \fIn\fR
@@ -26,6 +35,12 @@ Suppress findings recorded in this accepted\-findings baseline; the Security
 view hides them by default behind a show/hide toggle. Without this flag,
 ~/.config/skarn/baseline.json is applied automatically when it exists. A
 directory of baselines (the org form) requires a Team license.
+.TP
+\fB\-\-fleet\fR \fIpath\fR
+Serve a Fleet roster view (preview) over this fleet.json aggregate of
+per\-machine redacted scan artifacts. The aggregate is produced by an external
+step that reads each machine's dropped scan output; skarn neither collects nor
+transmits fleet data. Requires an Enterprise license.
 .SH "SEE ALSO"
 skarn(1)
 .SH COPYRIGHT

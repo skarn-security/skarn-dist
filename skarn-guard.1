@@ -1,23 +1,44 @@
-.TH "SKARN-GUARD" "1" "2026-06-23" "skarn 0.17.2" "Skarn Manual"
+.TH "SKARN-GUARD" "1" "2026-06-23" "skarn 0.18.0" "Skarn Manual"
 .SH NAME
 skarn\-guard \- Real\-time pre\-execution hook for editor/agent integration;
 reads an event on stdin and emits a verdict. guard report summarizes the audit
-log and prints the enforce flip when the window is clean
+log, forecasts what enforcing would cost, and prints the enforce flip when the
+window is clean; guard accept records a flagged finding as a false positive so
+the guard stops blocking it
 .SH SYNOPSIS
-\fBskarn\fR \fBguard\fR [report] [options]
+\fBskarn\fR \fBguard\fR [report|accept <fingerprint>] [options]
 .SH DESCRIPTION
 Real\-time pre\-execution hook for editor/agent integration; reads an event on
-stdin and emits a verdict. guard report summarizes the audit log and prints
-the enforce flip when the window is clean.
+stdin and emits a verdict. guard report summarizes the audit log, forecasts
+what enforcing would cost, and prints the enforce flip when the window is
+clean; guard accept records a flagged finding as a false positive so the guard
+stops blocking it.
 .PP
 Control the real\-time pre\-execution hook used for editor/agent integration
 (Claude Code, Cursor, Codex CLI, and Copilot CLI). The report subverb reads
 the guard's own audit log instead of an event: it summarizes the flagged calls
-per agent (verdicts, top rules, latency, the most recent denies) and, when the
-window spans at least five days with zero denies, prints the exact command
-that flips the wired hooks to enforce. The guard logs only flagged calls, so
-every count report prints is a count of flagged actions, never a rate over all
-traffic. Report is ungated and reads nothing but the log.
+per agent (verdicts, top rules, latency, the most recent denies), states what
+enforcing that window would have cost (blocks per day, prompts per day), and,
+when the window spans at least five days with zero denies, prints the exact
+command that flips the wired hooks to enforce. The guard logs only flagged
+calls, so every count and every rate report prints is over flagged actions,
+never over all traffic. The accept subverb closes that loop: every audit
+record carries a fingerprint (the same secret\-scoped key check writes to
+SARIF partialFingerprints), report prints it under each deny, and `skarn guard
+accept <fingerprint>` records it as a false positive so the identical call
+stops being flagged. Both subverbs are ungated: report reads nothing but the
+log, and accept writes only a file. On a flagged call the guard consults the
+personal accepted\-findings baseline it shares with check
+(~/.config/skarn/baseline.json, the file form only \- never the org\-union
+directory, so the guard can never hit a paid gate): a finding accepted as a
+false positive is dropped from the verdict, while a finding a human confirmed
+as a REAL leak (`skarn baseline audit`, label true\-positive) is never
+suppressed and keeps being blocked until the credential is rotated. Only the
+highest\-severity finding of a call carries the fingerprint, so a call hiding
+several distinct secrets peels one accept at a time; a correlated attack chain
+still denies even when every secret in the call has been accepted; and a
+baseline that is missing, unreadable, or malformed suppresses nothing at all
+\- a broken baseline means more blocking, never less.
 .SH OPTIONS
 .TP
 \fB\-\-guard\-mode\fR \fImode\fR
@@ -33,15 +54,18 @@ Hook host (default: auto\-detect from the event shape; pass codex explicitly
 for Codex CLI, which shares Claude's event names, and copilot explicitly for
 Copilot CLI, whose Claude\-compat payloads are indistinguishable from
 Claude's). With \-\-self\-test, all (the default) tests the claude, cursor,
-and codex adapters. With report, it restricts the summary to one agent
-(repeatable or comma\-separated). One of: claude, cursor, codex, copilot, all.
+codex, and copilot adapters, copilot on both its CLI and VS Code dialects.
+With report, it restricts the summary to one agent (repeatable or
+comma\-separated). One of: claude, cursor, codex, copilot, all.
 .TP
 \fB\-\-self\-test\fR
 Verify the guard wiring instead of reading an event: feed two synthetic
 fixture events (one benign, one carrying a fake credential) through each
 adapter's real code path and report the verdicts, latency, and a guard\-log
-write probe. The fake credential is only ever printed redacted. Exit 0 when
-every adapter passes, 1 otherwise; works unlicensed (audit semantics).
+write probe. The fake credential is only ever printed redacted, and the
+self\-test deliberately ignores the accepted\-findings baseline, so an
+accepted fingerprint can never make a dead hook look alive. Exit 0 when every
+adapter passes, 1 otherwise; works unlicensed (audit semantics).
 .TP
 \fB\-\-log\fR \fIpath\fR
 With report: guard log to summarize, repeatable. Default: $SKARN_GUARD_LOG
@@ -54,9 +78,29 @@ as zero.
 With report: how far back to summarize, as <N>d or all. The default is 7d.
 .TP
 \fB\-\-format\fR \fIfmt\fR
-With report: text renders the summary and the recommendation; json emits the
-whole aggregate as one object with stable field names for fleet scripts. One
-of: text, json. The default is text.
+With report: text renders the summary, the enforce\-cost forecast, and the
+recommendation; json emits the whole aggregate as one object with stable field
+names for fleet scripts (including a forecast object and the denominator
+string that names what its rates are rates of). One of: text, json. The
+default is text.
+.TP
+\fB\-\-baseline\fR \fIfile\fR
+With accept: the accepted\-findings file to write. Defaults to the personal
+baseline the guard itself reads (~/.config/skarn/baseline.json, honoring
+$XDG_CONFIG_HOME), created on first use \- unlike `skarn baseline accept`,
+which always names its file, because an accept the guard does not read would
+not stop the block. Always a file, never a directory: the org\-union form is
+not reachable from the guard. Accepting a fingerprint already recorded as a
+confirmed true positive is refused, so a fingerprint\-only accept can never
+re\-silence a real leak.
+.TP
+\fB\-\-reason\fR \fItext\fR
+With accept: why this finding is a false positive, recorded in the baseline
+entry. Do not paste a secret here; the text is stored verbatim.
+.TP
+\fB\-\-identity\fR \fIid\fR
+With accept: override the accepted\-by identity stamped on the entry; defaults
+to $SKARN_IDENTITY.
 .SH "HOOK EVENTS"
 .SS "Claude Code"
 Claude Code fires PascalCase events with a JSON envelope on stdin. Five events

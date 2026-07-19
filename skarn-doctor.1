@@ -1,4 +1,4 @@
-.TH "SKARN-DOCTOR" "1" "2026-06-23" "skarn 0.17.2" "Skarn Manual"
+.TH "SKARN-DOCTOR" "1" "2026-06-23" "skarn 0.18.0" "Skarn Manual"
 .SH NAME
 skarn\-doctor \- Check whether skarn is actually protecting this machine:
 binary, license, wired agent hooks, guard log, session stores, and the guard
@@ -12,15 +12,56 @@ wired agent hooks, guard log, session stores, and the guard self\-test.
 Health, wiring, and dead\-hook detection. Doctor runs one named check per line
 \- the binary and its path, the license, each detected agent's hook config,
 whether each wired hook command still resolves to an executable, whether the
-wiring matches what this version of skarn writes, the guard log's freshness,
-the session stores it can enumerate, the guard self\-test, and the cache
-directory \- and every warning or failure names the exact command that clears
-it. Check ids (binary, license, agent_config_<agent>, guard_command_<agent>,
-config_drift_<agent>, guard_log_<agent>, self_test_<agent>, session_stores,
-cache_dir) are a stable, greppable contract for fleet scripts. A failure exits
-1; a warning never does; \-\-json is a data mode and always exits 0. Doctor is
-hermetic: it makes no network call, shells out to nothing, and enumerates the
-session stores without reading a session's content.
+guard mode the hook asks for (audit or enforce) is what actually runs under
+this binary's license, whether the wiring matches what this version of skarn
+writes, the guard log's freshness, the session stores it can enumerate, the
+guard self\-test, the cache directory, and how current the detection rules are
+\- and every warning or failure names the exact command that clears it, or the
+resource that explains it when no single command applies (a free binary whose
+bundled rules have aged has no command to run, so that one check carries the
+editions link instead of a fix). Each agent's hook config is read as ordered
+precedence layers \- the MDM/fleet\-managed system paths first, then the
+repo's committed project config in the working directory
+(./.claude/settings.json, ./.cursor/hooks.json, ./.codex/hooks.json,
+\&./.github/hooks/skarn.json), then the per\-user config \- so a machine wired
+only through the managed layer reports as protected and names the managed
+file, and a repo carrying a committed project config is inspected wherever
+doctor runs; on Claude and Codex a managed lockdown key (allowManagedHooksOnly
+/ allow_managed_hooks_only) makes every lower layer inert, and doctor reports
+an inert user or project hook instead of counting it as protection (Cursor and
+Copilot layer additively, so every present layer runs). A committed project
+hook gets its own guard\-command verdicts: an absolute machine\-local path or
+an unrendered __SKARN_PATH__ placeholder FAILs (that file protects nobody but
+its author), a PATH\-resolved command that does not resolve on this machine
+FAILs with the install command as the fix (the hook exits 0 here, so the repo
+is not protecting this machine), and Cursor at project scope WARNs naming the
+GUI\-PATH gap \- the deliberate, documented cost of a portable committed
+config. The license check WARNs when there is no license at all (check will
+not run, exit 7; assess, the guard, and the recall commands still work) and
+FAILs only when a license is present but broken. The eula check PASSes when an
+EULA acceptance is recorded (showing the accepted version, timestamp, and
+method) and WARNs when none is, with fix `skarn eula accept` \- doctor itself
+never asks, so a diagnostic is never blocked by the acceptance gate. The
+guard\-scope check WARNs when a hook wired with \-\-guard\-mode enforce runs
+on an unlicensed binary (the guard silently runs audit: it records the
+would\-be verdict and blocks nothing). The guard\-conformance check appears
+only when a managed layer declares a skarn hook and answers whether this
+machine runs what the org declared: it WARNs when the managed layer declares
+enforce on an unlicensed binary (the fleet is observing, not blocking), when
+the declared command does not resolve to an executable (the managed config
+alone deploys nothing \- the binary must ride the same MDM payload), when a
+declared event is not gated, or when a hook disagrees with the declared mode;
+every branch is a WARN with an exact fix, never a FAIL, because a policy
+divergence is a fleet fact, not a broken install. Check ids (binary, license,
+eula, agent_config_<agent>, guard_command_<agent>, guard_scope_<agent>,
+config_drift_<agent>, guard_log_<agent>, self_test_<agent>,
+guard_conformance_<agent>, session_stores, cache_dir, rule_age) are a stable,
+greppable contract for fleet scripts. A failure exits 1; a warning never does;
+\-\-json is a data mode and always exits 0. Doctor is hermetic: it makes no
+network call, shells out to nothing, and enumerates the session stores without
+reading a session's content. Set SKARN_MANAGED_ROOT to validate a staged
+managed payload before pushing it; the active root is echoed in the report
+header and in \-\-json, so a staged report can never pass as a live one.
 .SH OPTIONS
 .TP
 \fB\-v\fR, \fB\-\-verbose\fR
@@ -29,7 +70,59 @@ per\-tool session counts, and the resolved Homebrew path.
 .TP
 \fB\-\-json\fR
 Emit the full structured result: {version, checks[{id, status, detail, fix,
-notes}], summary{pass, warn, fail}}. Always exits 0.
+notes}], summary{pass, warn, fail}}, plus managed_root at the top level when
+SKARN_MANAGED_ROOT is active and an additive layers array ([{layer, path,
+effect, lockdown, wired}]) on each agent config check. Always exits 0.
+.SH FILES
+.TP
+\fB/Library/Application Support/ClaudeCode/managed\-settings.json, /etc/claude\-code/managed\-settings.json, C:\eProgram Files\eClaudeCode\emanaged\-settings.json\fR
+Claude Code's MDM\-managed settings (macOS, Linux/WSL, Windows). Doctor reads
+the platform's path as the claude host's managed precedence layer;
+allowManagedHooksOnly: true there makes every lower layer inert. Read\-only;
+never written.
+.TP
+\fB/Library/Managed Preferences/com.anthropic.claudecode.plist\fR
+Claude Code's macOS managed\-preferences domain. Declared as a managed source
+but not decoded; when present, doctor surfaces it as a coverage gap with a
+plutil command to inspect it, never as a silent absent.
+.TP
+\fB/etc/codex/requirements.toml, %ProgramData%\eOpenAI\eCodex\erequirements.toml\fR
+Codex's admin\-managed requirements file (Unix, Windows). Doctor reads it as
+the codex host's managed precedence layer via a scoped reader
+(allow_managed_hooks_only and the [[hooks.<Event>.hooks]] command strings);
+allow_managed_hooks_only = true makes every lower layer inert. Read\-only;
+never written.
+.TP
+\fB/Library/Managed Preferences/com.openai.codex.plist\fR
+Codex's macOS managed\-preferences domain. Doctor decodes the XML form
+(requirements_toml_base64 and config_toml_base64, base64 to the same scoped
+reader; the lockdown key is honored only from the requirements payload,
+matching Codex); a binary plist is surfaced as present\-but\-unreadable with
+the exact plutil conversion command, never as a silent absent.
+.TP
+\fB/Library/Application Support/Cursor/hooks.json, /etc/cursor/hooks.json, C:\eProgramData\eCursor\ehooks.json\fR
+Cursor's enterprise\-managed hooks (macOS, Linux/WSL, Windows). Doctor reads
+the platform's path as the cursor host's managed precedence layer; Cursor
+layers additively (no lockdown key), so every present layer stays active.
+Read\-only; never written.
+.TP
+\fB/etc/github\-copilot/policy.d/*.json, C:\eProgramData\eGitHub\eCopilot\epolicy.d\e*.json\fR
+Copilot's managed policy directory (Linux/macOS, Windows). Doctor folds every
+*.json in the directory into the copilot host's managed precedence layer,
+sorted by name; Copilot layers additively. Read\-only; never written.
+.TP
+\fB./.claude/settings.local.json\fR
+Claude Code's personal, gitignored project settings file. Claude merges hooks
+across every settings file and runs all of them, so a guard wired here
+protects this checkout and doctor reads it as part of the project layer. skarn
+setup never writes it: it writes only the committed ./.claude/settings.json.
+.TP
+\fB./.claude/settings.json, ./.cursor/hooks.json, ./.codex/hooks.json, ./.github/hooks/skarn.json\fR
+A repo's committed project\-scope hook configs (claude, cursor, codex,
+copilot), written by skarn setup \-\-scope project and read by doctor as each
+host's project precedence layer whenever it runs in that directory. Portable
+by construction: the committed command resolves skarn from PATH at run time
+and exits 0 where skarn is not installed.
 .SH "SEE ALSO"
 skarn(1)
 .SH COPYRIGHT
