@@ -1,4 +1,4 @@
-.TH "SKARN-GUARD" "1" "2026-06-23" "skarn 0.19.0" "Skarn Manual"
+.TH "SKARN-GUARD" "1" "2026-06-23" "skarn 0.20.0" "Skarn Manual"
 .SH NAME
 skarn\-guard \- Real\-time pre\-execution hook for editor/agent integration;
 reads an event on stdin and emits a verdict. guard report summarizes the audit
@@ -177,10 +177,12 @@ call.
 \fBStop\fR
 Scans nothing from the event: it triggers a throttled, scoped, offline scan of
 recent sessions on this machine. Enforce: never blocks (advisory only). Audit:
-systemMessage with suppressOutput. Wired by the shipped configs. The
-session\-end advisory. At most once an hour it reports a redacted count and
-the highest severity of credential exposures found in recent sessions, and
-points at skarn assess. Never egresses, never prints a secret value.
+systemMessage with suppressOutput. Wired by the shipped configs. The stop
+advisory. Claude fires Stop at the end of each response, not only at session
+end; the hourly throttle paces it, so at most once an hour it reports a
+redacted count and the highest severity of credential exposures found in
+recent sessions, and points at skarn assess. Never egresses, never prints a
+secret value.
 .SS "Cursor"
 Cursor fires camelCase events, each with its own stdin shape and its own
 verdict schema \- unlike Claude's single envelope. All four blocking events
@@ -221,7 +223,18 @@ recoverable: the user edits and resubmits.
 Codex's hook system mirrors Claude's \- PascalCase events and a
 near\-identical PreToolUse JSON \- but its verdict semantics differ:
 permissionDecision ask and a bare allow both FAIL OPEN, so a would\-be ask
-degrades to deny.
+degrades to deny. Codex fires more events than Skarn wires; the rest are
+evaluated and deliberately left off the matrix (verified against the OpenAI
+Hooks guide, 2026\-07\-21): SessionStart and SubagentStart carry only session
+and subagent metadata (model, permission_mode, agent_id/type), no
+credential\-bearing tool or prompt content; PreCompact and PostCompact carry
+only a compaction trigger over already\-seen transcript the recall scan
+covers; SubagentStop carries last_assistant_message (so it is NOT
+content\-free), but that post\-hoc subagent output lands in the session store
+the recall scan and the turn\-end advisory already cover, so it is a
+deliberate deferral pending the cross\-action daemon the codex README names.
+Codex has no SessionEnd event in the current reference; if one lands in a
+later release it is additive.
 .PP
 Routing: Codex shares Claude's event names, so pass \-\-agent codex
 explicitly. Auto\-detection falls back to a Codex\-only tell: turn_id (on
@@ -255,11 +268,44 @@ Scans tool_response of an in\-scope tool. Enforce: top\-level decision =
 block, with the redacted reason in reason. Audit: systemMessage. Supported but
 opt\-in: not wired by the shipped configs. Output scanning. Opt\-in \- it
 fires on every tool result.
+.TP
+\fBStop\fR
+Scans nothing from the event: it triggers a throttled, scoped, offline scan of
+this machine's recent codex sessions. Enforce: never blocks (advisory only).
+Audit: systemMessage with suppressOutput; it carries no decision, so Codex
+never continues the turn. Wired by the shipped configs. The turn\-end advisory
+\- Codex Stop is turn\-scoped (it fires when the agent finishes a turn), not a
+session\-end signal. Handled at run() level by isSessionEndEvent (guard.zig),
+which scans with \-\-agent codex; at most once an hour it reports a redacted
+count and the highest severity of credential exposures in recent codex
+sessions and points at skarn assess. Claude and Codex share one hourly
+advisory budget (the guard\-assess\-advisory throttle), so activity on either
+host can suppress the other's nudge for that hour \- a deliberate global
+budget, not a per\-host one. Never egresses, never prints a secret value.
 .SS "GitHub Copilot CLI"
 The Copilot CLI's native payload is camelCase (toolName / toolArgs /
 sessionId) and carries no event\-name field, so the event is inferred from the
 field shape. Only preToolUse can actually block; the other events run full
-detection and write the audit log but cannot decide.
+detection and write the audit log but cannot decide. GitHub documents fourteen
+Copilot CLI hook events; Skarn declares five of them (preToolUse,
+permissionRequest, userPromptSubmitted, userPromptTransformed, postToolUse)
+plus preMcpToolCall, and evaluates the rest as deliberately not wired
+(verified against the GitHub hooks reference, 2026\-07\-21): sessionStart
+carries an initialPrompt (scannable), but a session\-open detection arm beyond
+userPromptTransformed is out of this round's scope; subagentStart and
+subagentStop carry subagent metadata (agentName, transcriptPath), and the
+subagent's own tool calls are gated by preToolUse while any post\-hoc output
+lands in the session store the recall scan covers; postToolUseFailure carries
+the failed call's toolArgs plus its error text, which can hold output
+preToolUse never saw, so leaving it unwired is a deliberate coverage deferral
+of the same class as the opt\-in postToolUse output scan; errorOccurred and
+notification carry human\-readable error and message text (a low\-value
+surface deferred this round, not a claim they can never carry a secret);
+preCompact carries a compaction trigger and any customInstructions over
+already\-seen transcript; agentStop (Stop) and sessionEnd carry only a
+stopReason/reason over transcript the recall scan covers. Every one of these
+is a deliberate coverage deferral, not an assertion that the event can never
+carry a credential.
 .PP
 Routing: The camelCase field set is the CLI tell. A Copilot payload in
 Claude\-compat mode is byte\-indistinguishable from a real Claude event (field
@@ -290,12 +336,34 @@ Copilot CLI prompt is detected and logged but NOT blocked before it reaches
 the provider \- unlike Claude Code and Codex, whose prompt\-submit hooks can
 block. A host limitation, not a Skarn one.
 .TP
+\fBuserPromptTransformed\fR
+Scans transformedPrompt (the transformed, model\-facing prompt text; the
+payload also carries the pre\-transformation prompt, and this row is inferred
+on transformedPrompt before the prompt\-only userPromptSubmitted branch). The
+channel ships content off the machine, so a secret on it is exfiltration.
+Enforce: nothing is emitted \- this event's only output channel is
+modifiedTransformedPrompt, which rewrites the model\-facing prompt, and Skarn
+declines that mutation channel by policy; there is no block or decision
+channel on this event, so it is detection and audit\-log ONLY. Audit: none.
+Supported but opt\-in: not wired by the shipped configs. On this event Skarn
+detects and writes the audit log only; it never blocks or decides, because the
+event's sole output channel is modifiedTransformedPrompt (a prompt rewrite)
+which Skarn declines by policy \- it observes and blocks but never rewrites
+model\-facing content, a Skarn policy rather than a host limitation. Opt\-in,
+not wired in the shipped configs: a config update reaches users independently
+of the binary, and a binary predating this event would scan the payload as
+userPromptSubmitted (it carries prompt), so the opt\-in row avoids that
+ambiguity until a release carrying the arm is current.
+.TP
 \fBpreMcpToolCall\fR
 Scans arguments, under the canonical mcp__<server>__<tool> name. Enforce:
 nothing is emitted \- this event's output controls only MCP request metadata.
 Audit: none. Supported but opt\-in: not wired by the shipped configs.
 Supported but not wired in the shipped configs: it cannot block or advise, so
-it buys detection coverage in the guard log only.
+it buys detection coverage in the guard log only. Added in Copilot CLI 1.0.51
+and still firing (no removal through 1.0.73, verified 2026\-07\-21), though it
+is absent from GitHub's current hooks\-reference event table; the row is kept
+version\-scoped because older supported CLIs still fire it.
 .TP
 \fBpostToolUse\fR
 Scans toolResult. Enforce: advisory only \- never blocks. Audit:

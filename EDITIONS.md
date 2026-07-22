@@ -1,6 +1,6 @@
 # Skarn editions - the free/paid boundary
 
-Generated from docs/cli-model.toml by docs/build_manpage.py (regenerate with `zig build man`); do not edit by hand. skarn 0.19.0.
+Generated from docs/cli-model.toml by docs/build_manpage.py (regenerate with `zig build man`); do not edit by hand. skarn 0.20.0.
 
 One binary for every tier. The free tier is the full local product, not a trial: the entire detection engine, every output format, and redaction, under a free license available to anyone who registers - an individual or an organization alike. Paid tiers unlock org capabilities: distributing policy and accepted-findings baselines across a team, compliance evidence, the maintained feed, and real-time enforcement.
 

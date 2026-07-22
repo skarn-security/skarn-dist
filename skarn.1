@@ -1,4 +1,4 @@
-.TH "SKARN" "1" "2026-06-23" "skarn 0.19.0" "Skarn Manual"
+.TH "SKARN" "1" "2026-06-23" "skarn 0.20.0" "Skarn Manual"
 .SH NAME
 skarn \- AI coding session security scanner with built\-in session search
 .SH SYNOPSIS
@@ -1186,6 +1186,12 @@ GitHub Copilot CLI config directory visible in Skarn's environment; replaces
 the default ~/.copilot as the Copilot CLI session root, folded into the
 copilot source.
 .TP
+\fBCODEX_HOME\fR
+A Codex CLI data directory visible in Skarn's environment; folded into the
+codex source alongside the default ~/.codex, de\-duplicated, resolved via
+expandPath. Each root contributes its sessions/ and archived_sessions/
+children.
+.TP
 \fBSKARN_MANAGED_ROOT\fR
 Prefix doctor prepends to every managed (MDM/fleet) config path it reads, so a
 fleet admin can validate a staged payload directory before pushing it to a
@@ -1251,8 +1257,8 @@ and exits 0 where skarn is not installed.
 \fB~/.skarn.json\fR
 Optional tool configuration: the set of assistant tools and their session
 paths, plus an optional projects alias map. Both the recall surface and scan
-discovery (check, assess, baseline audit, the guard's session\-end advisory,
-and serve's Security scan) read it, so the security scan and the recall views
+discovery (check, assess, baseline audit, the guard's stop advisory, and
+serve's Security scan) read it, so the security scan and the recall views
 cover the same corpus. Falls back to a builtin tool set when absent. The
 projects object renames a resolved project for display: a key beginning ~, $,
 or / is a path prefix (with ~ and a leading $VAR expanded like sessions_path)
@@ -1294,6 +1300,14 @@ Claude Code MCP server definitions. Read by vet, along with a project\-local
 \fB~/.claude/plugins/, ~/.claude/skills/\fR
 Installed Claude Code plugins and skills. Vet reads each plugin.json and
 skill.json manifest for its install source and integrity marker.
+.TP
+\fB~/.codex/sessions/, ~/.codex/archived_sessions/\fR
+Default Codex CLI session roots, scanned automatically and extendable with
+$CODEX_HOME. zstd\-compressed rollouts (rollout\-*.jsonl.zst, written for
+rollouts older than 7 days) are read transparently through the same reader as
+plain ones; when both a plain rollout and its .zst twin exist the plain one is
+preferred. Only rollout\-* files are parsed as sessions, so
+session_index.jsonl is never scanned.
 .TP
 \fB~/.codex/config.toml, ~/.codex/hooks.json\fR
 Codex CLI MCP server definitions and hooks. Read by vet.
