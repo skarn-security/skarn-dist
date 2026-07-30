@@ -1,13 +1,22 @@
-.TH "SKARN-ASSESS" "1" "2026-06-23" "skarn 0.20.0" "Skarn Manual"
+.TH "SKARN-ASSESS" "1" "2026-06-23" "skarn 0.21.0" "Skarn Manual"
 .SH NAME
 skarn\-assess \- Scan every AI session on this machine and print a friendly
-risk summary, with an optional shareable redacted report. Free, no config, no
-license
+risk summary, with an optional shareable redacted report and a scoped incident
+dossier. Free, no config, no license. Run at a terminal it also names, once
+per release, a hook in your own per\-user agent config that has fallen behind
+this build, so an event a newer template gates does not go unscanned
+unnoticed; it looks at that config only, never at a repo's committed hooks and
+never at a fleet\-managed one
 .SH SYNOPSIS
 \fBskarn\fR \fBassess\fR [options]
 .SH DESCRIPTION
 Scan every AI session on this machine and print a friendly risk summary, with
-an optional shareable redacted report. Free, no config, no license.
+an optional shareable redacted report and a scoped incident dossier. Free, no
+config, no license. Run at a terminal it also names, once per release, a hook
+in your own per\-user agent config that has fallen behind this build, so an
+event a newer template gates does not go unscanned unnoticed; it looks at that
+config only, never at a repo's committed hooks and never at a fleet\-managed
+one.
 .PP
 The zero\-config machine\-scan wedge: scan every AI coding session on the
 machine and print a friendly risk summary, no flags and no license. \-o writes
@@ -21,7 +30,8 @@ renders Markdown, any other extension renders HTML.
 .TP
 \fB\-\-json\fR
 Emit the redacted scan as JSON (the same shape as the serve /api/scan view)
-for scripting, instead of the friendly summary.
+for scripting, instead of the friendly summary. With \-\-dossier the body is
+the dossier envelope that wraps this scan, not the bare scan shape.
 .TP
 \fB\-\-offline\fR
 Disable all network access. Assess is already egress\-free; this is the
@@ -38,7 +48,7 @@ default is low.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict the scan to one assistant's sessions. One of: claude, gemini, codex,
-cursor, copilot.
+cursor, copilot, kimi.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict the scan to matching projects: a comma\-separated list of names or
@@ -59,6 +69,14 @@ unlicensed directory degrades to a warning and an unsuppressed scan.
 .TP
 \fB\-\-no\-color\fR
 Disable colored output.
+.TP
+\fB\-\-dossier\fR \fIselector\fR
+Scope \-o and \-\-json to one finding by its 64\-character fingerprint (a
+reused credential matches every session it appears in) or one session by id,
+auto\-detected by shape, as an incident dossier: the redacted facts Skarn
+holds for the selection, plus an explicit list of the CRA Article 14 reporting
+fields Skarn cannot supply. A local share artifact; Skarn does not file
+reports or determine severity.
 .SH "SEE ALSO"
 skarn(1)
 .SH COPYRIGHT

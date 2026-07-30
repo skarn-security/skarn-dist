@@ -1,34 +1,54 @@
-.TH "SKARN-GUARD" "1" "2026-06-23" "skarn 0.20.0" "Skarn Manual"
+.TH "SKARN-GUARD" "1" "2026-06-23" "skarn 0.21.0" "Skarn Manual"
 .SH NAME
 skarn\-guard \- Real\-time pre\-execution hook for editor/agent integration;
 reads an event on stdin and emits a verdict. guard report summarizes the audit
-log, forecasts what enforcing would cost, and prints the enforce flip when the
-window is clean; guard accept records a flagged finding as a false positive so
-the guard stops blocking it
+log, forecasts what enforcing would cost, prints the enforce flip when the
+window is clean, and at a terminal names, once per release, a hook in your own
+per\-user agent config that has fallen behind this build; guard accept records
+a flagged finding as a false positive so the guard stops blocking it
 .SH SYNOPSIS
 \fBskarn\fR \fBguard\fR [report|accept <fingerprint>] [options]
 .SH DESCRIPTION
 Real\-time pre\-execution hook for editor/agent integration; reads an event on
 stdin and emits a verdict. guard report summarizes the audit log, forecasts
-what enforcing would cost, and prints the enforce flip when the window is
-clean; guard accept records a flagged finding as a false positive so the guard
-stops blocking it.
+what enforcing would cost, prints the enforce flip when the window is clean,
+and at a terminal names, once per release, a hook in your own per\-user agent
+config that has fallen behind this build; guard accept records a flagged
+finding as a false positive so the guard stops blocking it.
 .PP
 Control the real\-time pre\-execution hook used for editor/agent integration
-(Claude Code, Cursor, Codex CLI, and Copilot CLI). The report subverb reads
-the guard's own audit log instead of an event: it summarizes the flagged calls
-per agent (verdicts, top rules, latency, the most recent denies), states what
-enforcing that window would have cost (blocks per day, prompts per day), and,
-when the window spans at least five days with zero denies, prints the exact
-command that flips the wired hooks to enforce. The guard logs only flagged
-calls, so every count and every rate report prints is over flagged actions,
-never over all traffic. The accept subverb closes that loop: every audit
-record carries a fingerprint (the same secret\-scoped key check writes to
-SARIF partialFingerprints), report prints it under each deny, and `skarn guard
-accept <fingerprint>` records it as a false positive so the identical call
-stops being flagged. Both subverbs are ungated: report reads nothing but the
-log, and accept writes only a file. On a flagged call the guard consults the
-personal accepted\-findings baseline it shares with check
+(Claude Code, Cursor, Codex CLI, Copilot CLI, and Gemini CLI). The report
+subverb reads the guard's own audit log instead of an event: it summarizes the
+flagged calls per agent (verdicts, top rules, latency, the most recent
+denies), states what enforcing that window would have cost (blocks per day,
+prompts per day), and, when the window spans at least five days with zero
+denies, prints the exact command that flips the wired hooks to enforce. Run at
+a terminal it reads one thing more, your own per\-user hook configs, so it can
+name a hook that has fallen behind this build once per release; piped or as
+json it reads nothing but the log. The guard logs only flagged calls, so every
+count and every rate report prints is over flagged actions, never over all
+traffic. The accept subverb closes that loop: an audit record whose top
+finding carries a secret gets a fingerprint (the same secret\-scoped key check
+writes to SARIF partialFingerprints), report prints it under each such deny,
+and `skarn guard accept <fingerprint>` records it as a false positive so the
+identical call stops being flagged; a secret\-less deny (a structural egress
+detector, a typosquat, a chain) carries no fingerprint and no accept line. The
+structural egress detectors are built into the engine, not rule\-pack rules,
+and tier themselves: an egress whose whole payload is visible in the command
+itself \- a bare request, a literal body, query parameters, with no file sent,
+no credential store named, no earlier secret read in the same call, and no
+payload bytes the command text does not show (a command substitution, an
+environment expansion, a shell redirect, a form read, or a pipe feeding the
+target all keep the deny) \- is held at the ask tier \- a real approval prompt
+on the primary shell surfaces (Claude Code PreToolUse, Copilot preToolUse on
+both the CLI and VS Code, Cursor shell and MCP hooks), a block on the channels
+with no ask (Codex, Claude Code PermissionRequest, Copilot permissionRequest,
+Cursor file\-read events, Gemini) \- while a payload carrying a recognized
+credential file or upload form, a co\-detected secret, or recon earlier in the
+same call stays a deny. Both subverbs are ungated: report reads the log (plus,
+at a terminal, your own hook configs for the line above), and accept writes
+only a file. On a flagged call the guard consults the personal
+accepted\-findings baseline it shares with check
 (~/.config/skarn/baseline.json, the file form only \- never the org\-union
 directory, so the guard can never hit a paid gate): a finding accepted as a
 false positive is dropped from the verdict, while a finding a human confirmed
@@ -53,10 +73,12 @@ Also gate Read operations (credential\-file reconnaissance).
 Hook host (default: auto\-detect from the event shape; pass codex explicitly
 for Codex CLI, which shares Claude's event names, and copilot explicitly for
 Copilot CLI, whose Claude\-compat payloads are indistinguishable from
-Claude's). With \-\-self\-test, all (the default) tests the claude, cursor,
-codex, and copilot adapters, copilot on both its CLI and VS Code dialects.
-With report, it restricts the summary to one agent (repeatable or
-comma\-separated). One of: claude, cursor, codex, copilot, all.
+Claude's; Gemini CLI's Before*/After* event names are unique, so it
+auto\-detects, and the shipped configs pin it anyway). With \-\-self\-test,
+all (the default) tests the claude, cursor, codex, copilot, and gemini
+adapters, copilot on both its CLI and VS Code dialects. With report, it
+restricts the summary to one agent (repeatable or comma\-separated). One of:
+claude, cursor, codex, copilot, gemini, all.
 .TP
 \fB\-\-self\-test\fR
 Verify the guard wiring instead of reading an event: feed two synthetic
@@ -68,11 +90,20 @@ accepted fingerprint can never make a dead hook look alive. Exit 0 when every
 adapter passes, 1 otherwise; works unlicensed (audit semantics).
 .TP
 \fB\-\-log\fR \fIpath\fR
-With report: guard log to summarize, repeatable. Default: $SKARN_GUARD_LOG
-when set, otherwise the log skarn setup wires for each agent
-($XDG_CACHE_HOME/skarn/guard\-<agent>\-audit.jsonl). A log that does not exist
-is named in the output with the command that wires it, never silently counted
-as zero.
+On the hook invocation, `skarn guard \-\-log <path|none>`: where this call
+appends its redacted JSONL record. A path takes precedence over
+$SKARN_GUARD_LOG, none writes no record even when that variable is set, and no
+flag at all falls back to the variable. A path that expands to a
+parent\-directory segment or carries a control character is refused: no record
+is written and there is no fallback destination, because a fallback would
+derive from $XDG_CACHE_HOME or $HOME, which the same hook command can also
+set. With report: a guard log to summarize, repeatable. Default:
+$SKARN_GUARD_LOG when set, otherwise the log skarn setup wires for each agent
+($XDG_CACHE_HOME/skarn/guard\-<agent>\-audit.jsonl, plus the home cache beside
+it when a log already exists there). A log that does not exist is named in the
+output with the command that wires it, never silently counted as zero, and a
+configured path the guard refuses is named as refused rather than shown as
+empty.
 .TP
 \fB\-\-window\fR \fIspan\fR
 With report: how far back to summarize, as <N>d or all. The default is 7d.
@@ -402,6 +433,68 @@ Scans tool_response. Enforce: top\-level decision = block, with the redacted
 reason in reason. Audit: systemMessage. Supported but opt\-in: not wired by
 the shipped configs. Output scanning. Opt\-in \- it fires on every tool
 result.
+.SS "Gemini CLI"
+Gemini CLI fires eleven PascalCase events with a JSON envelope on stdin; hooks
+ship on by default since v0.26.0. Skarn gates three of them \- BeforeTool (the
+enforcing pre\-execution gate), BeforeAgent (the submitted prompt, an egress
+channel), and AfterTool (the tool result, opt\-in) \- and every other event
+fast\-allows. The stdout protocol is strict: the host requires that a hook
+print nothing to stdout but its final JSON object, so the guard's emit arm is
+the sole stdout writer and an allow prints nothing at all. Gemini's PUBLISHED
+output schema documents only allow and deny (alias block), with no ask value;
+gemini\-cli 0.49.0 does route an undocumented decision "ask" on BeforeTool to
+an interactive confirmation, but skarn deliberately does not emit it: a
+version that drops the undocumented behavior would read "ask" as no decision
+and let the call through, so a would\-be ask degrades to deny (fail\-closed on
+an undocumented channel). Timeouts are MILLISECONDS here, not seconds (the
+shipped entries use 5000).
+.PP
+Routing: The Before*/After* event vocabulary is unique to Gemini \- no other
+host uses those names \- so auto\-detection is unambiguous; the shipped
+configs pin \-\-agent gemini anyway, the same policy every other host follows.
+MCP tools arrive named mcp_<server>_<tool> with SINGLE underscores, so the
+guard keys MCP treatment on that prefix rather than on the canonical mcp__
+form.
+.PP
+Fail mode: A non\-2 non\-zero exit is a warning and fails open; exit 2 blocks
+with stderr as the reason. \-\-strict plus enforce exits 2 on an unparseable
+event.
+.TP
+\fBBeforeTool\fR
+Scans tool_name (mapped from Gemini's own vocabulary: run_shell_command,
+write_file, replace, read_file, read_many_files, web_fetch, google_web_search,
+invoke_agent) plus the flattened tool_input; a run_shell_command command is
+also carried raw so a tool description cannot poison the package parse.
+Enforce: top\-level decision = deny, with the redacted reason in reason (a
+would\-be ask degrades to deny: the published schema documents no ask value,
+and the undocumented one gemini\-cli 0.49.0 honors here would fail open on any
+version that drops it). Audit: systemMessage. Wired by the shipped configs.
+The entry timeout is in milliseconds (5000), unlike Claude's seconds. Gemini
+reads ONE command field on every platform \- there is no windows variant \- so
+setup renders the form the machine it configures needs, and a project\-scope
+file committed from POSIX fails open (a warning) on a native\-Windows
+teammate. MCP calls arrive as mcp_<server>_<tool>; skarn always rewrites the
+name to the canonical mcp__ form so every tool\-keyed detector sees an MCP
+call, recovering the real server/tool split from mcp_context when it is
+present, and never fast\-allows either way. The event also offers
+hookSpecificOutput.tool_input, which rewrites the model's arguments \- skarn
+surfaces and blocks but never rewrites, so that channel is deliberately
+unused.
+.TP
+\fBBeforeAgent\fR
+Scans prompt. The channel ships content off the machine, so a secret on it is
+exfiltration. Enforce: top\-level decision = deny, with the redacted reason in
+reason. Audit: systemMessage. Wired by the shipped configs. A lone secret is
+enough to deny here \- the destination is not ambiguous. A deny blocks the
+turn and discards the message from history; it is recoverable, the user edits
+and resubmits.
+.TP
+\fBAfterTool\fR
+Scans tool_response, an object carrying llmContent, returnDisplay, and an
+optional error, flattened into the scanned bytes. Enforce: top\-level decision
+= deny, with the reason replacing the tool result before the model sees it.
+Audit: systemMessage. Supported but opt\-in: not wired by the shipped configs.
+Output scanning. Opt\-in \- it fires on every tool result.
 .SH "SEE ALSO"
 skarn(1)
 .SH COPYRIGHT

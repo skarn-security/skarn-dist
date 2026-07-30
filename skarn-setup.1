@@ -1,4 +1,4 @@
-.TH "SKARN-SETUP" "1" "2026-06-23" "skarn 0.20.0" "Skarn Manual"
+.TH "SKARN-SETUP" "1" "2026-06-23" "skarn 0.21.0" "Skarn Manual"
 .SH NAME
 skarn\-setup \- Wire the skarn guard hook into detected AI coding agents
 (merge\-based, reversible), then verify it with the guard self\-test
@@ -9,25 +9,29 @@ Wire the skarn guard hook into detected AI coding agents (merge\-based,
 reversible), then verify it with the guard self\-test.
 .PP
 Guided onboarding: detect installed AI coding agents (Claude Code, Cursor,
-Codex CLI, Copilot CLI), merge the skarn guard hook into each one's native
-config in audit mode, and prove the wiring with the guard self\-test.
-\-\-scope project writes committed, shareable configs whose commands are
-portable by construction (a PATH\-guarded invocation and a literal $HOME log
-path, never this machine's absolute paths); \-\-plugin commits the claude
-plugin requirement instead of hook entries, and the two project routes are
-mutually exclusive \- each removes the other's skarn\-owned entries so the
-guard can never fire twice. Existing foreign hooks are never touched; every
-modified file is backed up first (*.skarn\-bak.<timestamp>) and rewritten
-atomically; a target file that does not parse as JSON is refused, never
-overwritten. On a terminal it runs an interactive wizard with default\-yes
-prompts; \-\-yes accepts everything, \-\-print writes nothing.
+Codex CLI, Copilot CLI, Gemini CLI), merge the skarn guard hook into each
+one's native config in audit mode, and prove the wiring with the guard
+self\-test. \-\-scope project writes committed, shareable configs whose
+commands are portable by construction (a PATH\-guarded invocation and a
+literal $HOME log path, never this machine's absolute paths) \- with one
+honest exception: Gemini CLI has a single cross\-platform command field, so a
+file committed from a POSIX machine carries the POSIX form and a
+native\-Windows teammate's hook fails open with a warning instead of running;
+\-\-plugin commits the claude plugin requirement instead of hook entries, and
+the two project routes are mutually exclusive \- each removes the other's
+skarn\-owned entries so the guard can never fire twice. Existing foreign hooks
+are never touched; every modified file is backed up first
+(*.skarn\-bak.<timestamp>) and rewritten atomically; a target file that does
+not parse as JSON is refused, never overwritten. On a terminal it runs an
+interactive wizard with default\-yes prompts; \-\-yes accepts everything,
+\-\-print writes nothing.
 .SH OPTIONS
 .TP
 \fB\-\-agent\fR \fIname\fR
 Target agents, repeatable or comma\-separated. Default: all detected (an agent
 is detected when its config directory exists or its CLI is on PATH); naming an
 agent explicitly also targets it when undetected. One of: claude, cursor,
-codex, copilot, all.
+codex, copilot, gemini, all.
 .TP
 \fB\-\-mode\fR \fImode\fR
 Guard mode written into the hook commands. Audit records would\-be verdicts to
@@ -40,10 +44,22 @@ Add \-\-strict to the generated guard commands (also gates Read operations;
 fail\-closed semantics on Codex).
 .TP
 \fB\-\-log\fR \fIpath\fR
-Guard log path wired into the hook commands as the SKARN_GUARD_LOG prefix;
-pass none to disable logging. The Codex commandWindows and Copilot powershell
-forms carry their own Windows path (set the variable in the environment on
-Windows). The default is ~/.cache/skarn/guard\-<agent>\-audit.jsonl.
+Guard log path wired into the hook commands: a SKARN_GUARD_LOG= prefix on the
+POSIX arms and on Copilot's powershell arm, and a \-\-log flag on the Codex
+commandWindows arm, which Codex may run under either PowerShell or cmd.exe and
+where no shell\-syntax prefix parses under both. Pass none to disable logging.
+At \-\-scope project an explicit path is refused: a committed config runs on
+every teammate's machine, so it carries only the portable per\-user default. A
+path with a parent\-directory segment or a control character is refused at any
+scope, since the guard refuses it at runtime and the hook would write nothing.
+An explicit path reaches only the arms whose host could have that location: a
+POSIX\-absolute path reaches the POSIX arms, a drive\-qualified or UNC path
+reaches the Windows arm, and the other arm keeps the portable default rather
+than a destination its host cannot resolve. A path that does reach the Codex
+Windows arm may use only letters, digits and ~ / \e . \- _ : ; anything else
+is refused rather than escaped, because a bare argument both shells must parse
+has no single correct escaping. The default is
+~/.cache/skarn/guard\-<agent>\-audit.jsonl.
 .TP
 \fB\-\-command\fR \fIpath\fR
 The guard executable invoked by the hook commands. At user scope the default
@@ -56,14 +72,19 @@ skarn from PATH on every machine. The default is this binary's absolute path.
 .TP
 \fB\-\-scope\fR \fIscope\fR
 Write user\-level configs (~/.claude/settings.json, ~/.cursor/hooks.json,
-~/.codex/hooks.json, ~/.copilot/hooks/skarn.json) or project\-level ones
-(./.claude, ./.cursor, ./.codex, ./.github/hooks/skarn.json relative to the
-working directory), meant to be committed and shared. The two scopes
-deliberately write different command shapes: user scope bakes this binary's
-absolute path (immune to a GUI host's missing PATH), project scope emits a
-portable PATH\-guarded command (if command \-v skarn ...; then ...; else exit
-0; fi) with a literal $HOME log path, so the committed file runs unmodified on
-every teammate's machine and exits 0 where skarn is not installed. Copilot
+~/.codex/hooks.json, ~/.copilot/hooks/skarn.json, ~/.gemini/settings.json) or
+project\-level ones (./.claude, ./.cursor, ./.codex,
+\&./.github/hooks/skarn.json, ./.gemini relative to the working directory),
+meant to be committed and shared. The two scopes deliberately write different
+command shapes: user scope bakes this binary's absolute path (immune to a GUI
+host's missing PATH), project scope emits a portable PATH\-guarded command (if
+command \-v skarn ...; then ...; else exit 0; fi) with a literal $HOME log
+path, so the committed file runs unmodified on every teammate's machine and
+exits 0 where skarn is not installed. Gemini is the one exception to that
+promise: it reads a single command field on every platform, so the committed
+POSIX form does not run under the PowerShell a native\-Windows teammate's
+Gemini uses \- the hook exits non\-zero, Gemini treats that as a warning and
+continues, and that machine is unprotected until it wires its own. Copilot
 honors $COPILOT_HOME as its user\-scope root. One of: user, project. The
 default is user.
 .TP
@@ -94,7 +115,15 @@ a terminal.
 .TP
 \fB\-\-update\fR
 Only touch agents whose config already carries skarn entries; the
-audit\-to\-enforce flip is skarn setup \-\-update \-\-mode enforce.
+audit\-to\-enforce flip is skarn setup \-\-update \-\-mode enforce. An owned
+entry is replaced whole \- any field you added to it is dropped and a field a
+newer template stopped writing stays gone \- except a hook\-call timeout you
+tuned yourself (timeout, or timeoutSec on copilot), which is carried across
+only when its entry pairs unambiguously with the replacement and the value is
+a positive integer within the host's range, and otherwise falls back to the
+template default. A hook you added inside skarn's own matcher group is kept
+where you put it: skarn replaces its own entry beside yours instead of adding
+a second group to the event.
 .TP
 \fB\-\-remove\fR
 Surgically remove skarn\-owned hook entries, dropping any matcher groups and
@@ -106,12 +135,20 @@ Print a machine\-readable result summary (per agent: path, action, backup,
 self\-test result) instead of the text report.
 .SH FILES
 .TP
-\fB./.claude/settings.json, ./.cursor/hooks.json, ./.codex/hooks.json, ./.github/hooks/skarn.json\fR
+\fB./.claude/settings.json, ./.cursor/hooks.json, ./.codex/hooks.json, ./.github/hooks/skarn.json, ./.gemini/settings.json\fR
 A repo's committed project\-scope hook configs (claude, cursor, codex,
-copilot), written by skarn setup \-\-scope project and read by doctor as each
-host's project precedence layer whenever it runs in that directory. Portable
-by construction: the committed command resolves skarn from PATH at run time
-and exits 0 where skarn is not installed.
+copilot, gemini), written by skarn setup \-\-scope project and read by doctor
+as each host's project precedence layer whenever it runs in that directory.
+Portable by construction: the committed command resolves skarn from PATH at
+run time and exits 0 where skarn is not installed. Gemini reads one command
+field on every platform, so its committed POSIX command fails open on a
+native\-Windows teammate; Gemini also runs hooks from a project file only once
+that folder is trusted.
+.TP
+\fB~/.gemini/settings.json\fR
+Gemini CLI's user settings: MCP server definitions read by vet, and the hooks
+object skarn setup \-\-agent gemini merges the guard into and doctor reads as
+the user precedence layer.
 .SH "SEE ALSO"
 skarn(1)
 .SH COPYRIGHT

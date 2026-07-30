@@ -1,4 +1,4 @@
-.TH "SKARN" "1" "2026-06-23" "skarn 0.20.0" "Skarn Manual"
+.TH "SKARN" "1" "2026-06-23" "skarn 0.21.0" "Skarn Manual"
 .SH NAME
 skarn \- AI coding session security scanner with built\-in session search
 .SH SYNOPSIS
@@ -52,7 +52,12 @@ Scan AI sessions for leaked credentials and attack patterns.
 .TP
 \fBassess\fR [options]
 Scan every AI session on this machine and print a friendly risk summary, with
-an optional shareable redacted report. Free, no config, no license.
+an optional shareable redacted report and a scoped incident dossier. Free, no
+config, no license. Run at a terminal it also names, once per release, a hook
+in your own per\-user agent config that has fallen behind this build, so an
+event a newer template gates does not go unscanned unnoticed; it looks at that
+config only, never at a repo's committed hooks and never at a fleet\-managed
+one.
 .TP
 \fBvet\fR [options]
 Statically vet the local AI assistant configuration (hooks, MCP servers,
@@ -94,9 +99,10 @@ Export sessions as text, json, ndjson, or html (redacted by default).
 \fBguard\fR [report|accept <fingerprint>] [options]
 Real\-time pre\-execution hook for editor/agent integration; reads an event on
 stdin and emits a verdict. guard report summarizes the audit log, forecasts
-what enforcing would cost, and prints the enforce flip when the window is
-clean; guard accept records a flagged finding as a false positive so the guard
-stops blocking it.
+what enforcing would cost, prints the enforce flip when the window is clean,
+and at a terminal names, once per release, a hook in your own per\-user agent
+config that has fallen behind this build; guard accept records a flagged
+finding as a false positive so the guard stops blocking it.
 .TP
 \fBsetup\fR [options]
 Wire the skarn guard hook into detected AI coding agents (merge\-based,
@@ -114,7 +120,9 @@ Start the local web UI (search, recent, stats, and a redacted scan view) bound
 to 127.0.0.1.
 .TP
 \fBtaxonomies\fR
-Print the standards crosswalk (MITRE ATLAS, OWASP LLM Top 10, CWE).
+Print the standards crosswalk (MITRE ATLAS, OWASP LLM Top 10, CWE) and the EU
+Cyber Resilience Act obligation axis (process evidence relevant to an
+obligation, not proof of product conformity).
 .TP
 \fBlicense\fR [<file>|\-|renew] [options]
 Show the active license, install one from a file (or stdin), or renew it from
@@ -178,7 +186,7 @@ Scan window in hours; 0 means no time limit. The default is 720.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict the scan to one assistant's sessions. One of: claude, gemini, codex,
-cursor, copilot.
+cursor, copilot, kimi.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict the scan to matching projects: a comma\-separated list of names or
@@ -190,7 +198,9 @@ Scan a single session by id.
 .TP
 \fB\-\-format\fR \fIfmt\fR
 Output format. ndjson is an ECS\-shaped event stream (one redacted finding per
-line) for SIEM ingest. One of: text, json, sarif, ndjson. The default is text.
+line) for SIEM ingest. evidence is a redacted Markdown evidence pack for a
+product technical file, and is the one value that requires a Team license. One
+of: text, json, sarif, ndjson, evidence. The default is text.
 .TP
 \fB\-v\fR, \fB\-\-verbose\fR
 Verbose output.
@@ -246,6 +256,31 @@ of recorded history. Requires a Team license.
 \fB\-\-audit\-verify\fR \fIfile\fR
 Verify an audit log's hash chain and exit (no scan). Exits non\-zero if the
 chain is broken. Needs no license.
+.TP
+\fB\-\-product\fR \fIname\fR
+Release lineage for \-\-format evidence: the product this scan's sessions
+produced changes for. Without lineage the evidence pack states that it cannot
+be attached to a specific technical file.
+.TP
+\fB\-\-product\-version\fR \fIver\fR
+Release lineage for \-\-format evidence: the product version the pack
+describes.
+.TP
+\fB\-\-build\-id\fR \fIid\fR
+Release lineage for \-\-format evidence: the commit or build identifier the
+pack describes.
+.TP
+\fB\-\-sbom\-ref\fR \fIref\fR
+Release lineage for \-\-format evidence: a reference to the product's declared
+SBOM, recorded as supplied (control characters masked). Skarn neither parses
+nor fetches it.
+.TP
+\fB\-\-sbom\fR \fIpath\fR
+Reconcile production dependencies the sessions added to a manifest against
+this declared SBOM (CycloneDX or SPDX 2.x JSON), reporting each undeclared
+addition as low\-severity workflow\-drift evidence (so pair it with
+\-\-severity low). Unlike \-\-sbom\-ref, the file is read and parsed; an
+unreadable or malformed one fails the scan.
 .SS "Assess options"
 The zero\-config machine\-scan wedge: scan every AI coding session on the
 machine and print a friendly risk summary, no flags and no license. \-o writes
@@ -258,7 +293,8 @@ renders Markdown, any other extension renders HTML.
 .TP
 \fB\-\-json\fR
 Emit the redacted scan as JSON (the same shape as the serve /api/scan view)
-for scripting, instead of the friendly summary.
+for scripting, instead of the friendly summary. With \-\-dossier the body is
+the dossier envelope that wraps this scan, not the bare scan shape.
 .TP
 \fB\-\-offline\fR
 Disable all network access. Assess is already egress\-free; this is the
@@ -275,7 +311,7 @@ default is low.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict the scan to one assistant's sessions. One of: claude, gemini, codex,
-cursor, copilot.
+cursor, copilot, kimi.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict the scan to matching projects: a comma\-separated list of names or
@@ -296,6 +332,14 @@ unlicensed directory degrades to a warning and an unsuppressed scan.
 .TP
 \fB\-\-no\-color\fR
 Disable colored output.
+.TP
+\fB\-\-dossier\fR \fIselector\fR
+Scope \-o and \-\-json to one finding by its 64\-character fingerprint (a
+reused credential matches every session it appears in) or one session by id,
+auto\-detected by shape, as an incident dossier: the redacted facts Skarn
+holds for the selection, plus an explicit list of the CRA Article 14 reporting
+fields Skarn cannot supply. A local share artifact; Skarn does not file
+reports or determine severity.
 .SS "Vet options"
 Statically vet this machine's AI assistant configuration \- hook commands, MCP
 server definitions, permission grants, and installed plugins and skills across
@@ -358,7 +402,7 @@ $SKARN_IDENTITY.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict the audit scan to one assistant's sessions. One of: claude, gemini,
-codex, cursor, copilot.
+codex, cursor, copilot, kimi.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict the audit scan to matching projects: a comma\-separated list of names
@@ -380,20 +424,38 @@ Only audit findings at or above this severity. One of: low, medium, high,
 critical. The default is medium.
 .SS "Guard options"
 Control the real\-time pre\-execution hook used for editor/agent integration
-(Claude Code, Cursor, Codex CLI, and Copilot CLI). The report subverb reads
-the guard's own audit log instead of an event: it summarizes the flagged calls
-per agent (verdicts, top rules, latency, the most recent denies), states what
-enforcing that window would have cost (blocks per day, prompts per day), and,
-when the window spans at least five days with zero denies, prints the exact
-command that flips the wired hooks to enforce. The guard logs only flagged
-calls, so every count and every rate report prints is over flagged actions,
-never over all traffic. The accept subverb closes that loop: every audit
-record carries a fingerprint (the same secret\-scoped key check writes to
-SARIF partialFingerprints), report prints it under each deny, and `skarn guard
-accept <fingerprint>` records it as a false positive so the identical call
-stops being flagged. Both subverbs are ungated: report reads nothing but the
-log, and accept writes only a file. On a flagged call the guard consults the
-personal accepted\-findings baseline it shares with check
+(Claude Code, Cursor, Codex CLI, Copilot CLI, and Gemini CLI). The report
+subverb reads the guard's own audit log instead of an event: it summarizes the
+flagged calls per agent (verdicts, top rules, latency, the most recent
+denies), states what enforcing that window would have cost (blocks per day,
+prompts per day), and, when the window spans at least five days with zero
+denies, prints the exact command that flips the wired hooks to enforce. Run at
+a terminal it reads one thing more, your own per\-user hook configs, so it can
+name a hook that has fallen behind this build once per release; piped or as
+json it reads nothing but the log. The guard logs only flagged calls, so every
+count and every rate report prints is over flagged actions, never over all
+traffic. The accept subverb closes that loop: an audit record whose top
+finding carries a secret gets a fingerprint (the same secret\-scoped key check
+writes to SARIF partialFingerprints), report prints it under each such deny,
+and `skarn guard accept <fingerprint>` records it as a false positive so the
+identical call stops being flagged; a secret\-less deny (a structural egress
+detector, a typosquat, a chain) carries no fingerprint and no accept line. The
+structural egress detectors are built into the engine, not rule\-pack rules,
+and tier themselves: an egress whose whole payload is visible in the command
+itself \- a bare request, a literal body, query parameters, with no file sent,
+no credential store named, no earlier secret read in the same call, and no
+payload bytes the command text does not show (a command substitution, an
+environment expansion, a shell redirect, a form read, or a pipe feeding the
+target all keep the deny) \- is held at the ask tier \- a real approval prompt
+on the primary shell surfaces (Claude Code PreToolUse, Copilot preToolUse on
+both the CLI and VS Code, Cursor shell and MCP hooks), a block on the channels
+with no ask (Codex, Claude Code PermissionRequest, Copilot permissionRequest,
+Cursor file\-read events, Gemini) \- while a payload carrying a recognized
+credential file or upload form, a co\-detected secret, or recon earlier in the
+same call stays a deny. Both subverbs are ungated: report reads the log (plus,
+at a terminal, your own hook configs for the line above), and accept writes
+only a file. On a flagged call the guard consults the personal
+accepted\-findings baseline it shares with check
 (~/.config/skarn/baseline.json, the file form only \- never the org\-union
 directory, so the guard can never hit a paid gate): a finding accepted as a
 false positive is dropped from the verdict, while a finding a human confirmed
@@ -417,10 +479,12 @@ Also gate Read operations (credential\-file reconnaissance).
 Hook host (default: auto\-detect from the event shape; pass codex explicitly
 for Codex CLI, which shares Claude's event names, and copilot explicitly for
 Copilot CLI, whose Claude\-compat payloads are indistinguishable from
-Claude's). With \-\-self\-test, all (the default) tests the claude, cursor,
-codex, and copilot adapters, copilot on both its CLI and VS Code dialects.
-With report, it restricts the summary to one agent (repeatable or
-comma\-separated). One of: claude, cursor, codex, copilot, all.
+Claude's; Gemini CLI's Before*/After* event names are unique, so it
+auto\-detects, and the shipped configs pin it anyway). With \-\-self\-test,
+all (the default) tests the claude, cursor, codex, copilot, and gemini
+adapters, copilot on both its CLI and VS Code dialects. With report, it
+restricts the summary to one agent (repeatable or comma\-separated). One of:
+claude, cursor, codex, copilot, gemini, all.
 .TP
 \fB\-\-self\-test\fR
 Verify the guard wiring instead of reading an event: feed two synthetic
@@ -432,11 +496,20 @@ accepted fingerprint can never make a dead hook look alive. Exit 0 when every
 adapter passes, 1 otherwise; works unlicensed (audit semantics).
 .TP
 \fB\-\-log\fR \fIpath\fR
-With report: guard log to summarize, repeatable. Default: $SKARN_GUARD_LOG
-when set, otherwise the log skarn setup wires for each agent
-($XDG_CACHE_HOME/skarn/guard\-<agent>\-audit.jsonl). A log that does not exist
-is named in the output with the command that wires it, never silently counted
-as zero.
+On the hook invocation, `skarn guard \-\-log <path|none>`: where this call
+appends its redacted JSONL record. A path takes precedence over
+$SKARN_GUARD_LOG, none writes no record even when that variable is set, and no
+flag at all falls back to the variable. A path that expands to a
+parent\-directory segment or carries a control character is refused: no record
+is written and there is no fallback destination, because a fallback would
+derive from $XDG_CACHE_HOME or $HOME, which the same hook command can also
+set. With report: a guard log to summarize, repeatable. Default:
+$SKARN_GUARD_LOG when set, otherwise the log skarn setup wires for each agent
+($XDG_CACHE_HOME/skarn/guard\-<agent>\-audit.jsonl, plus the home cache beside
+it when a log already exists there). A log that does not exist is named in the
+output with the command that wires it, never silently counted as zero, and a
+configured path the guard refuses is named as refused rather than shown as
+empty.
 .TP
 \fB\-\-window\fR \fIspan\fR
 With report: how far back to summarize, as <N>d or all. The default is 7d.
@@ -467,24 +540,28 @@ With accept: override the accepted\-by identity stamped on the entry; defaults
 to $SKARN_IDENTITY.
 .SS "Setup options"
 Guided onboarding: detect installed AI coding agents (Claude Code, Cursor,
-Codex CLI, Copilot CLI), merge the skarn guard hook into each one's native
-config in audit mode, and prove the wiring with the guard self\-test.
-\-\-scope project writes committed, shareable configs whose commands are
-portable by construction (a PATH\-guarded invocation and a literal $HOME log
-path, never this machine's absolute paths); \-\-plugin commits the claude
-plugin requirement instead of hook entries, and the two project routes are
-mutually exclusive \- each removes the other's skarn\-owned entries so the
-guard can never fire twice. Existing foreign hooks are never touched; every
-modified file is backed up first (*.skarn\-bak.<timestamp>) and rewritten
-atomically; a target file that does not parse as JSON is refused, never
-overwritten. On a terminal it runs an interactive wizard with default\-yes
-prompts; \-\-yes accepts everything, \-\-print writes nothing.
+Codex CLI, Copilot CLI, Gemini CLI), merge the skarn guard hook into each
+one's native config in audit mode, and prove the wiring with the guard
+self\-test. \-\-scope project writes committed, shareable configs whose
+commands are portable by construction (a PATH\-guarded invocation and a
+literal $HOME log path, never this machine's absolute paths) \- with one
+honest exception: Gemini CLI has a single cross\-platform command field, so a
+file committed from a POSIX machine carries the POSIX form and a
+native\-Windows teammate's hook fails open with a warning instead of running;
+\-\-plugin commits the claude plugin requirement instead of hook entries, and
+the two project routes are mutually exclusive \- each removes the other's
+skarn\-owned entries so the guard can never fire twice. Existing foreign hooks
+are never touched; every modified file is backed up first
+(*.skarn\-bak.<timestamp>) and rewritten atomically; a target file that does
+not parse as JSON is refused, never overwritten. On a terminal it runs an
+interactive wizard with default\-yes prompts; \-\-yes accepts everything,
+\-\-print writes nothing.
 .TP
 \fB\-\-agent\fR \fIname\fR
 Target agents, repeatable or comma\-separated. Default: all detected (an agent
 is detected when its config directory exists or its CLI is on PATH); naming an
 agent explicitly also targets it when undetected. One of: claude, cursor,
-codex, copilot, all.
+codex, copilot, gemini, all.
 .TP
 \fB\-\-mode\fR \fImode\fR
 Guard mode written into the hook commands. Audit records would\-be verdicts to
@@ -497,10 +574,22 @@ Add \-\-strict to the generated guard commands (also gates Read operations;
 fail\-closed semantics on Codex).
 .TP
 \fB\-\-log\fR \fIpath\fR
-Guard log path wired into the hook commands as the SKARN_GUARD_LOG prefix;
-pass none to disable logging. The Codex commandWindows and Copilot powershell
-forms carry their own Windows path (set the variable in the environment on
-Windows). The default is ~/.cache/skarn/guard\-<agent>\-audit.jsonl.
+Guard log path wired into the hook commands: a SKARN_GUARD_LOG= prefix on the
+POSIX arms and on Copilot's powershell arm, and a \-\-log flag on the Codex
+commandWindows arm, which Codex may run under either PowerShell or cmd.exe and
+where no shell\-syntax prefix parses under both. Pass none to disable logging.
+At \-\-scope project an explicit path is refused: a committed config runs on
+every teammate's machine, so it carries only the portable per\-user default. A
+path with a parent\-directory segment or a control character is refused at any
+scope, since the guard refuses it at runtime and the hook would write nothing.
+An explicit path reaches only the arms whose host could have that location: a
+POSIX\-absolute path reaches the POSIX arms, a drive\-qualified or UNC path
+reaches the Windows arm, and the other arm keeps the portable default rather
+than a destination its host cannot resolve. A path that does reach the Codex
+Windows arm may use only letters, digits and ~ / \e . \- _ : ; anything else
+is refused rather than escaped, because a bare argument both shells must parse
+has no single correct escaping. The default is
+~/.cache/skarn/guard\-<agent>\-audit.jsonl.
 .TP
 \fB\-\-command\fR \fIpath\fR
 The guard executable invoked by the hook commands. At user scope the default
@@ -513,14 +602,19 @@ skarn from PATH on every machine. The default is this binary's absolute path.
 .TP
 \fB\-\-scope\fR \fIscope\fR
 Write user\-level configs (~/.claude/settings.json, ~/.cursor/hooks.json,
-~/.codex/hooks.json, ~/.copilot/hooks/skarn.json) or project\-level ones
-(./.claude, ./.cursor, ./.codex, ./.github/hooks/skarn.json relative to the
-working directory), meant to be committed and shared. The two scopes
-deliberately write different command shapes: user scope bakes this binary's
-absolute path (immune to a GUI host's missing PATH), project scope emits a
-portable PATH\-guarded command (if command \-v skarn ...; then ...; else exit
-0; fi) with a literal $HOME log path, so the committed file runs unmodified on
-every teammate's machine and exits 0 where skarn is not installed. Copilot
+~/.codex/hooks.json, ~/.copilot/hooks/skarn.json, ~/.gemini/settings.json) or
+project\-level ones (./.claude, ./.cursor, ./.codex,
+\&./.github/hooks/skarn.json, ./.gemini relative to the working directory),
+meant to be committed and shared. The two scopes deliberately write different
+command shapes: user scope bakes this binary's absolute path (immune to a GUI
+host's missing PATH), project scope emits a portable PATH\-guarded command (if
+command \-v skarn ...; then ...; else exit 0; fi) with a literal $HOME log
+path, so the committed file runs unmodified on every teammate's machine and
+exits 0 where skarn is not installed. Gemini is the one exception to that
+promise: it reads a single command field on every platform, so the committed
+POSIX form does not run under the PowerShell a native\-Windows teammate's
+Gemini uses \- the hook exits non\-zero, Gemini treats that as a warning and
+continues, and that machine is unprotected until it wires its own. Copilot
 honors $COPILOT_HOME as its user\-scope root. One of: user, project. The
 default is user.
 .TP
@@ -551,7 +645,15 @@ a terminal.
 .TP
 \fB\-\-update\fR
 Only touch agents whose config already carries skarn entries; the
-audit\-to\-enforce flip is skarn setup \-\-update \-\-mode enforce.
+audit\-to\-enforce flip is skarn setup \-\-update \-\-mode enforce. An owned
+entry is replaced whole \- any field you added to it is dropped and a field a
+newer template stopped writing stays gone \- except a hook\-call timeout you
+tuned yourself (timeout, or timeoutSec on copilot), which is carried across
+only when its entry pairs unambiguously with the replacement and the value is
+a positive integer within the host's range, and otherwise falls back to the
+template default. A hook you added inside skarn's own matcher group is kept
+where you put it: skarn replaces its own entry beside yours instead of adding
+a second group to the event.
 .TP
 \fB\-\-remove\fR
 Surgically remove skarn\-owned hook entries, dropping any matcher groups and
@@ -563,58 +665,84 @@ Print a machine\-readable result summary (per agent: path, action, backup,
 self\-test result) instead of the text report.
 .SS "Doctor options"
 Health, wiring, and dead\-hook detection. Doctor runs one named check per line
-\- the binary and its path, the license, each detected agent's hook config,
-whether each wired hook command still resolves to an executable, whether the
-guard mode the hook asks for (audit or enforce) is what actually runs under
-this binary's license, whether the wiring matches what this version of skarn
-writes, the guard log's freshness, the session stores it can enumerate, the
-guard self\-test, the cache directory, and how current the detection rules are
-\- and every warning or failure names the exact command that clears it, or the
+\- the binary and its path, the license, the hook config of every agent this
+machine either has installed or carries a managed config for, whether each
+wired hook command still resolves to an executable, whether the guard mode the
+hook asks for (audit or enforce) is what actually runs under this binary's
+license, whether the wiring matches what this version of skarn writes, the
+guard log's freshness, the session stores it can enumerate, the guard
+self\-test, the cache directory, and how current the detection rules are \-
+and every warning or failure names the exact command that clears it, or the
 resource that explains it when no single command applies (a free binary whose
 bundled rules have aged has no command to run, so that one check carries the
 editions link instead of a fix). Each agent's hook config is read as ordered
 precedence layers \- the MDM/fleet\-managed system paths first, then the
 repo's committed project config in the working directory
 (./.claude/settings.json, ./.cursor/hooks.json, ./.codex/hooks.json,
-\&./.github/hooks/skarn.json), then the per\-user config \- so a machine wired
-only through the managed layer reports as protected and names the managed
-file, and a repo carrying a committed project config is inspected wherever
-doctor runs; on Claude and Codex a managed lockdown key (allowManagedHooksOnly
-/ allow_managed_hooks_only) makes every lower layer inert, and doctor reports
-an inert user or project hook instead of counting it as protection (Cursor and
-Copilot layer additively, so every present layer runs). A committed project
-hook gets its own guard\-command verdicts: an absolute machine\-local path or
-an unrendered __SKARN_PATH__ placeholder FAILs (that file protects nobody but
-its author), a PATH\-resolved command that does not resolve on this machine
-FAILs with the install command as the fix (the hook exits 0 here, so the repo
-is not protecting this machine), and Cursor at project scope WARNs naming the
-GUI\-PATH gap \- the deliberate, documented cost of a portable committed
-config. The license check WARNs when there is no license at all (check will
-not run, exit 7; assess, the guard, and the recall commands still work) and
-FAILs only when a license is present but broken. The eula check PASSes when an
-EULA acceptance is recorded (showing the accepted version, timestamp, and
-method) and WARNs when none is, with fix `skarn eula accept` \- doctor itself
-never asks, so a diagnostic is never blocked by the acceptance gate. The
-guard\-scope check WARNs when a hook wired with \-\-guard\-mode enforce runs
-on an unlicensed binary (the guard silently runs audit: it records the
-would\-be verdict and blocks nothing). The guard\-conformance check appears
-only when a managed layer declares a skarn hook and answers whether this
-machine runs what the org declared: it WARNs when the managed layer declares
-enforce on an unlicensed binary (the fleet is observing, not blocking), when
-the declared command does not resolve to an executable (the managed config
-alone deploys nothing \- the binary must ride the same MDM payload), when a
-declared event is not gated, or when a hook disagrees with the declared mode;
-every branch is a WARN with an exact fix, never a FAIL, because a policy
-divergence is a fleet fact, not a broken install. Check ids (binary, license,
-eula, agent_config_<agent>, guard_command_<agent>, guard_scope_<agent>,
-config_drift_<agent>, guard_log_<agent>, self_test_<agent>,
-guard_conformance_<agent>, session_stores, cache_dir, rule_age) are a stable,
-greppable contract for fleet scripts. A failure exits 1; a warning never does;
-\-\-json is a data mode and always exits 0. Doctor is hermetic: it makes no
-network call, shells out to nothing, and enumerates the session stores without
-reading a session's content. Set SKARN_MANAGED_ROOT to validate a staged
-managed payload before pushing it; the active root is echoed in the report
-header and in \-\-json, so a staged report can never pass as a live one.
+\&./.github/hooks/skarn.json, ./.gemini/settings.json), then the per\-user
+config \- so a machine wired only through the managed layer reports as
+protected and names the managed file, and a repo carrying a committed project
+config is inspected wherever doctor runs; on Claude and Codex a managed
+lockdown key (allowManagedHooksOnly / allow_managed_hooks_only) makes every
+lower layer inert, and doctor reports an inert user or project hook instead of
+counting it as protection (Cursor and Copilot layer additively, so every
+present layer runs). On Claude the managed layer is the system
+managed\-settings.json folded together with its managed\-settings.d/ drop\-in
+directory the way Claude merges them, so a machine wired only through a
+drop\-in reports as protected and the report names the drop\-in file itself; a
+hook found at the retired C:\eProgramData\eClaudeCode\emanaged\-settings.json
+is never counted, only noted with the supported path. Three Claude managed
+delivery surfaces stay outside what doctor can read: the HKLM and HKCU
+SOFTWARE\ePolicies\eClaudeCode registry keys, the com.anthropic.claudecode
+managed\-preferences plist, and the server\-managed settings delivered at
+sign\-in from the claude.ai admin console or a self\-hosted gateway. The
+registry gap runs both ways \- a machine managed only through the registry can
+report its hook as unwired, and a registry policy that overrides a
+managed\-settings.json carrying the skarn hook would still be counted from the
+file. For the same reason, when a managed\-preferences plist skarn cannot
+decode sits next to the file\-delivered policy, doctor stops counting that
+file's hooks and reports the coverage gap instead of a protection it cannot
+confirm. Gemini is the one host whose managed layer is NOT read first: its own
+precedence is system\-defaults, then user, then project, then the system
+settings file on top (that file has the final say), and doctor reports its
+layers in exactly that order; hook arrays still concatenate across all four,
+so every present layer runs, and what turns hooks off is not a lockdown key
+but hooksConfig \- enabled is a single value the highest layer that sets it
+wins, disabled is a list of hook names unioned across every layer, and a hook
+either switch silences is reported inert rather than counted as protection. A
+committed project hook gets its own guard\-command verdicts: an absolute
+machine\-local path or an unrendered __SKARN_PATH__ placeholder FAILs (that
+file protects nobody but its author), a PATH\-resolved command that does not
+resolve on this machine FAILs with the install command as the fix (the hook
+exits 0 here, so the repo is not protecting this machine), and Cursor at
+project scope WARNs naming the GUI\-PATH gap \- the deliberate, documented
+cost of a portable committed config. The license check WARNs when there is no
+license at all (check will not run, exit 7; assess, the guard, and the recall
+commands still work) and FAILs only when a license is present but broken. The
+eula check PASSes when an EULA acceptance is recorded (showing the accepted
+version, timestamp, and method) and WARNs when none is, with fix `skarn eula
+accept` \- doctor itself never asks, so a diagnostic is never blocked by the
+acceptance gate. The guard\-scope check WARNs when a hook wired with
+\-\-guard\-mode enforce runs on an unlicensed binary (the guard silently runs
+audit: it records the would\-be verdict and blocks nothing). The
+guard\-conformance check appears only when a managed layer declares a skarn
+hook and answers whether this machine runs what the org declared: it WARNs
+when the managed layer declares enforce on an unlicensed binary (the fleet is
+observing, not blocking), when the declared command does not resolve to an
+executable (the managed config alone deploys nothing \- the binary must ride
+the same MDM payload), when a declared event is not gated, or when a hook
+disagrees with the declared mode; every branch is a WARN with an exact fix,
+never a FAIL, because a policy divergence is a fleet fact, not a broken
+install. Check ids (binary, license, eula, agent_config_<agent>,
+guard_command_<agent>, guard_scope_<agent>, config_drift_<agent>,
+guard_log_<agent>, self_test_<agent>, guard_conformance_<agent>,
+session_stores, cache_dir, rule_age) are a stable, greppable contract for
+fleet scripts. A failure exits 1; a warning never does; \-\-json is a data
+mode and always exits 0. Doctor is hermetic: it makes no network call, shells
+out to nothing, and enumerates the session stores without reading a session's
+content. Set SKARN_MANAGED_ROOT to validate a staged managed payload before
+pushing it; the active root is echoed in the report header and in \-\-json, so
+a staged report can never pass as a live one.
 .TP
 \fB\-v\fR, \fB\-\-verbose\fR
 Add detail to every check: the paths searched, each wired hook command, the
@@ -671,7 +799,7 @@ List and filter recent sessions.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot.
+copilot, kimi.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths, each
@@ -704,7 +832,7 @@ the other flags only narrow which session a prefix resolves to.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot.
+copilot, kimi.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths, each
@@ -741,7 +869,7 @@ Search past sessions. The query is positional and flag order is free.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot.
+copilot, kimi.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths, each
@@ -814,7 +942,7 @@ Session analytics. A positional session id switches to a per\-session view.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot.
+copilot, kimi.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths, each
@@ -861,7 +989,7 @@ Export session data.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot.
+copilot, kimi.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths, each
@@ -905,7 +1033,7 @@ Shell commands run across sessions.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot.
+copilot, kimi.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths, each
@@ -949,7 +1077,7 @@ MCP calls made across sessions.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot.
+copilot, kimi.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths, each
@@ -993,7 +1121,7 @@ Tools used across sessions.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot.
+copilot, kimi.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths, each
@@ -1148,6 +1276,19 @@ unset). One record per flagged call, carrying the fingerprint that `skarn
 guard accept` takes; clean calls, and calls whose every finding was already
 accepted, are not logged.
 .TP
+\fBGEMINI_CLI_SYSTEM_SETTINGS_PATH\fR
+Gemini CLI's own override for the path of its managed system settings file;
+when set it REPLACES the default path, and Gemini also takes its
+system\-defaults file from that path's directory. Doctor resolves both gemini
+managed layers through it, so the report names the files Gemini actually reads
+instead of default files it is not.
+.TP
+\fBGEMINI_CLI_SYSTEM_DEFAULTS_PATH\fR
+Gemini CLI's own override for the path of its system\-defaults file, the
+lowest of its four settings layers; when set it REPLACES the path Gemini would
+otherwise derive from the system settings file's directory, and doctor reads
+the override.
+.TP
 \fBSKARN_IDENTITY\fR
 Local\-first identity tag (an SSO subject, email, or CI principal) stamped as
 provenance on baseline entries created with \-\-baseline\-create. Optional;
@@ -1186,6 +1327,12 @@ GitHub Copilot CLI config directory visible in Skarn's environment; replaces
 the default ~/.copilot as the Copilot CLI session root, folded into the
 copilot source.
 .TP
+\fBKIMI_CODE_HOME\fR
+A Kimi Code CLI data directory visible in Skarn's environment; replaces the
+default ~/.kimi\-code as the kimi root, folded into the kimi source,
+de\-duplicated, resolved via expandPath. Each root contributes its sessions/
+and user\-history/ children.
+.TP
 \fBCODEX_HOME\fR
 A Codex CLI data directory visible in Skarn's environment; folded into the
 codex source alongside the default ~/.codex, de\-duplicated, resolved via
@@ -1211,10 +1358,49 @@ the platform's path as the claude host's managed precedence layer;
 allowManagedHooksOnly: true there makes every lower layer inert. Read\-only;
 never written.
 .TP
+\fB/Library/Application Support/ClaudeCode/managed\-settings.d/*.json, /etc/claude\-code/managed\-settings.d/*.json, C:\eProgram Files\eClaudeCode\emanaged\-settings.d\e*.json\fR
+Claude Code's managed\-settings drop\-in directories (macOS, Linux/WSL,
+Windows), where separate teams deploy policy fragments without editing one
+shared file. Doctor folds a drop\-in directory into the SAME managed layer as
+its sibling managed\-settings.json, in the order Claude merges them: the base
+file first, then every *.json in the directory sorted by name, wired hooks
+unioned and de\-duplicated on the event and the exact command, and
+allowManagedHooksOnly taken from the last file that sets it (a file that omits
+the key changes nothing, a file that sets it to false unlocks an earlier
+true). Files whose name begins with a dot are ignored, as Claude ignores them.
+Read\-only; never written.
+.TP
+\fBC:\eProgramData\eClaudeCode\emanaged\-settings.json\fR
+Claude Code's retired Windows managed\-settings path. Claude Code no longer
+reads it, so doctor never counts a hook found there as protection: when the
+file is present the report carries a note naming the supported path
+(C:\eProgram Files\eClaudeCode\emanaged\-settings.json), and when it is absent
+it is silent. Read\-only; never written.
+.TP
+\fBHKLM\eSOFTWARE\ePolicies\eClaudeCode, HKCU\eSOFTWARE\ePolicies\eClaudeCode\fR
+Claude Code's Windows registry policy keys (a Settings value of type REG_SZ or
+REG_EXPAND_SZ holding the same JSON), deployed through Group Policy or Intune;
+the HKCU key is used only when no admin\-level source exists. Skarn has no
+registry reader, so doctor cannot inspect a policy delivered this way and the
+gap runs both ways: a machine managed only through the registry can report its
+hook as unwired, and a registry policy that overrides a managed\-settings.json
+carrying the skarn hook would still be counted from the file doctor can read.
+Declared here so the limit is explicit.
+.TP
+\fBserver\-managed settings (claude.ai admin console or a self\-hosted Claude apps gateway)\fR
+Claude Code's remotely delivered managed settings, fetched at sign\-in with no
+local file on the machine. Doctor cannot read them, so a fleet whose hooks
+arrive only through this channel sees its machines report as unwired. Declared
+here so the set of managed delivery surfaces is complete.
+.TP
 \fB/Library/Managed Preferences/com.anthropic.claudecode.plist\fR
 Claude Code's macOS managed\-preferences domain. Declared as a managed source
 but not decoded; when present, doctor surfaces it as a coverage gap with a
-plutil command to inspect it, never as a silent absent.
+plutil command to inspect it, never as a silent absent. Because skarn cannot
+read what that channel deploys and Claude Code does not document how it
+composes with the file\-delivered policy, a present plist also stops doctor
+from counting the hooks in managed\-settings.json and its drop\-ins: the
+report names the coverage gap instead of a protection it cannot confirm.
 .TP
 \fB/etc/codex/requirements.toml, %ProgramData%\eOpenAI\eCodex\erequirements.toml\fR
 Codex's admin\-managed requirements file (Unix, Windows). Doctor reads it as
@@ -1241,18 +1427,36 @@ Copilot's managed policy directory (Linux/macOS, Windows). Doctor folds every
 *.json in the directory into the copilot host's managed precedence layer,
 sorted by name; Copilot layers additively. Read\-only; never written.
 .TP
+\fB/Library/Application Support/GeminiCli/system\-defaults.json, /etc/gemini\-cli/system\-defaults.json, C:\eProgramData\egemini\-cli\esystem\-defaults.json\fR
+Gemini CLI's managed system\-defaults file, the LOWEST of its four settings
+layers. Read by doctor. Gemini derives this path from the system settings
+file's directory, so $GEMINI_CLI_SYSTEM_SETTINGS_PATH moves it too, and
+$GEMINI_CLI_SYSTEM_DEFAULTS_PATH replaces it outright; doctor reads whichever
+path wins. Hook arrays concatenate across layers, so hooks declared here run
+alongside the user and project ones rather than replacing them.
+.TP
+\fB/Library/Application Support/GeminiCli/settings.json, /etc/gemini\-cli/settings.json, C:\eProgramData\egemini\-cli\esettings.json\fR
+Gemini CLI's managed system settings file, the HIGHEST of its four settings
+layers \- it has the final say on single\-valued settings such as
+hooksConfig.enabled. Read by doctor. $GEMINI_CLI_SYSTEM_SETTINGS_PATH replaces
+this path, and doctor reads whichever path wins; hook arrays still concatenate
+across every layer.
+.TP
 \fB./.claude/settings.local.json\fR
 Claude Code's personal, gitignored project settings file. Claude merges hooks
 across every settings file and runs all of them, so a guard wired here
 protects this checkout and doctor reads it as part of the project layer. skarn
 setup never writes it: it writes only the committed ./.claude/settings.json.
 .TP
-\fB./.claude/settings.json, ./.cursor/hooks.json, ./.codex/hooks.json, ./.github/hooks/skarn.json\fR
+\fB./.claude/settings.json, ./.cursor/hooks.json, ./.codex/hooks.json, ./.github/hooks/skarn.json, ./.gemini/settings.json\fR
 A repo's committed project\-scope hook configs (claude, cursor, codex,
-copilot), written by skarn setup \-\-scope project and read by doctor as each
-host's project precedence layer whenever it runs in that directory. Portable
-by construction: the committed command resolves skarn from PATH at run time
-and exits 0 where skarn is not installed.
+copilot, gemini), written by skarn setup \-\-scope project and read by doctor
+as each host's project precedence layer whenever it runs in that directory.
+Portable by construction: the committed command resolves skarn from PATH at
+run time and exits 0 where skarn is not installed. Gemini reads one command
+field on every platform, so its committed POSIX command fails open on a
+native\-Windows teammate; Gemini also runs hooks from a project file only once
+that folder is trusted.
 .TP
 \fB~/.skarn.json\fR
 Optional tool configuration: the set of assistant tools and their session
@@ -1288,6 +1492,19 @@ by installing a License Token; never transmitted. Honors $XDG_CONFIG_HOME.
 Default Claude Code session root. Scanned automatically; extend with
 $SKARN_CLAUDE_DIRS or $CLAUDE_CONFIG_DIR.
 .TP
+\fB~/.kimi\-code/sessions/\fR
+Default Kimi Code CLI session root. One wire.jsonl per agent under
+sessions/<workdir\-key>/<session\-id>/agents/<agent>/; the main conversation
+and every sub\-agent stream are scanned as separate sessions. Relocate with
+$KIMI_CODE_HOME. The legacy python kimi\-cli root ~/.kimi/ stores a different
+session layout and is not scanned; `kimi migrate` converts it.
+.TP
+\fB~/.kimi\-code/user\-history/\fR
+Kimi Code CLI's per\-working\-directory prompt log, one file per workdir.
+Scanned in addition to the session tree because it retains prompts from
+sessions that were aborted before any session record was written. Relocate
+with $KIMI_CODE_HOME.
+.TP
 \fB~/.claude/settings.json, ~/.claude/settings.local.json\fR
 Claude Code hooks and permission grants. Read (never written) by vet, and by
 the project\-local ./.claude/settings.json and ./.claude/settings.local.json
@@ -1319,7 +1536,9 @@ Cursor MCP server definitions and hooks. Read by vet.
 Copilot CLI MCP server definitions and configuration. Read by vet.
 .TP
 \fB~/.gemini/settings.json\fR
-Gemini CLI MCP server definitions. Read by vet.
+Gemini CLI's user settings: MCP server definitions read by vet, and the hooks
+object skarn setup \-\-agent gemini merges the guard into and doctor reads as
+the user precedence layer.
 .SH EXAMPLES
 Show which license this machine is using, where it came from, and when it
 expires.
@@ -1477,6 +1696,16 @@ Exit non\-zero in CI when a session's risk score exceeds 60.
 .RS 4
 .EX
 skarn check \-\-fail\-on\-risk 60
+.EE
+.RE
+.PP
+Write a redacted Markdown evidence pack for one product build (Team); redirect
+it to a dated file such as skarn\-evidence\-2026\-07\-24.md to file into a
+technical file. Omitting the lineage flags renders a pack that states it
+cannot be attached to a specific technical file.
+.RS 4
+.EX
+skarn check \-\-format evidence \-\-product acme\-gateway \-\-product\-version 3.2.1 \-\-build\-id 9f2c1ab
 .EE
 .RE
 .PP

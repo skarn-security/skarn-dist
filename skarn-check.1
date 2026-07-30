@@ -1,4 +1,4 @@
-.TH "SKARN-CHECK" "1" "2026-06-23" "skarn 0.20.0" "Skarn Manual"
+.TH "SKARN-CHECK" "1" "2026-06-23" "skarn 0.21.0" "Skarn Manual"
 .SH NAME
 skarn\-check \- Scan AI sessions for leaked credentials and attack patterns
 .SH SYNOPSIS
@@ -60,7 +60,7 @@ Scan window in hours; 0 means no time limit. The default is 720.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict the scan to one assistant's sessions. One of: claude, gemini, codex,
-cursor, copilot.
+cursor, copilot, kimi.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict the scan to matching projects: a comma\-separated list of names or
@@ -72,7 +72,9 @@ Scan a single session by id.
 .TP
 \fB\-\-format\fR \fIfmt\fR
 Output format. ndjson is an ECS\-shaped event stream (one redacted finding per
-line) for SIEM ingest. One of: text, json, sarif, ndjson. The default is text.
+line) for SIEM ingest. evidence is a redacted Markdown evidence pack for a
+product technical file, and is the one value that requires a Team license. One
+of: text, json, sarif, ndjson, evidence. The default is text.
 .TP
 \fB\-v\fR, \fB\-\-verbose\fR
 Verbose output.
@@ -128,6 +130,31 @@ of recorded history. Requires a Team license.
 \fB\-\-audit\-verify\fR \fIfile\fR
 Verify an audit log's hash chain and exit (no scan). Exits non\-zero if the
 chain is broken. Needs no license.
+.TP
+\fB\-\-product\fR \fIname\fR
+Release lineage for \-\-format evidence: the product this scan's sessions
+produced changes for. Without lineage the evidence pack states that it cannot
+be attached to a specific technical file.
+.TP
+\fB\-\-product\-version\fR \fIver\fR
+Release lineage for \-\-format evidence: the product version the pack
+describes.
+.TP
+\fB\-\-build\-id\fR \fIid\fR
+Release lineage for \-\-format evidence: the commit or build identifier the
+pack describes.
+.TP
+\fB\-\-sbom\-ref\fR \fIref\fR
+Release lineage for \-\-format evidence: a reference to the product's declared
+SBOM, recorded as supplied (control characters masked). Skarn neither parses
+nor fetches it.
+.TP
+\fB\-\-sbom\fR \fIpath\fR
+Reconcile production dependencies the sessions added to a manifest against
+this declared SBOM (CycloneDX or SPDX 2.x JSON), reporting each undeclared
+addition as low\-severity workflow\-drift evidence (so pair it with
+\-\-severity low). Unlike \-\-sbom\-ref, the file is read and parsed; an
+unreadable or malformed one fails the scan.
 .SH "EXIT STATUS"
 .TP
 \fB0\fR

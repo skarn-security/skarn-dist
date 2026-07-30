@@ -1,4 +1,4 @@
-.TH "SKARN-DOCTOR" "1" "2026-06-23" "skarn 0.20.0" "Skarn Manual"
+.TH "SKARN-DOCTOR" "1" "2026-06-23" "skarn 0.21.0" "Skarn Manual"
 .SH NAME
 skarn\-doctor \- Check whether skarn is actually protecting this machine:
 binary, license, wired agent hooks, guard log, session stores, and the guard
@@ -10,58 +10,84 @@ Check whether skarn is actually protecting this machine: binary, license,
 wired agent hooks, guard log, session stores, and the guard self\-test.
 .PP
 Health, wiring, and dead\-hook detection. Doctor runs one named check per line
-\- the binary and its path, the license, each detected agent's hook config,
-whether each wired hook command still resolves to an executable, whether the
-guard mode the hook asks for (audit or enforce) is what actually runs under
-this binary's license, whether the wiring matches what this version of skarn
-writes, the guard log's freshness, the session stores it can enumerate, the
-guard self\-test, the cache directory, and how current the detection rules are
-\- and every warning or failure names the exact command that clears it, or the
+\- the binary and its path, the license, the hook config of every agent this
+machine either has installed or carries a managed config for, whether each
+wired hook command still resolves to an executable, whether the guard mode the
+hook asks for (audit or enforce) is what actually runs under this binary's
+license, whether the wiring matches what this version of skarn writes, the
+guard log's freshness, the session stores it can enumerate, the guard
+self\-test, the cache directory, and how current the detection rules are \-
+and every warning or failure names the exact command that clears it, or the
 resource that explains it when no single command applies (a free binary whose
 bundled rules have aged has no command to run, so that one check carries the
 editions link instead of a fix). Each agent's hook config is read as ordered
 precedence layers \- the MDM/fleet\-managed system paths first, then the
 repo's committed project config in the working directory
 (./.claude/settings.json, ./.cursor/hooks.json, ./.codex/hooks.json,
-\&./.github/hooks/skarn.json), then the per\-user config \- so a machine wired
-only through the managed layer reports as protected and names the managed
-file, and a repo carrying a committed project config is inspected wherever
-doctor runs; on Claude and Codex a managed lockdown key (allowManagedHooksOnly
-/ allow_managed_hooks_only) makes every lower layer inert, and doctor reports
-an inert user or project hook instead of counting it as protection (Cursor and
-Copilot layer additively, so every present layer runs). A committed project
-hook gets its own guard\-command verdicts: an absolute machine\-local path or
-an unrendered __SKARN_PATH__ placeholder FAILs (that file protects nobody but
-its author), a PATH\-resolved command that does not resolve on this machine
-FAILs with the install command as the fix (the hook exits 0 here, so the repo
-is not protecting this machine), and Cursor at project scope WARNs naming the
-GUI\-PATH gap \- the deliberate, documented cost of a portable committed
-config. The license check WARNs when there is no license at all (check will
-not run, exit 7; assess, the guard, and the recall commands still work) and
-FAILs only when a license is present but broken. The eula check PASSes when an
-EULA acceptance is recorded (showing the accepted version, timestamp, and
-method) and WARNs when none is, with fix `skarn eula accept` \- doctor itself
-never asks, so a diagnostic is never blocked by the acceptance gate. The
-guard\-scope check WARNs when a hook wired with \-\-guard\-mode enforce runs
-on an unlicensed binary (the guard silently runs audit: it records the
-would\-be verdict and blocks nothing). The guard\-conformance check appears
-only when a managed layer declares a skarn hook and answers whether this
-machine runs what the org declared: it WARNs when the managed layer declares
-enforce on an unlicensed binary (the fleet is observing, not blocking), when
-the declared command does not resolve to an executable (the managed config
-alone deploys nothing \- the binary must ride the same MDM payload), when a
-declared event is not gated, or when a hook disagrees with the declared mode;
-every branch is a WARN with an exact fix, never a FAIL, because a policy
-divergence is a fleet fact, not a broken install. Check ids (binary, license,
-eula, agent_config_<agent>, guard_command_<agent>, guard_scope_<agent>,
-config_drift_<agent>, guard_log_<agent>, self_test_<agent>,
-guard_conformance_<agent>, session_stores, cache_dir, rule_age) are a stable,
-greppable contract for fleet scripts. A failure exits 1; a warning never does;
-\-\-json is a data mode and always exits 0. Doctor is hermetic: it makes no
-network call, shells out to nothing, and enumerates the session stores without
-reading a session's content. Set SKARN_MANAGED_ROOT to validate a staged
-managed payload before pushing it; the active root is echoed in the report
-header and in \-\-json, so a staged report can never pass as a live one.
+\&./.github/hooks/skarn.json, ./.gemini/settings.json), then the per\-user
+config \- so a machine wired only through the managed layer reports as
+protected and names the managed file, and a repo carrying a committed project
+config is inspected wherever doctor runs; on Claude and Codex a managed
+lockdown key (allowManagedHooksOnly / allow_managed_hooks_only) makes every
+lower layer inert, and doctor reports an inert user or project hook instead of
+counting it as protection (Cursor and Copilot layer additively, so every
+present layer runs). On Claude the managed layer is the system
+managed\-settings.json folded together with its managed\-settings.d/ drop\-in
+directory the way Claude merges them, so a machine wired only through a
+drop\-in reports as protected and the report names the drop\-in file itself; a
+hook found at the retired C:\eProgramData\eClaudeCode\emanaged\-settings.json
+is never counted, only noted with the supported path. Three Claude managed
+delivery surfaces stay outside what doctor can read: the HKLM and HKCU
+SOFTWARE\ePolicies\eClaudeCode registry keys, the com.anthropic.claudecode
+managed\-preferences plist, and the server\-managed settings delivered at
+sign\-in from the claude.ai admin console or a self\-hosted gateway. The
+registry gap runs both ways \- a machine managed only through the registry can
+report its hook as unwired, and a registry policy that overrides a
+managed\-settings.json carrying the skarn hook would still be counted from the
+file. For the same reason, when a managed\-preferences plist skarn cannot
+decode sits next to the file\-delivered policy, doctor stops counting that
+file's hooks and reports the coverage gap instead of a protection it cannot
+confirm. Gemini is the one host whose managed layer is NOT read first: its own
+precedence is system\-defaults, then user, then project, then the system
+settings file on top (that file has the final say), and doctor reports its
+layers in exactly that order; hook arrays still concatenate across all four,
+so every present layer runs, and what turns hooks off is not a lockdown key
+but hooksConfig \- enabled is a single value the highest layer that sets it
+wins, disabled is a list of hook names unioned across every layer, and a hook
+either switch silences is reported inert rather than counted as protection. A
+committed project hook gets its own guard\-command verdicts: an absolute
+machine\-local path or an unrendered __SKARN_PATH__ placeholder FAILs (that
+file protects nobody but its author), a PATH\-resolved command that does not
+resolve on this machine FAILs with the install command as the fix (the hook
+exits 0 here, so the repo is not protecting this machine), and Cursor at
+project scope WARNs naming the GUI\-PATH gap \- the deliberate, documented
+cost of a portable committed config. The license check WARNs when there is no
+license at all (check will not run, exit 7; assess, the guard, and the recall
+commands still work) and FAILs only when a license is present but broken. The
+eula check PASSes when an EULA acceptance is recorded (showing the accepted
+version, timestamp, and method) and WARNs when none is, with fix `skarn eula
+accept` \- doctor itself never asks, so a diagnostic is never blocked by the
+acceptance gate. The guard\-scope check WARNs when a hook wired with
+\-\-guard\-mode enforce runs on an unlicensed binary (the guard silently runs
+audit: it records the would\-be verdict and blocks nothing). The
+guard\-conformance check appears only when a managed layer declares a skarn
+hook and answers whether this machine runs what the org declared: it WARNs
+when the managed layer declares enforce on an unlicensed binary (the fleet is
+observing, not blocking), when the declared command does not resolve to an
+executable (the managed config alone deploys nothing \- the binary must ride
+the same MDM payload), when a declared event is not gated, or when a hook
+disagrees with the declared mode; every branch is a WARN with an exact fix,
+never a FAIL, because a policy divergence is a fleet fact, not a broken
+install. Check ids (binary, license, eula, agent_config_<agent>,
+guard_command_<agent>, guard_scope_<agent>, config_drift_<agent>,
+guard_log_<agent>, self_test_<agent>, guard_conformance_<agent>,
+session_stores, cache_dir, rule_age) are a stable, greppable contract for
+fleet scripts. A failure exits 1; a warning never does; \-\-json is a data
+mode and always exits 0. Doctor is hermetic: it makes no network call, shells
+out to nothing, and enumerates the session stores without reading a session's
+content. Set SKARN_MANAGED_ROOT to validate a staged managed payload before
+pushing it; the active root is echoed in the report header and in \-\-json, so
+a staged report can never pass as a live one.
 .SH OPTIONS
 .TP
 \fB\-v\fR, \fB\-\-verbose\fR
@@ -81,10 +107,49 @@ the platform's path as the claude host's managed precedence layer;
 allowManagedHooksOnly: true there makes every lower layer inert. Read\-only;
 never written.
 .TP
+\fB/Library/Application Support/ClaudeCode/managed\-settings.d/*.json, /etc/claude\-code/managed\-settings.d/*.json, C:\eProgram Files\eClaudeCode\emanaged\-settings.d\e*.json\fR
+Claude Code's managed\-settings drop\-in directories (macOS, Linux/WSL,
+Windows), where separate teams deploy policy fragments without editing one
+shared file. Doctor folds a drop\-in directory into the SAME managed layer as
+its sibling managed\-settings.json, in the order Claude merges them: the base
+file first, then every *.json in the directory sorted by name, wired hooks
+unioned and de\-duplicated on the event and the exact command, and
+allowManagedHooksOnly taken from the last file that sets it (a file that omits
+the key changes nothing, a file that sets it to false unlocks an earlier
+true). Files whose name begins with a dot are ignored, as Claude ignores them.
+Read\-only; never written.
+.TP
+\fBC:\eProgramData\eClaudeCode\emanaged\-settings.json\fR
+Claude Code's retired Windows managed\-settings path. Claude Code no longer
+reads it, so doctor never counts a hook found there as protection: when the
+file is present the report carries a note naming the supported path
+(C:\eProgram Files\eClaudeCode\emanaged\-settings.json), and when it is absent
+it is silent. Read\-only; never written.
+.TP
+\fBHKLM\eSOFTWARE\ePolicies\eClaudeCode, HKCU\eSOFTWARE\ePolicies\eClaudeCode\fR
+Claude Code's Windows registry policy keys (a Settings value of type REG_SZ or
+REG_EXPAND_SZ holding the same JSON), deployed through Group Policy or Intune;
+the HKCU key is used only when no admin\-level source exists. Skarn has no
+registry reader, so doctor cannot inspect a policy delivered this way and the
+gap runs both ways: a machine managed only through the registry can report its
+hook as unwired, and a registry policy that overrides a managed\-settings.json
+carrying the skarn hook would still be counted from the file doctor can read.
+Declared here so the limit is explicit.
+.TP
+\fBserver\-managed settings (claude.ai admin console or a self\-hosted Claude apps gateway)\fR
+Claude Code's remotely delivered managed settings, fetched at sign\-in with no
+local file on the machine. Doctor cannot read them, so a fleet whose hooks
+arrive only through this channel sees its machines report as unwired. Declared
+here so the set of managed delivery surfaces is complete.
+.TP
 \fB/Library/Managed Preferences/com.anthropic.claudecode.plist\fR
 Claude Code's macOS managed\-preferences domain. Declared as a managed source
 but not decoded; when present, doctor surfaces it as a coverage gap with a
-plutil command to inspect it, never as a silent absent.
+plutil command to inspect it, never as a silent absent. Because skarn cannot
+read what that channel deploys and Claude Code does not document how it
+composes with the file\-delivered policy, a present plist also stops doctor
+from counting the hooks in managed\-settings.json and its drop\-ins: the
+report names the coverage gap instead of a protection it cannot confirm.
 .TP
 \fB/etc/codex/requirements.toml, %ProgramData%\eOpenAI\eCodex\erequirements.toml\fR
 Codex's admin\-managed requirements file (Unix, Windows). Doctor reads it as
@@ -111,18 +176,41 @@ Copilot's managed policy directory (Linux/macOS, Windows). Doctor folds every
 *.json in the directory into the copilot host's managed precedence layer,
 sorted by name; Copilot layers additively. Read\-only; never written.
 .TP
+\fB/Library/Application Support/GeminiCli/system\-defaults.json, /etc/gemini\-cli/system\-defaults.json, C:\eProgramData\egemini\-cli\esystem\-defaults.json\fR
+Gemini CLI's managed system\-defaults file, the LOWEST of its four settings
+layers. Read by doctor. Gemini derives this path from the system settings
+file's directory, so $GEMINI_CLI_SYSTEM_SETTINGS_PATH moves it too, and
+$GEMINI_CLI_SYSTEM_DEFAULTS_PATH replaces it outright; doctor reads whichever
+path wins. Hook arrays concatenate across layers, so hooks declared here run
+alongside the user and project ones rather than replacing them.
+.TP
+\fB/Library/Application Support/GeminiCli/settings.json, /etc/gemini\-cli/settings.json, C:\eProgramData\egemini\-cli\esettings.json\fR
+Gemini CLI's managed system settings file, the HIGHEST of its four settings
+layers \- it has the final say on single\-valued settings such as
+hooksConfig.enabled. Read by doctor. $GEMINI_CLI_SYSTEM_SETTINGS_PATH replaces
+this path, and doctor reads whichever path wins; hook arrays still concatenate
+across every layer.
+.TP
 \fB./.claude/settings.local.json\fR
 Claude Code's personal, gitignored project settings file. Claude merges hooks
 across every settings file and runs all of them, so a guard wired here
 protects this checkout and doctor reads it as part of the project layer. skarn
 setup never writes it: it writes only the committed ./.claude/settings.json.
 .TP
-\fB./.claude/settings.json, ./.cursor/hooks.json, ./.codex/hooks.json, ./.github/hooks/skarn.json\fR
+\fB./.claude/settings.json, ./.cursor/hooks.json, ./.codex/hooks.json, ./.github/hooks/skarn.json, ./.gemini/settings.json\fR
 A repo's committed project\-scope hook configs (claude, cursor, codex,
-copilot), written by skarn setup \-\-scope project and read by doctor as each
-host's project precedence layer whenever it runs in that directory. Portable
-by construction: the committed command resolves skarn from PATH at run time
-and exits 0 where skarn is not installed.
+copilot, gemini), written by skarn setup \-\-scope project and read by doctor
+as each host's project precedence layer whenever it runs in that directory.
+Portable by construction: the committed command resolves skarn from PATH at
+run time and exits 0 where skarn is not installed. Gemini reads one command
+field on every platform, so its committed POSIX command fails open on a
+native\-Windows teammate; Gemini also runs hooks from a project file only once
+that folder is trusted.
+.TP
+\fB~/.gemini/settings.json\fR
+Gemini CLI's user settings: MCP server definitions read by vet, and the hooks
+object skarn setup \-\-agent gemini merges the guard into and doctor reads as
+the user precedence layer.
 .SH "SEE ALSO"
 skarn(1)
 .SH COPYRIGHT
