@@ -1,4 +1,4 @@
-.TH "SKARN" "1" "2026-06-23" "skarn 0.21.0" "Skarn Manual"
+.TH "SKARN" "1" "2026-06-23" "skarn 0.22.0" "Skarn Manual"
 .SH NAME
 skarn \- AI coding session security scanner with built\-in session search
 .SH SYNOPSIS
@@ -61,7 +61,8 @@ one.
 .TP
 \fBvet\fR [options]
 Statically vet the local AI assistant configuration (hooks, MCP servers,
-permission grants, plugins and skills) for risky patterns. Read\-only and
+permission grants, plugins and skills) for risky patterns across Claude Code,
+Codex CLI, Cursor, Copilot, Gemini CLI, and Microsoft Scout. Read\-only and
 offline; free, no license.
 .TP
 \fBbaseline\fR \fIaudit|accept\fR \fIfile\fR [<fingerprint>] [options]
@@ -343,17 +344,17 @@ reports or determine severity.
 .SS "Vet options"
 Statically vet this machine's AI assistant configuration \- hook commands, MCP
 server definitions, permission grants, and installed plugins and skills across
-Claude Code, Codex CLI, Cursor, Copilot, and Gemini CLI \- and report the
-risky patterns it finds: hooks that exfiltrate local content or
+Claude Code, Codex CLI, Cursor, Copilot, Gemini CLI, and Microsoft Scout \-
+and report the risky patterns it finds: hooks that exfiltrate local content or
 fetch\-and\-execute remote code, hooks that rewrite an assistant's own config,
 MCP endpoints on remote hosts, MCP launchers with no pinned version or digest,
-permission grants that approve a whole class of actions, and extensions
-installed from a remote source or carrying no integrity marker. Vet is
-read\-only and offline: it opens each config file for reading, never writes
-one, and makes no network call. A config file that does not exist is skipped;
-a config file that exists but cannot be read is a coverage gap that fails
-closed under a \-\-fail\-on flag. Vet surfaces risky configuration and does
-not change it.
+permission grants that approve a whole class of actions, grants that let the
+assistant ask to widen its own authority, and extensions installed from a
+remote source or carrying no integrity marker. Vet is read\-only and offline:
+it opens each config file for reading, never writes one, and makes no network
+call. A config file that does not exist is skipped; a config file that exists
+but cannot be read is a coverage gap that fails closed under a \-\-fail\-on
+flag. Vet surfaces risky configuration and does not change it.
 .TP
 \fB\-\-format\fR \fIfmt\fR
 Output format. json and sarif carry the same rule ids, severities, config
@@ -485,6 +486,16 @@ all (the default) tests the claude, cursor, codex, copilot, and gemini
 adapters, copilot on both its CLI and VS Code dialects. With report, it
 restricts the summary to one agent (repeatable or comma\-separated). One of:
 claude, cursor, codex, copilot, gemini, all.
+.TP
+\fB\-\-event\fR \fIname\fR
+The hook event this config entry fires on, for a host whose payload does not
+name its own event. Only the Copilot CLI needs it: its permissionRequest
+payload carries a subset of preToolUse's documented fields and nothing
+separates the two, so a permissionRequest entry must say so or the guard reads
+it as a preToolUse and answers in a schema that event does not understand.
+Default: the event is inferred from the payload shape, which never yields
+permissionRequest. Ignored by every host whose payload names its own event,
+and by the VS Code Copilot dialect. One of: preToolUse, permissionRequest.
 .TP
 \fB\-\-self\-test\fR
 Verify the guard wiring instead of reading an event: feed two synthetic
@@ -691,17 +702,24 @@ managed\-settings.json folded together with its managed\-settings.d/ drop\-in
 directory the way Claude merges them, so a machine wired only through a
 drop\-in reports as protected and the report names the drop\-in file itself; a
 hook found at the retired C:\eProgramData\eClaudeCode\emanaged\-settings.json
-is never counted, only noted with the supported path. Three Claude managed
-delivery surfaces stay outside what doctor can read: the HKLM and HKCU
-SOFTWARE\ePolicies\eClaudeCode registry keys, the com.anthropic.claudecode
-managed\-preferences plist, and the server\-managed settings delivered at
-sign\-in from the claude.ai admin console or a self\-hosted gateway. The
-registry gap runs both ways \- a machine managed only through the registry can
-report its hook as unwired, and a registry policy that overrides a
-managed\-settings.json carrying the skarn hook would still be counted from the
-file. For the same reason, when a managed\-preferences plist skarn cannot
-decode sits next to the file\-delivered policy, doctor stops counting that
-file's hooks and reports the coverage gap instead of a protection it cannot
+is never counted, only noted with the supported path. On Windows the managed
+layer also covers the HKLM and HKCU SOFTWARE\ePolicies\eClaudeCode registry
+keys that Group Policy and Intune deploy, so a fleet managed only through the
+registry is examined rather than skipped. Claude Code reads exactly one
+managed source and ignores the rest rather than merging them \- an
+MDM/OS\-level policy (the HKLM registry key, or the macOS managed\-preferences
+plist) outranks the system managed\-settings.json and its drop\-ins, which in
+turn outrank the user\-writable HKCU key \- so doctor reports the losing
+source as inert and never counts its hooks as protection. When the winning
+source is one skarn cannot decode, such as the managed\-preferences plist,
+doctor reports the coverage gap instead of a protection it cannot confirm. Two
+Claude managed delivery surfaces still stay outside what doctor can read, both
+of them above everything local: the server\-managed settings delivered at
+sign\-in from the claude.ai admin console or a self\-hosted gateway, and a
+policyHelper executable that computes managed settings at startup. On WSL the
+whole Windows policy chain is out of reach of a Linux binary and outranks
+/etc/claude\-code, so a claude check that would otherwise pass is downgraded
+to a warn naming that chain rather than claiming a protection skarn cannot
 confirm. Gemini is the one host whose managed layer is NOT read first: its own
 precedence is system\-defaults, then user, then project, then the system
 settings file on top (that file has the final say), and doctor reports its
@@ -751,8 +769,10 @@ per\-tool session counts, and the resolved Homebrew path.
 \fB\-\-json\fR
 Emit the full structured result: {version, checks[{id, status, detail, fix,
 notes}], summary{pass, warn, fail}}, plus managed_root at the top level when
-SKARN_MANAGED_ROOT is active and an additive layers array ([{layer, path,
-effect, lockdown, wired}]) on each agent config check. Always exits 0.
+SKARN_MANAGED_ROOT is active, managed_registry_root when
+SKARN_MANAGED_REGISTRY_ROOT is active, and an additive layers array ([{layer,
+path, effect, lockdown, wired}]) on each agent config check, where a Windows
+registry layer carries its policy key as the path. Always exits 0.
 .SS "Serve options"
 Control the localhost web UI. Access requires the per\-run token embedded in
 the URL the command prints at startup; opening that URL sets a session cookie,
@@ -1325,7 +1345,11 @@ claude source like an SKARN_CLAUDE_DIRS entry.
 \fBCOPILOT_HOME\fR
 GitHub Copilot CLI config directory visible in Skarn's environment; replaces
 the default ~/.copilot as the Copilot CLI session root, folded into the
-copilot source.
+copilot source. Microsoft Scout sets this variable to ~/.scout/copilot in the
+environment of the Copilot CLI child process it spawns, not in the user's
+shell, so Skarn's own process never sees it; that root is therefore declared
+in the scanner rather than read from here, exactly as $CODEX_HOME and
+$KIMI_CODE_HOME are declared rather than guessed.
 .TP
 \fBKIMI_CODE_HOME\fR
 A Kimi Code CLI data directory visible in Skarn's environment; replaces the
@@ -1345,6 +1369,19 @@ fleet admin can validate a staged payload directory before pushing it to a
 single machine (SKARN_MANAGED_ROOT=/tmp/stage skarn doctor). Empty or unset
 means the live system paths. Whenever it is active, doctor echoes the root in
 the report header and emits it as managed_root in \-\-json, so a staged report
+can never pass as a report about the live machine. Only doctor reads it. It is
+a filesystem prefix and cannot re\-root a registry key;
+SKARN_MANAGED_REGISTRY_ROOT does that.
+.TP
+\fBSKARN_MANAGED_REGISTRY_ROOT\fR
+Registry key doctor reads the Windows managed policy keys under, so an
+administrator can validate a staged payload without touching live Group Policy
+(SKARN_MANAGED_REGISTRY_ROOT='HKCU\eSoftware\eSkarnStage' skarn doctor reads
+HKCU\eSoftware\eSkarnStage\eHKLM\eSOFTWARE\ePolicies\eClaudeCode). The hive
+stays a key component under the staging root, so the HKLM and HKCU policies
+stage to distinct keys instead of collapsing into one. Empty or unset means
+the live policy keys. Whenever it is active, doctor echoes it in the report
+header and emits it as managed_registry_root in \-\-json, so a staged report
 can never pass as a report about the live machine. Only doctor reads it.
 .TP
 \fBXDG_CACHE_HOME\fR
@@ -1379,28 +1416,48 @@ it is silent. Read\-only; never written.
 .TP
 \fBHKLM\eSOFTWARE\ePolicies\eClaudeCode, HKCU\eSOFTWARE\ePolicies\eClaudeCode\fR
 Claude Code's Windows registry policy keys (a Settings value of type REG_SZ or
-REG_EXPAND_SZ holding the same JSON), deployed through Group Policy or Intune;
-the HKCU key is used only when no admin\-level source exists. Skarn has no
-registry reader, so doctor cannot inspect a policy delivered this way and the
-gap runs both ways: a machine managed only through the registry can report its
-hook as unwired, and a registry policy that overrides a managed\-settings.json
-carrying the skarn hook would still be counted from the file doctor can read.
-Declared here so the limit is explicit.
+REG_EXPAND_SZ holding the same JSON), deployed through Group Policy or Intune.
+Doctor reads both as claude's managed precedence layer, so a fleet managed
+entirely through Group Policy or Intune is examined and reported rather than
+skipped, and finding one is enough to examine the host even where Claude Code
+itself is not installed. A REG_EXPAND_SZ value is read verbatim without
+environment expansion, because doctor reports what is configured rather than
+what it resolves to on this machine. Claude Code reads exactly ONE managed
+source and ignores the rest rather than merging them, so HKLM outranks the
+system managed\-settings.json and its drop\-ins, which in turn outrank the
+user\-writable HKCU key; doctor reports the loser as inert and never counts
+its hooks as protection. A key that exists but whose Settings value cannot be
+read or is not a string type is a coverage gap with a reg query command, never
+a silent absent. On WSL, Claude Code reads the Windows policy chain in
+addition to /etc/claude\-code and gives the Windows sources priority
+(wslInheritsWindowsSettings, default true), and a Linux skarn binary cannot
+reach the registry from there; rather than report a protection a Windows\-side
+allowManagedHooksOnly may already have silenced, doctor downgrades what would
+have been a claude pass to a warn naming that unread chain, with /status
+inside Claude Code as the way to see which source won. Read\-only; never
+written.
 .TP
 \fBserver\-managed settings (claude.ai admin console or a self\-hosted Claude apps gateway)\fR
 Claude Code's remotely delivered managed settings, fetched at sign\-in with no
-local file on the machine. Doctor cannot read them, so a fleet whose hooks
-arrive only through this channel sees its machines report as unwired. Declared
-here so the set of managed delivery surfaces is complete.
+local file on the machine, and the policyHelper executable that can compute
+managed settings at startup. Both outrank every local managed source and,
+because Claude Code reads only its highest\-precedence managed source, both
+silence the file and registry policies doctor can read. Doctor cannot read
+either, so a fleet whose hooks arrive only through one of them sees its
+machines report as unwired. Declared here so the set of managed delivery
+surfaces is complete. Confirm the winning source on a machine with /status
+inside Claude Code, which names the delivery channel it loaded.
 .TP
 \fB/Library/Managed Preferences/com.anthropic.claudecode.plist\fR
-Claude Code's macOS managed\-preferences domain. Declared as a managed source
-but not decoded; when present, doctor surfaces it as a coverage gap with a
-plutil command to inspect it, never as a silent absent. Because skarn cannot
-read what that channel deploys and Claude Code does not document how it
-composes with the file\-delivered policy, a present plist also stops doctor
-from counting the hooks in managed\-settings.json and its drop\-ins: the
-report names the coverage gap instead of a protection it cannot confirm.
+Claude Code's macOS managed\-preferences domain, and the macOS half of the
+same MDM/OS\-level policy tier the Windows HKLM registry key occupies.
+Declared as a managed source but not decoded; when present, doctor surfaces it
+as a coverage gap with a plutil command to inspect it, never as a silent
+absent. Because that tier outranks the file\-delivered policy and Claude Code
+reads only its highest\-precedence managed source, a present plist also stops
+doctor from counting the hooks in managed\-settings.json and its drop\-ins:
+those hooks genuinely never run, and the report names the coverage gap instead
+of a protection it cannot confirm.
 .TP
 \fB/etc/codex/requirements.toml, %ProgramData%\eOpenAI\eCodex\erequirements.toml\fR
 Codex's admin\-managed requirements file (Unix, Windows). Doctor reads it as
@@ -1458,6 +1515,28 @@ field on every platform, so its committed POSIX command fails open on a
 native\-Windows teammate; Gemini also runs hooks from a project file only once
 that folder is trusted.
 .TP
+\fB./.github/copilot/settings.json, ./.github/copilot/settings.local.json, ~/.copilot/settings.json\fR
+The repository's Copilot CLI settings. Doctor reads one key from them, the
+top\-level disableAllHooks: setting it true makes the CLI skip the user\- and
+repository\-delivered hooks for that repository, the operator's own
+user\-scope hook included, and the CLI logs nothing when it does \- so the
+state is knowable only by reading the file. The settings.local.json sibling
+takes precedence over settings.json, the CLI reads the same key from the
+shared cross\-tool ./.claude/settings.json and ./.claude/settings.local.json,
+and the operator's own ~/.copilot/settings.json (honoring $COPILOT_HOME)
+carries it too, outranked by whatever the repository says. Doctor resolves the
+repository scope first and consults the user file only when no repository file
+spoke; nothing documents which of the two repository families wins when they
+disagree, so it honors a true from either \- reporting a live hook as silenced
+is a false alarm the named file settles, reporting a silenced hook as
+protection is not. Comments are tolerated on a retry, since the CLI documents
+JSONC for its settings. When the switch is on, doctor reports the user and
+project hook layers as inert instead of counting them as protection, and
+reports a managed policy layer as unverified rather than as either: it does
+not stop a host application's own in\-process hooks, which arrive through the
+SDK rather than from a file, and whether it skips machine policy hooks is
+unmeasured (GitHub documents them as exempt). Read\-only; never written.
+.TP
 \fB~/.skarn.json\fR
 Optional tool configuration: the set of assistant tools and their session
 paths, plus an optional projects alias map. Both the recall surface and scan
@@ -1505,6 +1584,24 @@ Scanned in addition to the session tree because it retains prompts from
 sessions that were aborted before any session record was written. Relocate
 with $KIMI_CODE_HOME.
 .TP
+\fB~/.copilot/session\-state/, ~/.scout/copilot/session\-state/\fR
+GitHub Copilot CLI session roots, one events.jsonl per session under
+<root>/session\-state/<id>/. Both are scanned automatically, each only when it
+has a session\-state child, and $COPILOT_HOME adds another when it names a
+distinct root. The second root is Microsoft Scout's: Scout spawns the Copilot
+CLI it bundles with COPILOT_HOME=~/.scout/copilot, so that CLI writes its
+transcript there in the clear, in the same format as the standalone CLI. What
+Skarn reads is that transcript. Discovery under ~/.scout goes to that one
+location and nowhere else: the root directory is never enumerated, so Scout's
+own encrypted session index (~/.scout/m\-sessions/sessions\-index.json) and
+every other m\- file are outside what discovery reaches, and nothing is
+decrypted. Naming a project for the session afterwards uses the same resolver
+every source uses, on two inputs: a workspace.json probed three directories
+above the transcript, which neither the Copilot CLI nor Scout writes, and the
+cwd the transcript itself names, with a .git pointer stat'd beside it. No
+session content is read from either. Verified against Scout 0.23.331,
+2026\-07\-30.
+.TP
 \fB~/.claude/settings.json, ~/.claude/settings.local.json\fR
 Claude Code hooks and permission grants. Read (never written) by vet, and by
 the project\-local ./.claude/settings.json and ./.claude/settings.local.json
@@ -1534,6 +1631,16 @@ Cursor MCP server definitions and hooks. Read by vet.
 .TP
 \fB~/.copilot/mcp\-config.json, ~/.copilot/config.json\fR
 Copilot CLI MCP server definitions and configuration. Read by vet.
+.TP
+\fB~/.scout/m\-settings.json\fR
+Microsoft Scout's permission grants, auto\-approve settings, and experiment
+flags. Read by vet. The path has no platform branch: Scout resolves its config
+root to ~/.scout on macOS and Windows alike.
+.TP
+\fB~/.scout/m\-mcp\-servers.json\fR
+Microsoft Scout MCP server definitions. Read by vet. A user\-added server
+nests its launcher or endpoint under a config object; a built\-in server has
+none, because Scout generates its command at run time.
 .TP
 \fB~/.gemini/settings.json\fR
 Gemini CLI's user settings: MCP server definitions read by vet, and the hooks

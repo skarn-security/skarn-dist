@@ -1,4 +1,4 @@
-.TH "SKARN-GUARD" "1" "2026-06-23" "skarn 0.21.0" "Skarn Manual"
+.TH "SKARN-GUARD" "1" "2026-06-23" "skarn 0.22.0" "Skarn Manual"
 .SH NAME
 skarn\-guard \- Real\-time pre\-execution hook for editor/agent integration;
 reads an event on stdin and emits a verdict. guard report summarizes the audit
@@ -79,6 +79,16 @@ all (the default) tests the claude, cursor, codex, copilot, and gemini
 adapters, copilot on both its CLI and VS Code dialects. With report, it
 restricts the summary to one agent (repeatable or comma\-separated). One of:
 claude, cursor, codex, copilot, gemini, all.
+.TP
+\fB\-\-event\fR \fIname\fR
+The hook event this config entry fires on, for a host whose payload does not
+name its own event. Only the Copilot CLI needs it: its permissionRequest
+payload carries a subset of preToolUse's documented fields and nothing
+separates the two, so a permissionRequest entry must say so or the guard reads
+it as a preToolUse and answers in a schema that event does not understand.
+Default: the event is inferred from the payload shape, which never yields
+permissionRequest. Ignored by every host whose payload names its own event,
+and by the VS Code Copilot dialect. One of: preToolUse, permissionRequest.
 .TP
 \fB\-\-self\-test\fR
 Verify the guard wiring instead of reading an event: feed two synthetic
@@ -316,48 +326,86 @@ budget, not a per\-host one. Never egresses, never prints a secret value.
 .SS "GitHub Copilot CLI"
 The Copilot CLI's native payload is camelCase (toolName / toolArgs /
 sessionId) and carries no event\-name field, so the event is inferred from the
-field shape. Only preToolUse can actually block; the other events run full
-detection and write the audit log but cannot decide. GitHub documents fourteen
-Copilot CLI hook events; Skarn declares five of them (preToolUse,
-permissionRequest, userPromptSubmitted, userPromptTransformed, postToolUse)
-plus preMcpToolCall, and evaluates the rest as deliberately not wired
-(verified against the GitHub hooks reference, 2026\-07\-21): sessionStart
-carries an initialPrompt (scannable), but a session\-open detection arm beyond
-userPromptTransformed is out of this round's scope; subagentStart and
-subagentStop carry subagent metadata (agentName, transcriptPath), and the
-subagent's own tool calls are gated by preToolUse while any post\-hoc output
-lands in the session store the recall scan covers; postToolUseFailure carries
-the failed call's toolArgs plus its error text, which can hold output
-preToolUse never saw, so leaving it unwired is a deliberate coverage deferral
-of the same class as the opt\-in postToolUse output scan; errorOccurred and
-notification carry human\-readable error and message text (a low\-value
-surface deferred this round, not a claim they can never carry a secret);
-preCompact carries a compaction trigger and any customInstructions over
-already\-seen transcript; agentStop (Stop) and sessionEnd carry only a
-stopReason/reason over transcript the recall scan covers. Every one of these
-is a deliberate coverage deferral, not an assertion that the event can never
-carry a credential.
+field shape \- except permissionRequest, whose payload is a subset of
+preToolUse's and which the config entry therefore names with \-\-event
+permissionRequest. preToolUse and permissionRequest both block; the other
+events run full detection and write the audit log but cannot decide. GitHub
+documents fourteen Copilot CLI hook events; Skarn declares five of them
+(preToolUse, permissionRequest, userPromptSubmitted, userPromptTransformed,
+postToolUse) plus preMcpToolCall, and evaluates the rest as deliberately not
+wired (verified against the GitHub hooks reference, 2026\-07\-30):
+sessionStart carries an initialPrompt (scannable), but a session\-open
+detection arm beyond userPromptTransformed is out of this round's scope;
+subagentStart and subagentStop carry subagent metadata (agentName,
+transcriptPath), and the subagent's own tool calls are gated by preToolUse
+while any post\-hoc output lands in the session store the recall scan covers;
+postToolUseFailure carries the failed call's toolArgs plus its error text,
+which can hold output preToolUse never saw, so leaving it unwired is a
+deliberate coverage deferral of the same class as the opt\-in postToolUse
+output scan; errorOccurred and notification carry human\-readable error and
+message text (a low\-value surface deferred this round, not a claim they can
+never carry a secret); preCompact carries a compaction trigger and any
+customInstructions over already\-seen transcript; agentStop (Stop) and
+sessionEnd carry only a stopReason/reason over transcript the recall scan
+covers. Every one of these is a deliberate coverage deferral, not an assertion
+that the event can never carry a credential.
 .PP
 Routing: The camelCase field set is the CLI tell. A Copilot payload in
 Claude\-compat mode is byte\-indistinguishable from a real Claude event (field
 names AND tool names), so the shipped Copilot configs always pass \-\-agent
-copilot explicitly.
+copilot explicitly. The CLI loads hooks from policy, then the repository, then
+the user, then inline repository settings, then inline user settings, then
+plugins, and how several hooks for one event compose differs by event. On
+preToolUse any hook returning deny blocks the tool, so a Skarn deny there is
+final; measured on CLI 1.0.70 the entries after the denying one did not run at
+all, and on 1.0.61 under SDK 1.0.1 the host's own SDK\-registered callback was
+never invoked for that call either. On permissionRequest every configured hook
+runs and their outputs are MERGED with later outputs overriding earlier ones,
+so a Skarn deny there is not final: a hook loading after it that answers allow
+replaces the decision. That is why preToolUse remains the durable gate and
+permissionRequest is a second chokepoint rather than a stronger one. A
+top\-level disableAllHooks: true in the repository's
+\&.github/copilot/settings.json skips the user\- and repository\-delivered hooks
+for that repository, the operator's own included, and logs nothing when it
+does; whether machine policy hooks survive it is unverified. It silences the
+layers it reaches across events (sessionStart as well as preToolUse) and
+leaves the host application's own SDK\-registered callbacks running, so doctor
+reads that file and reports the file layer as inert rather than counting it as
+protection or calling the machine unprotected.
 .PP
 Fail mode: preToolUse fails CLOSED on a non\-zero exit, but a hook TIMEOUT
-fails OPEN (the shipped configs set timeoutSec 10).
+fails OPEN (the shipped configs set timeoutSec 10). permissionRequest treats
+exit 2 as a deny.
 .TP
 \fBpreToolUse\fR
 Scans toolName plus toolArgs (an object, or a JSON string that is parsed and
 flattened). Enforce: top\-level permissionDecision = deny or ask, with the
 redacted reason in permissionDecisionReason. Audit: additionalContext. Wired
-by the shipped configs. The only enforcing gate on this host, and the only one
-where ask is a real interactive prompt rather than a degraded deny.
+by the shipped configs. The durable gate on this host: a deny from ANY hook
+blocks the tool, so Skarn's answer here cannot be replaced by a later one. It
+is also the only Copilot event where ask is a real interactive prompt rather
+than a degraded deny.
 .TP
 \fBpermissionRequest\fR
-Scans the same shape as preToolUse. Enforce: nothing is emitted \- detection
-and the audit log only. Audit: none. Wired by the shipped configs.
-Byte\-identical to preToolUse with no discriminator, so it cannot
-independently block. It is wired for detection coverage and the audit log.
+Scans toolName, plus toolArgs when the payload carries it. Enforce: top\-level
+behavior = deny, with the redacted reason in message; that decision
+short\-circuits the normal permission flow, but not other hooks \- every
+configured permissionRequest hook runs and later outputs override earlier
+ones, so a hook loading after Skarn can answer allow and replace the deny.
+Audit: none. Wired by the shipped configs. The second chokepoint on this host:
+the permission\-decision step for a call preToolUse deferred or allowed.
+GitHub documents its payload as a subset of preToolUse's and no field
+separates the two, so the guard never infers it \- the shipped config entries
+pass \-\-event permissionRequest, and an unpinned payload is read as
+preToolUse. A would\-be ask degrades to deny (the schema has allow and deny
+and no ask value). Its deny is not final the way a preToolUse deny is: outputs
+from several permissionRequest hooks merge last\-writer\-wins, and the load
+order is policy, repository, user, inline settings, plugins \- so a
+policy\-delivered Skarn deny is the MOST overridable placement and a
+plugin\-delivered one the least. Audit is silent by design: the only other
+output fields are message and an interrupt that stops the whole agent, and a
+message with no behavior would ride into another hook's merged decision, so
+there is no channel here that advises without deciding.
 .TP
 \fBuserPromptSubmitted\fR
 Scans prompt. The channel ships content off the machine, so a secret on it is
@@ -392,9 +440,12 @@ nothing is emitted \- this event's output controls only MCP request metadata.
 Audit: none. Supported but opt\-in: not wired by the shipped configs.
 Supported but not wired in the shipped configs: it cannot block or advise, so
 it buys detection coverage in the guard log only. Added in Copilot CLI 1.0.51
-and still firing (no removal through 1.0.73, verified 2026\-07\-21), though it
-is absent from GitHub's current hooks\-reference event table; the row is kept
-version\-scoped because older supported CLIs still fire it.
+and still firing (no removal through 1.0.73), and still absent from GitHub's
+hooks\-reference event table on re\-verification 2026\-07\-30, which is why it
+gains no decision channel here: the one output the SDK documents for it is
+metaToUse, MCP request metadata, and Skarn does not emit a verdict schema the
+vendor does not publish. The row is kept version\-scoped because older
+supported CLIs still fire it.
 .TP
 \fBpostToolUse\fR
 Scans toolResult. Enforce: advisory only \- never blocks. Audit:
