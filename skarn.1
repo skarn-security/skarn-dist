@@ -1,4 +1,4 @@
-.TH "SKARN" "1" "2026-06-23" "skarn 0.22.0" "Skarn Manual"
+.TH "SKARN" "1" "2026-06-23" "skarn 0.23.0" "Skarn Manual"
 .SH NAME
 skarn \- AI coding session security scanner with built\-in session search
 .SH SYNOPSIS
@@ -257,6 +257,23 @@ of recorded history. Requires a Team license.
 \fB\-\-audit\-verify\fR \fIfile\fR
 Verify an audit log's hash chain and exit (no scan). Exits non\-zero if the
 chain is broken. Needs no license.
+.TP
+\fB\-\-drop\fR \fIdir\fR
+After the scan, write a self\-describing drop artifact to
+<dir>/<identity>/<runId>.json: identity, org, host, run id, scan window, the
+\-\-project scope it declares, and the redacted summary counts. Its counts
+cover the declared scope, not the machine: the session count is the number
+that passed \-\-project and \-\-session. Scope is recorded twice because the
+two sides speak different vocabularies \- scope.projects is the \-\-project
+needles verbatim, which is often a path, and scope.resolved is the project
+names those needles actually matched. Content is attributed against
+scope.resolved, so a run scoped by path still names the project its exposure
+came from, while a run that declared no scope resolves nothing and therefore
+names no project at all. Written atomically, so a second run in the same
+window adds a file rather than overwriting one and a concurrent reader never
+sees a partial artifact. Skarn does not transmit it; moving the directory is
+the organization's job. Identity comes from SKARN_IDENTITY, falling back to a
+hostname\-derived tag with a warning.
 .TP
 \fB\-\-product\fR \fIname\fR
 Release lineage for \-\-format evidence: the product this scan's sessions

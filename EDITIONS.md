@@ -1,6 +1,6 @@
 # Skarn editions - the free/paid boundary
 
-Generated from docs/cli-model.toml by docs/build_manpage.py (regenerate with `zig build man`); do not edit by hand. skarn 0.22.0.
+Generated from docs/cli-model.toml by docs/build_manpage.py (regenerate with `zig build man`); do not edit by hand. skarn 0.23.0.
 
 One binary for every tier. The free tier is the full local product, not a trial: the entire detection engine, every output format except the Team evidence pack, and redaction, under a free license available to anyone who registers - an individual or an organization alike. Paid tiers unlock org capabilities: distributing policy and accepted-findings baselines across a team, compliance evidence, the maintained feed, and real-time enforcement.
 
@@ -18,6 +18,7 @@ skarn check and the serve security view require a license; the free license is i
 | CI gating: --fail-on-severity, --fail-on-risk, --fail-on-scan-error, the exit-code contract | A scanner that cannot fail CI is crippled; individual CI use is free. |
 | Personal baseline: --baseline <file>, --baseline-create | Accept-and-diff is the single-developer workflow. |
 | Custom rules and local detectors: --rules, --no-default-rules, --check-code, --check-packages, --sbom | The entire local detection engine is free; the paid asset is the maintained feed, not the engine. Reconciling your own SBOM against your own sessions on your own machine is local surfacing, not distribution. |
+| Fleet drop: check --drop <dir> | Producing a drop artifact for your own machine is local surfacing, exactly like --format ndjson: a single developer can drop artifacts for their own use under the free license. Aggregating many machines' drops and viewing the fleet is Enterprise. Combining --drop with --audit-log still needs Team for the audit log itself; a free drop simply omits it. |
 | All recall commands: search, recent, stats, tools, mcps, cmds, export, messages, restore | The daily-use surface: session search, browsing, and analytics need no license. |
 | skarn serve - the localhost web UI | Single-user, 127.0.0.1 only; the paid surface is the future fleet console, not your own browser. The recall views need no license; the security view requires the free license, exactly like check. |
 | skarn guard - audit mode | Reports would-be verdicts and does not block; a lapsed license does not break an editor. |
@@ -43,5 +44,5 @@ skarn check and the serve security view require a license; the free license is i
 |---|---|---|
 | --profile | No - refuses fail-closed with exit 5 before any scan | Count-aware dedup and reshape for fleet-scale reporting. |
 | --fleet | No - refuses fail-closed with exit 5 before any scan | Fleet aggregation across machines is the org console surface; every single-machine view stays free. |
-| Fleet roster view: serve --fleet (preview) | No - refuses fail-closed with exit 5 before any scan | Renders an org-produced aggregate of per-machine redacted scan artifacts - roster, compliance strip, auditor evidence. Skarn neither collects nor transmits fleet data; the aggregate is assembled from artifacts each machine drops on an org-controlled store. |
+| Fleet roster view: serve --fleet (preview) | No - refuses fail-closed with exit 5 before any scan | Renders an org-produced aggregate of per-machine redacted scan artifacts - roster, compliance strip, auditor evidence. Skarn neither collects nor transmits fleet data; the aggregate is assembled from the artifacts each machine writes with check --drop onto an org-controlled store. |
 | Fleet console, SSO/RBAC, central reporting (roadmap) | No - not built yet | Org-scale centralization, reserved in the entitlement layer. |
