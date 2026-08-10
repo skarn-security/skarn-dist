@@ -1,4 +1,4 @@
-.TH "SKARN-CHECK" "1" "2026-06-23" "skarn 0.23.0" "Skarn Manual"
+.TH "SKARN-CHECK" "1" "2026-06-23" "skarn 0.24.0" "Skarn Manual"
 .SH NAME
 skarn\-check \- Scan AI sessions for leaked credentials and attack patterns
 .SH SYNOPSIS
@@ -142,11 +142,20 @@ needles verbatim, which is often a path, and scope.resolved is the project
 names those needles actually matched. Content is attributed against
 scope.resolved, so a run scoped by path still names the project its exposure
 came from, while a run that declared no scope resolves nothing and therefore
-names no project at all. Written atomically, so a second run in the same
-window adds a file rather than overwriting one and a concurrent reader never
-sees a partial artifact. Skarn does not transmit it; moving the directory is
-the organization's job. Identity comes from SKARN_IDENTITY, falling back to a
-hostname\-derived tag with a warning.
+names no project at all. The assistant list and the last\-activity timestamp
+describe the sessions the scan read inside that scope, not the ones that
+produced a finding, so a machine with nothing to report still says which
+assistants run on it and when it was last used; the guard mode is resolved by
+the same wired\-hook walk doctor performs, which only this flag pays for, and
+an absent guard mode means it could not be resolved rather than that no hook
+is wired. Written atomically, so a second run in the same window adds a file
+rather than overwriting one and a concurrent reader never sees a partial
+artifact. The artifact carries a schema version and is never reinterpreted
+across versions, so a release that moves that version needs the machines
+upgraded alongside whatever assembles their artifacts, and the ones written at
+the older version cleared out of the collection directory. Skarn does not
+transmit it; moving the directory is the organization's job. Identity comes
+from SKARN_IDENTITY, falling back to a hostname\-derived tag with a warning.
 .TP
 \fB\-\-product\fR \fIname\fR
 Release lineage for \-\-format evidence: the product this scan's sessions

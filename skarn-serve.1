@@ -1,4 +1,4 @@
-.TH "SKARN-SERVE" "1" "2026-06-23" "skarn 0.23.0" "Skarn Manual"
+.TH "SKARN-SERVE" "1" "2026-06-23" "skarn 0.24.0" "Skarn Manual"
 .SH NAME
 skarn\-serve \- Start the local web UI (search, recent, stats, and a redacted
 scan view) bound to 127.0.0.1
@@ -40,7 +40,27 @@ directory of baselines (the org form) requires a Team license.
 Serve a Fleet roster view (preview) over this fleet.json aggregate of
 per\-machine redacted scan artifacts. The aggregate is produced by an external
 step that reads each machine's dropped scan output; skarn neither collects nor
-transmits fleet data. Requires an Enterprise license.
+transmits fleet data. When that step was run against an org\-declared machine
+roster, the aggregate also carries the coverage that roster implies, and the
+view states how many of the expected machines reported and names the ones that
+did not; assembled without a roster it carries none, because a machine that
+never reported is invisible to anything reading only the artifacts that
+arrived. Serve validates the file against the current aggregate contract
+before it binds a port: a file that declares a schemaVersion is refused with
+exit 1 when a machine's topExposure names a project absent from the projects
+that machine resolved, when a machine carries projects while declaring no
+scope, or when a topExposure secret is not a redaction\-chokepoint preview.
+Every refusal names the offending machine, and the two scope refusals name the
+project as well, so a rejected aggregate is a deliberate refusal rather than a
+crash. A file that declares no schemaVersion at all is refused the same way,
+naming the aggregator version to regenerate it with: no invariant can be
+evaluated on a file that does not say what it is, and serving one would put
+whatever it happens to carry, redacted or not, into the Fleet view. The kit
+that produces the aggregate \- the aggregator, the per\-platform scheduling
+units, the managed guard configs, and the rollout runbooks \- is published at
+integrations/fleet/ in https://github.com/skarn\-security/skarn\-dist, where
+it downloads with no credential and no license; only rendering the assembled
+aggregate here needs one. Requires an Enterprise license.
 .SH "SEE ALSO"
 skarn(1)
 .SH COPYRIGHT

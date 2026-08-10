@@ -1,4 +1,4 @@
-.TH "SKARN" "1" "2026-06-23" "skarn 0.23.0" "Skarn Manual"
+.TH "SKARN" "1" "2026-06-23" "skarn 0.24.0" "Skarn Manual"
 .SH NAME
 skarn \- AI coding session security scanner with built\-in session search
 .SH SYNOPSIS
@@ -269,11 +269,20 @@ needles verbatim, which is often a path, and scope.resolved is the project
 names those needles actually matched. Content is attributed against
 scope.resolved, so a run scoped by path still names the project its exposure
 came from, while a run that declared no scope resolves nothing and therefore
-names no project at all. Written atomically, so a second run in the same
-window adds a file rather than overwriting one and a concurrent reader never
-sees a partial artifact. Skarn does not transmit it; moving the directory is
-the organization's job. Identity comes from SKARN_IDENTITY, falling back to a
-hostname\-derived tag with a warning.
+names no project at all. The assistant list and the last\-activity timestamp
+describe the sessions the scan read inside that scope, not the ones that
+produced a finding, so a machine with nothing to report still says which
+assistants run on it and when it was last used; the guard mode is resolved by
+the same wired\-hook walk doctor performs, which only this flag pays for, and
+an absent guard mode means it could not be resolved rather than that no hook
+is wired. Written atomically, so a second run in the same window adds a file
+rather than overwriting one and a concurrent reader never sees a partial
+artifact. The artifact carries a schema version and is never reinterpreted
+across versions, so a release that moves that version needs the machines
+upgraded alongside whatever assembles their artifacts, and the ones written at
+the older version cleared out of the collection directory. Skarn does not
+transmit it; moving the directory is the organization's job. Identity comes
+from SKARN_IDENTITY, falling back to a hostname\-derived tag with a warning.
 .TP
 \fB\-\-product\fR \fIname\fR
 Release lineage for \-\-format evidence: the product this scan's sessions
@@ -822,7 +831,27 @@ directory of baselines (the org form) requires a Team license.
 Serve a Fleet roster view (preview) over this fleet.json aggregate of
 per\-machine redacted scan artifacts. The aggregate is produced by an external
 step that reads each machine's dropped scan output; skarn neither collects nor
-transmits fleet data. Requires an Enterprise license.
+transmits fleet data. When that step was run against an org\-declared machine
+roster, the aggregate also carries the coverage that roster implies, and the
+view states how many of the expected machines reported and names the ones that
+did not; assembled without a roster it carries none, because a machine that
+never reported is invisible to anything reading only the artifacts that
+arrived. Serve validates the file against the current aggregate contract
+before it binds a port: a file that declares a schemaVersion is refused with
+exit 1 when a machine's topExposure names a project absent from the projects
+that machine resolved, when a machine carries projects while declaring no
+scope, or when a topExposure secret is not a redaction\-chokepoint preview.
+Every refusal names the offending machine, and the two scope refusals name the
+project as well, so a rejected aggregate is a deliberate refusal rather than a
+crash. A file that declares no schemaVersion at all is refused the same way,
+naming the aggregator version to regenerate it with: no invariant can be
+evaluated on a file that does not say what it is, and serving one would put
+whatever it happens to carry, redacted or not, into the Fleet view. The kit
+that produces the aggregate \- the aggregator, the per\-platform scheduling
+units, the managed guard configs, and the rollout runbooks \- is published at
+integrations/fleet/ in https://github.com/skarn\-security/skarn\-dist, where
+it downloads with no credential and no license; only rendering the assembled
+aggregate here needs one. Requires an Enterprise license.
 .SS "Global options"
 Available on a bare invocation.
 .TP

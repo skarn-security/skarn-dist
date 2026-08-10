@@ -1,6 +1,6 @@
 # Skarn editions - the free/paid boundary
 
-Generated from docs/cli-model.toml by docs/build_manpage.py (regenerate with `zig build man`); do not edit by hand. skarn 0.23.0.
+Generated from docs/cli-model.toml by docs/build_manpage.py (regenerate with `zig build man`); do not edit by hand. skarn 0.24.0.
 
 One binary for every tier. The free tier is the full local product, not a trial: the entire detection engine, every output format except the Team evidence pack, and redaction, under a free license available to anyone who registers - an individual or an organization alike. Paid tiers unlock org capabilities: distributing policy and accepted-findings baselines across a team, compliance evidence, the maintained feed, and real-time enforcement.
 
@@ -44,5 +44,5 @@ skarn check and the serve security view require a license; the free license is i
 |---|---|---|
 | --profile | No - refuses fail-closed with exit 5 before any scan | Count-aware dedup and reshape for fleet-scale reporting. |
 | --fleet | No - refuses fail-closed with exit 5 before any scan | Fleet aggregation across machines is the org console surface; every single-machine view stays free. |
-| Fleet roster view: serve --fleet (preview) | No - refuses fail-closed with exit 5 before any scan | Renders an org-produced aggregate of per-machine redacted scan artifacts - roster, compliance strip, auditor evidence. Skarn neither collects nor transmits fleet data; the aggregate is assembled from the artifacts each machine writes with check --drop onto an org-controlled store. |
+| Fleet roster view: serve --fleet (preview) | No - refuses fail-closed with exit 5 before any scan | Renders an org-produced aggregate of per-machine redacted scan artifacts - roster, compliance strip, auditor evidence. Skarn neither collects nor transmits fleet data; the aggregate is assembled from the artifacts each machine writes with check --drop onto an org-controlled store. The kit that assembles it - the aggregator, the scheduling units, the managed guard configs, and the rollout runbooks - is published at integrations/fleet/ in https://github.com/skarn-security/skarn-dist, and needs no license to download. |
 | Fleet console, SSO/RBAC, central reporting (roadmap) | No - not built yet | Org-scale centralization, reserved in the entitlement layer. |
