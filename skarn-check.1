@@ -1,4 +1,4 @@
-.TH "SKARN-CHECK" "1" "2026-06-23" "skarn 0.24.0" "Skarn Manual"
+.TH "SKARN-CHECK" "1" "2026-06-23" "skarn 0.25.0" "Skarn Manual"
 .SH NAME
 skarn\-check \- Scan AI sessions for leaked credentials and attack patterns
 .SH SYNOPSIS
@@ -35,8 +35,10 @@ Fetch and verify the latest feed from the subscriber channel, then scan.
 Requires a Team license.
 .TP
 \fB\-\-feed\-url\fR \fIurl\fR
-Feed channel URL for \-\-update\-rules; falls back to $SKARN_FEED_URL.
-Requires a Team license.
+Feed channel URL for \-\-update\-rules; falls back to $SKARN_FEED_URL. It must
+be https \- plain http is accepted only against loopback \- and must carry no
+userinfo, so a poisoned channel cannot receive the subscriber credential in
+cleartext. Requires a Team license.
 .TP
 \fB\-\-offline\fR
 Disable all network access (the maintained\-feed fetch).
@@ -59,8 +61,11 @@ Flag insecure code written by the assistant during the session.
 Scan window in hours; 0 means no time limit. The default is 720.
 .TP
 \fB\-\-cli\fR \fIname\fR
-Restrict the scan to one assistant's sessions. One of: claude, gemini, codex,
-cursor, copilot, kimi.
+Restrict the scan to one assistant's sessions. A name this machine has no tool
+for is refused with exit 6 rather than scanned as empty, so a typo cannot pass
+for a clean result. A custom tool declared in ~/.skarn.json is accepted by its
+configured name. One of: claude, gemini, codex, cursor, copilot, kimi, grok,
+grokbot, antigravity.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict the scan to matching projects: a comma\-separated list of names or
@@ -72,15 +77,24 @@ Scan a single session by id.
 .TP
 \fB\-\-format\fR \fIfmt\fR
 Output format. ndjson is an ECS\-shaped event stream (one redacted finding per
-line) for SIEM ingest. evidence is a redacted Markdown evidence pack for a
-product technical file, and is the one value that requires a Team license. One
-of: text, json, sarif, ndjson, evidence. The default is text.
+line) for SIEM ingest. sarif (partialFingerprints), ndjson
+(skarn.fingerprint), evidence, and the json cross\-session chains (fingerprint
+and exfilFingerprint) carry the finding fingerprint, a deterministic unkeyed
+two\-stage hash (the sha256 of the rule id, a NUL byte, and the lowercase hex
+sha256 of the ASCII\-lowercased secret), so a guessable secret is recoverable
+from it by candidate testing wherever that output travels. evidence is a
+redacted Markdown evidence pack for a product technical file, and is the one
+value that requires a Team license. One of: text, json, sarif, ndjson,
+evidence. The default is text.
 .TP
 \fB\-v\fR, \fB\-\-verbose\fR
 Verbose output.
 .TP
 \fB\-\-no\-redact\fR
-Show secrets in full instead of redacting them. Use with caution.
+Show secrets in full instead of redacting them, in the text, json and sarif
+reports only. Use with caution. The ndjson stream, the evidence pack, the
+artifacts written by \-\-drop, serve and assess, the baseline files, and the
+guard ignore this flag and stay redacted.
 .TP
 \fB\-\-no\-color\fR
 Disable colored output.
@@ -88,7 +102,9 @@ Disable colored output.
 \fB\-\-policy\fR \fIpath\fR
 Load a declarative TOML policy file (fail thresholds, required/forbidden
 rules, baseline enforcement, profile); the \-\-fail\-on\-* and \-\-profile
-flags override it. Requires a Team license.
+flags override it. A file that cannot be read or parsed exits 4 rather than
+falling back to the embedded default, which gates nothing: a gate you asked
+for and did not get must never pass silently. Requires a Team license.
 .TP
 \fB\-\-profile\fR \fIpreset\fR
 Output profile. enterprise keeps high\-confidence findings and dedups them.
@@ -103,20 +119,28 @@ Exit 2 if the session risk score exceeds this threshold.
 .TP
 \fB\-\-fail\-on\-scan\-error\fR
 Fail closed (exit 6) when the scan was incomplete: a tool source errored out
-of discovery, or a session's parse failed. Off by default (a partial scan
-still reports, with a stderr warning).
+of discovery, a session store that exists could not be read, a session's parse
+failed, the assistant compacted a session before the scan so its transcript no
+longer holds the whole conversation, or the scan read no sessions at all. Off
+by default (a partial scan still reports, and an empty scan still warns, with
+a stderr warning).
 .TP
 \fB\-\-baseline\fR \fIpath\fR
 Suppress findings recorded in this baseline; fail only on new findings. A
 single file is free; a directory unions every .json baseline inside it (an
-org\-shared accepted set) and requires a Team license. Without this flag,
+org\-shared accepted set) and requires a Team license. A fingerprint any
+member labelled a true positive is left out of that union, so a confirmed leak
+keeps failing the gate whatever another member labelled it. Without this flag,
 ~/.config/skarn/baseline.json is applied automatically when it exists
 (suppression only; \-\-baseline\-create and \-\-baseline\-merge targets stay
 explicit).
 .TP
 \fB\-\-baseline\-create\fR
 Write the current findings to the \-\-baseline file as the accepted set and
-exit.
+exit. Under \-\-fail\-on\-scan\-error an incomplete scan is refused instead:
+the run exits 6 and the existing file is left as it was, because an accepted
+set recorded from a scan that read only part of the machine would suppress
+findings that were never examined.
 .TP
 \fB\-\-baseline\-merge\fR \fIfile\fR
 Consolidate the \-\-baseline input (a file or a directory of per\-member
@@ -128,8 +152,12 @@ verdict; no secrets) to this local log; detects in\-place edits and reordering
 of recorded history. Requires a Team license.
 .TP
 \fB\-\-audit\-verify\fR \fIfile\fR
-Verify an audit log's hash chain and exit (no scan). Exits non\-zero if the
-chain is broken. Needs no license.
+Verify an audit log's hash chain and exit (no scan). A broken chain exits 1. A
+log that exists but could not be read \- a permission failure, a directory, a
+log past the read cap \- exits 6, because not one byte of it was examined and
+an unexamined log must never read as an intact one. An absent log is a valid
+empty chain and exits 0, so a verify that runs before the first scan does not
+fail. Needs no license.
 .TP
 \fB\-\-drop\fR \fIdir\fR
 After the scan, write a self\-describing drop artifact to
@@ -184,14 +212,19 @@ unreadable or malformed one fails the scan.
 .SH "EXIT STATUS"
 .TP
 \fB0\fR
-Clean, or informational output only.
+Clean, or informational output only. For mcp: the client closed stdin, which
+is the normal shutdown.
 .TP
 \fB1\fR
 A finding at or above the \-\-fail\-on\-severity threshold was reported. For
 setup and guard \-\-self\-test: a target was refused or a verification failed.
-For doctor: at least one check FAILED (a warning never exits nonzero, and
-\-\-json always exits 0). Also: the first\-run EULA prompt was declined, so
-the invoked operation was not performed.
+For doctor: at least one check FAILED (a warning never exits nonzero), or an
+unknown option was passed, which is refused before any check runs. For
+restore: the recorded working directory or session id could not be rendered
+safely, so nothing was printed to stdout and the refusal is named on stderr.
+Also: the first\-run EULA prompt was declined, so the invoked operation was
+not performed. For mcp: an unknown argument was passed, which is refused
+before the protocol loop starts.
 .TP
 \fB2\fR
 The session risk score exceeded the \-\-fail\-on\-risk threshold. For setup:
@@ -203,8 +236,10 @@ A canary token was triggered (a proven breach). This overrides every other
 gate.
 .TP
 \fB4\fR
-A policy precondition was not met: a required rule is missing, or the policy
-requires a baseline and none was supplied.
+A policy precondition was not met: a required rule is missing, the policy
+requires a baseline and none was supplied or the one supplied did not load, or
+the \-\-policy file itself could not be read or parsed. A policy that never
+loaded is never quietly replaced by the embedded default, which gates nothing.
 .TP
 \fB5\fR
 A requested paid feature is not covered by the active license (a Team or
@@ -212,34 +247,75 @@ Enterprise flag without a matching license). Refused before any scan. With no
 usable license at all, check exits 7 before this gate is consulted.
 .TP
 \fB6\fR
-The scan could not complete: session discovery or the scan itself failed. For
-vet: the home directory could not be resolved (so the configuration was never
-located at all), or a config file that exists could not be read, so the
-configuration was only partly seen. Fail\-closed \- the result is not
-trustworthy, so it is never reported as clean.
+The scan could not complete: session discovery or the scan itself failed,
+including a home directory that could not be resolved so no session store was
+ever located, or the detection rules could not be loaded so no scan was ever
+defined. Under \-\-fail\-on\-scan\-error an otherwise\-complete run exits 6 as
+well whenever coverage was partial: a tool source dropped out of discovery, a
+session store that exists could not be read, a session's parse failed, the
+assistant compacted a session before the scan so its transcript no longer
+holds the whole conversation, or the run read no sessions at all. That verdict
+is computed BEFORE the report is rendered, so the SARIF invocation exit code,
+the evidence pack and the audit record all carry 6 rather than describing the
+run as clean and then exiting nonzero. A \-\-baseline\-create run is refused
+on the same condition before it writes anything, so an incomplete scan is
+never recorded as the accepted set and the previous baseline survives. For
+check \-\-audit\-verify: the audit log exists but could not be read, so the
+hash chain was never examined (an absent log is a valid empty chain and exits
+0). For vet: the home directory could not be resolved (so the configuration
+was never located at all), or a config file that exists was not read \- it
+could not be read, or it was skipped because it is not that assistant's live
+configuration \- so the configuration was only partly seen. For doctor: the
+home directory could not be resolved, so every per\-agent check would have
+read an empty machine \- a diagnostic that could not be produced is never
+reported as a healthy one. Fail\-closed \- the result is not trustworthy, so
+it is never reported as clean.
 .TP
 \fB7\fR
 No usable license is present \- none was found via SKARN_LICENSE,
-SKARN_LICENSE_FILE, or the installed file \- so check refused before scanning.
-The free license is issued at https://getskarn.com/free after a quick email
-confirmation and is verified offline. Also used when a license IS present but
-cannot be used at all (revoked, tampered, or signed by an untrusted key).
-assess, the recall commands, guard, setup, doctor, vet, license, taxonomies
-and check \-\-audit\-verify never exit 7.
+SKARN_LICENSE_FILE, or the installed file \- so check, or baseline audit,
+refused before scanning. The free license is issued at
+https://getskarn.com/free after a quick email confirmation and is verified
+offline. Also used when a license IS present but cannot be used at all
+(revoked, tampered, or signed by an untrusted key). assess, baseline accept,
+guard accept, the recall commands, guard, setup, doctor, vet, mcp, license,
+taxonomies and check \-\-audit\-verify never exit 7.
 .SH SECURITY
 Skarn scans locally and makes no network connection by default. Secrets are
-redacted in every output format unless \-\-no\-redact is given.
+redacted in every output format. \-\-no\-redact lifts that only where it is
+honored \- check's text, json and sarif reports, and export's raw session
+content; the ndjson stream, the evidence pack, the artifacts written by
+\-\-drop, serve and assess, the baseline files, and the guard ignore it and
+stay redacted.
 .PP
-The only feature that transmits anything off the machine is the maintained
-feed: \-\-update\-rules and \-\-feed\-url fetch a signed feed bundle from the
-subscriber channel. No secret ever leaves the machine. It is off by default
-and is disabled by \-\-offline.
+Two commands transmit anything off the machine, and only when you type them.
+skarn check \-\-update\-rules fetches a signed feed bundle from the subscriber
+channel, presenting $SKARN_FEED_TOKEN as a bearer credential; \-\-feed\-url
+names that channel when $SKARN_FEED_URL does not. The feed is off by default
+and is disabled by \-\-offline. skarn license renew posts the installed
+license token to the license service to receive a re\-signed one. Both refuse
+any endpoint that is not https, or http against loopback, and any endpoint
+carrying userinfo. No session content, no finding, and no scanned secret ever
+leaves the machine through a connection skarn makes. skarn mcp makes no
+network connection; the results it hands to the connected MCP client (redacted
+findings by default, redacted session content only with \-\-enable\-recall)
+are forwarded by that client to its model provider \- that egress is the
+client's, and it happens only when you configure the server.
 .PP
 skarn vet reads the AI assistant configuration files listed under FILES
 read\-only: it opens each one for reading, never writes, rewrites, or removes
 one, and makes no network call. It reports what it finds and leaves every
 decision about the configuration to you. \-\-offline is accepted for parity
 and changes nothing.
+.PP
+skarn mcp reads the same session stores as assess and the same configuration
+files as vet, read\-only and with no network call, and answers only the AI
+coding assistant that spawned it over stdin and stdout. Its results are the
+redacted scan report, the masked vet report, and session metadata carrying
+neither message text nor any label authored inside a transcript. Because the
+assistant receives those results, they travel wherever that assistant sends
+its context, so treat them as leaving the machine even though skarn itself
+opens no socket.
 .SH "SEE ALSO"
 skarn(1)
 .SH COPYRIGHT

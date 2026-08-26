@@ -1,0 +1,90 @@
+.TH "SKARN-MCP" "1" "2026-06-23" "skarn 0.25.0" "Skarn Manual"
+.SH NAME
+skarn\-mcp \- Run a local stdio MCP server exposing read\-only, redacted scan,
+config\-vetting and session\-metadata tools to an AI coding assistant
+.SH SYNOPSIS
+\fBskarn\fR \fBmcp\fR
+.SH DESCRIPTION
+Run a Model Context Protocol server on stdin and stdout for one client.
+Messages are newline\-delimited JSON\-RPC 2.0, one message per line, UTF\-8,
+with no embedded newline; a request frame larger than 1048576 bytes is
+answered with a single \-32600 error and skipped. The client opens with
+initialize and the server replies with the negotiated protocolVersion, a tools
+capability, its serverInfo and a short instructions paragraph; tools/list and
+tools/call before that reply are answered \-32600, while ping is answered at
+any time. Notifications, including notifications/initialized and
+notifications/cancelled, are accepted and never answered. An unparseable frame
+is \-32700, a frame that is not a JSON\-RPC 2.0 request object is \-32600, an
+unknown method is \-32601, and a malformed initialize or an unknown tool name
+is \-32602. An argument a tool refuses \- an unknown key, a wrong type, an
+out\-of\-range number, a string over 4096 bytes or one carrying control
+characters \- comes back as a normal tool result marked isError so the model
+can correct itself, never as a protocol error. On first run the End User
+License Agreement notice is printed as one line on stderr before the protocol
+loop starts and the server proceeds; `skarn eula accept`, or
+SKARN_EULA_ACCEPTED=1 in the client's env block, silences it. Nothing but MCP
+messages is ever written to stdout. Stderr is not part of the protocol and may
+carry a diagnostic from the scan path, for example when the home directory
+cannot be resolved; the tool still answers with a normal result marked isError
+and the server stays up. Register the server in a client with the command
+`skarn` and the argument list ["mcp"], which requires skarn on PATH; the
+documented alternative is the version\-pinned form `npx \-y
+@skarn\-security/skarn@X.Y.Z mcp`, which downloads that exact version from the
+npm registry on first use and caches it. An unpinned npx form is reported as a
+finding by `skarn vet`, so pin the version.
+.PP
+Run a local Model Context Protocol (MCP) server so an AI coding assistant can
+call Skarn directly. The transport is stdio: newline\-delimited JSON\-RPC 2.0
+on stdin and stdout, one server process per client, and the process exits 0
+when the client closes stdin. The negotiated protocol version is 2025\-11\-25;
+a client that asks for 2025\-06\-18 gets that version back, and any other
+request, including the batch\-era 2025\-03\-26 and the stateless 2026\-07\-28,
+is answered with 2025\-11\-25. Batched requests are not accepted: a top\-level
+JSON array is answered with one \-32600 error. Four read\-only tools are
+exposed by default, and \-\-enable\-recall adds search_sessions and
+get_session, which return transcript text and are described under that option.
+scan_sessions returns the same redacted scan report that `skarn assess
+\-\-json` prints, minus the per\-incident context snippet and minus every
+transcript\-authored label, which means the project labels on both the
+incidents and the attack chains and the tool name on an incident, and takes
+severity, hours and project. vet_configs returns the masked findings report
+that `skarn vet \-\-format json` prints and takes no arguments; those findings
+quote this machine's own configuration, including hook command lines and MCP
+server definitions, with any credential\-shaped value masked. list_sessions
+returns recent sessions as identifiers and counts only \- session id,
+assistant, the two timestamps, message and tool counts, and token totals \-
+and takes hours, limit, project and cli. session_stats returns the same
+aggregate counts across those sessions and takes hours, project and cli. Every
+tool is annotated read\-only, non\-destructive and closed\-world. No tool
+writes, changes or removes a file, no tool opens a network connection, and no
+default tool returns session message text or a label authored inside a
+transcript such as a project name, a git branch, a model id or a tool name.
+Every value a detector matched is reported only in its masked form, which
+keeps at most the first character and last two characters and discards the
+middle; a value under 16 characters, and any personal data, is replaced whole.
+That is a truncated preview rather than a one\-way transform of the whole
+value. Three classes of string are still passed through as they are: a file
+path, a session id, and a timestamp. Each is a locator the tools exist to hand
+back, and each is read from the transcript or the store rather than generated
+by Skarn, so a credential deliberately planted in a session id or a directory
+name reaches the client verbatim. A Claude Code store also encodes the project
+directory into its transcript file name, so the returned session_file carries
+that directory in encoded form. Every other Skarn surface passes those three
+through the same way. Tool results are returned to the MCP client that spawned
+the server, which is the assistant, so they travel wherever that assistant
+sends its context. The verb needs no license. Project\-level configuration for
+vet_configs is read from the server process's working directory, which is
+whatever directory the client spawned it in.
+.SH OPTIONS
+.TP
+\fB\-\-enable\-recall\fR
+Add the content tools search_sessions and get_session to the server. Off by
+default. They return transcript content with detected credentials masked and
+other text as recorded, so anything they return leaves the machine through the
+connected MCP client and reaches the model provider.
+.SH "SEE ALSO"
+skarn(1)
+.SH COPYRIGHT
+Copyright (c) 2026 Srdjan Markovic. All rights reserved. Skarn is proprietary
+software; see the LICENSE distributed with the binary and
+https://getskarn.com.

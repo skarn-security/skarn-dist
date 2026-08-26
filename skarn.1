@@ -1,4 +1,4 @@
-.TH "SKARN" "1" "2026-06-23" "skarn 0.24.0" "Skarn Manual"
+.TH "SKARN" "1" "2026-06-23" "skarn 0.25.0" "Skarn Manual"
 .SH NAME
 skarn \- AI coding session security scanner with built\-in session search
 .SH SYNOPSIS
@@ -6,6 +6,7 @@ skarn \- AI coding session security scanner with built\-in session search
 \fBskarn\fR \fBcheck\fR [options]
 \fBskarn\fR \fBassess\fR [options]
 \fBskarn\fR \fBvet\fR [options]
+\fBskarn\fR \fBmcp\fR
 \fBskarn\fR \fBbaseline\fR \fIaudit|accept\fR \fIfile\fR [<fingerprint>] [options]
 \fBskarn\fR \fBsearch\fR \fIquery\fR [options]
 \fBskarn\fR \fBrecent\fR [options]
@@ -31,8 +32,9 @@ skarn \fB\-\-help\fR
 Skarn is an AI coding session security scanner with built\-in session search.
 It detects leaked credentials and the attack patterns that cause or exploit
 them in the local session transcripts of AI coding assistants (Claude Code,
-Gemini CLI, Codex CLI, Cursor, and VS Code Copilot Chat), and it lets you
-search, browse, and analyze those sessions.
+Gemini CLI, Codex CLI, Cursor, VS Code Copilot Chat, Kimi Code CLI, Grok
+Build, Grok Bot, and Antigravity), and it lets you search, browse, and analyze
+those sessions.
 .PP
 Skarn is a single static binary. It scans locally and makes no network
 connection by default; the only features that transmit data off the machine
@@ -40,11 +42,13 @@ are opt\-in and named explicitly in the SECURITY section below.
 .PP
 Skarn has two faces over one parsing engine. The recall commands (search,
 recent, stats, and friends) are the daily\-use surface and never trigger a
-scan. The check command is the security scanner: it runs the detection rules,
-correlates attack chains, and computes a session risk score for CI/CD gating.
-Every finding is mapped to MITRE ATLAS, the OWASP Top 10 for LLM Applications
-2025, and CWE; run skarn taxonomies to print the crosswalk and the pinned
-framework versions.
+scan, with one exception: export redacts by default, which runs the detector
+over the sessions it emits to mask every secret, and \-\-no\-redact dumps raw
+content and skips that scan. The check command is the security scanner: it
+runs the detection rules, correlates attack chains, and computes a session
+risk score for CI/CD gating. Every finding is mapped to MITRE ATLAS, the OWASP
+Top 10 for LLM Applications 2025, and CWE; run skarn taxonomies to print the
+crosswalk and the pinned framework versions.
 .SH COMMANDS
 .TP
 \fBcheck\fR [options]
@@ -62,8 +66,12 @@ one.
 \fBvet\fR [options]
 Statically vet the local AI assistant configuration (hooks, MCP servers,
 permission grants, plugins and skills) for risky patterns across Claude Code,
-Codex CLI, Cursor, Copilot, Gemini CLI, and Microsoft Scout. Read\-only and
-offline; free, no license.
+Codex CLI, Cursor, Copilot, Gemini CLI, Grok Build, Grok Bot, and Microsoft
+Scout. Read\-only and offline; free, no license.
+.TP
+\fBmcp\fR
+Run a local stdio MCP server exposing read\-only, redacted scan,
+config\-vetting and session\-metadata tools to an AI coding assistant.
 .TP
 \fBbaseline\fR \fIaudit|accept\fR \fIfile\fR [<fingerprint>] [options]
 Interactively triage findings into a committed baseline (audit), or record a
@@ -162,8 +170,10 @@ Fetch and verify the latest feed from the subscriber channel, then scan.
 Requires a Team license.
 .TP
 \fB\-\-feed\-url\fR \fIurl\fR
-Feed channel URL for \-\-update\-rules; falls back to $SKARN_FEED_URL.
-Requires a Team license.
+Feed channel URL for \-\-update\-rules; falls back to $SKARN_FEED_URL. It must
+be https \- plain http is accepted only against loopback \- and must carry no
+userinfo, so a poisoned channel cannot receive the subscriber credential in
+cleartext. Requires a Team license.
 .TP
 \fB\-\-offline\fR
 Disable all network access (the maintained\-feed fetch).
@@ -186,8 +196,11 @@ Flag insecure code written by the assistant during the session.
 Scan window in hours; 0 means no time limit. The default is 720.
 .TP
 \fB\-\-cli\fR \fIname\fR
-Restrict the scan to one assistant's sessions. One of: claude, gemini, codex,
-cursor, copilot, kimi.
+Restrict the scan to one assistant's sessions. A name this machine has no tool
+for is refused with exit 6 rather than scanned as empty, so a typo cannot pass
+for a clean result. A custom tool declared in ~/.skarn.json is accepted by its
+configured name. One of: claude, gemini, codex, cursor, copilot, kimi, grok,
+grokbot, antigravity.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict the scan to matching projects: a comma\-separated list of names or
@@ -199,15 +212,24 @@ Scan a single session by id.
 .TP
 \fB\-\-format\fR \fIfmt\fR
 Output format. ndjson is an ECS\-shaped event stream (one redacted finding per
-line) for SIEM ingest. evidence is a redacted Markdown evidence pack for a
-product technical file, and is the one value that requires a Team license. One
-of: text, json, sarif, ndjson, evidence. The default is text.
+line) for SIEM ingest. sarif (partialFingerprints), ndjson
+(skarn.fingerprint), evidence, and the json cross\-session chains (fingerprint
+and exfilFingerprint) carry the finding fingerprint, a deterministic unkeyed
+two\-stage hash (the sha256 of the rule id, a NUL byte, and the lowercase hex
+sha256 of the ASCII\-lowercased secret), so a guessable secret is recoverable
+from it by candidate testing wherever that output travels. evidence is a
+redacted Markdown evidence pack for a product technical file, and is the one
+value that requires a Team license. One of: text, json, sarif, ndjson,
+evidence. The default is text.
 .TP
 \fB\-v\fR, \fB\-\-verbose\fR
 Verbose output.
 .TP
 \fB\-\-no\-redact\fR
-Show secrets in full instead of redacting them. Use with caution.
+Show secrets in full instead of redacting them, in the text, json and sarif
+reports only. Use with caution. The ndjson stream, the evidence pack, the
+artifacts written by \-\-drop, serve and assess, the baseline files, and the
+guard ignore this flag and stay redacted.
 .TP
 \fB\-\-no\-color\fR
 Disable colored output.
@@ -215,7 +237,9 @@ Disable colored output.
 \fB\-\-policy\fR \fIpath\fR
 Load a declarative TOML policy file (fail thresholds, required/forbidden
 rules, baseline enforcement, profile); the \-\-fail\-on\-* and \-\-profile
-flags override it. Requires a Team license.
+flags override it. A file that cannot be read or parsed exits 4 rather than
+falling back to the embedded default, which gates nothing: a gate you asked
+for and did not get must never pass silently. Requires a Team license.
 .TP
 \fB\-\-profile\fR \fIpreset\fR
 Output profile. enterprise keeps high\-confidence findings and dedups them.
@@ -230,20 +254,28 @@ Exit 2 if the session risk score exceeds this threshold.
 .TP
 \fB\-\-fail\-on\-scan\-error\fR
 Fail closed (exit 6) when the scan was incomplete: a tool source errored out
-of discovery, or a session's parse failed. Off by default (a partial scan
-still reports, with a stderr warning).
+of discovery, a session store that exists could not be read, a session's parse
+failed, the assistant compacted a session before the scan so its transcript no
+longer holds the whole conversation, or the scan read no sessions at all. Off
+by default (a partial scan still reports, and an empty scan still warns, with
+a stderr warning).
 .TP
 \fB\-\-baseline\fR \fIpath\fR
 Suppress findings recorded in this baseline; fail only on new findings. A
 single file is free; a directory unions every .json baseline inside it (an
-org\-shared accepted set) and requires a Team license. Without this flag,
+org\-shared accepted set) and requires a Team license. A fingerprint any
+member labelled a true positive is left out of that union, so a confirmed leak
+keeps failing the gate whatever another member labelled it. Without this flag,
 ~/.config/skarn/baseline.json is applied automatically when it exists
 (suppression only; \-\-baseline\-create and \-\-baseline\-merge targets stay
 explicit).
 .TP
 \fB\-\-baseline\-create\fR
 Write the current findings to the \-\-baseline file as the accepted set and
-exit.
+exit. Under \-\-fail\-on\-scan\-error an incomplete scan is refused instead:
+the run exits 6 and the existing file is left as it was, because an accepted
+set recorded from a scan that read only part of the machine would suppress
+findings that were never examined.
 .TP
 \fB\-\-baseline\-merge\fR \fIfile\fR
 Consolidate the \-\-baseline input (a file or a directory of per\-member
@@ -255,8 +287,12 @@ verdict; no secrets) to this local log; detects in\-place edits and reordering
 of recorded history. Requires a Team license.
 .TP
 \fB\-\-audit\-verify\fR \fIfile\fR
-Verify an audit log's hash chain and exit (no scan). Exits non\-zero if the
-chain is broken. Needs no license.
+Verify an audit log's hash chain and exit (no scan). A broken chain exits 1. A
+log that exists but could not be read \- a permission failure, a directory, a
+log past the read cap \- exits 6, because not one byte of it was examined and
+an unexamined log must never read as an intact one. An absent log is a valid
+empty chain and exits 0, so a verify that runs before the first scan does not
+fail. Needs no license.
 .TP
 \fB\-\-drop\fR \fIdir\fR
 After the scan, write a self\-describing drop artifact to
@@ -337,8 +373,11 @@ everything and curates the display. One of: low, medium, high, critical. The
 default is low.
 .TP
 \fB\-\-cli\fR \fIname\fR
-Restrict the scan to one assistant's sessions. One of: claude, gemini, codex,
-cursor, copilot, kimi.
+Restrict the scan to one assistant's sessions. A name this machine has no tool
+for is refused with exit 6 rather than scanned as empty, so a typo cannot pass
+for a clean result. A custom tool declared in ~/.skarn.json is accepted by its
+configured name. One of: claude, gemini, codex, cursor, copilot, kimi, grok,
+grokbot, antigravity.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict the scan to matching projects: a comma\-separated list of names or
@@ -370,17 +409,40 @@ reports or determine severity.
 .SS "Vet options"
 Statically vet this machine's AI assistant configuration \- hook commands, MCP
 server definitions, permission grants, and installed plugins and skills across
-Claude Code, Codex CLI, Cursor, Copilot, Gemini CLI, and Microsoft Scout \-
-and report the risky patterns it finds: hooks that exfiltrate local content or
-fetch\-and\-execute remote code, hooks that rewrite an assistant's own config,
-MCP endpoints on remote hosts, MCP launchers with no pinned version or digest,
-permission grants that approve a whole class of actions, grants that let the
-assistant ask to widen its own authority, and extensions installed from a
-remote source or carrying no integrity marker. Vet is read\-only and offline:
-it opens each config file for reading, never writes one, and makes no network
+Claude Code, Codex CLI, Cursor, Copilot, Gemini CLI, Grok Build, Grok Bot, and
+Microsoft Scout \- and report the risky patterns it finds: hooks that
+exfiltrate local content or fetch\-and\-execute remote code, hooks that post
+the session event envelope to a remote http endpoint, hooks that rewrite an
+assistant's own config, MCP endpoints on remote hosts, MCP launchers with no
+pinned version or digest, permission grants that approve a whole class of
+actions, grants that let the assistant ask to widen its own authority, and
+extensions installed from a remote source or carrying no integrity marker,
+plus two file\-level patterns read from permission metadata and declared
+posture flags alone: a plaintext credential store whose file mode grants group
+or other read, and an assistant configured with an always\-on local\-exec and
+egress channel. Vet reports declared configuration, not the effective merge
+across layers: a grant a higher layer denies, or a permission mode an
+administrator lock disables, is still surfaced, because the declaration exists
+and is one edit away from active. Project configuration is read at the
+cwd\-level file only, so a host that also loads configuration from parent
+directories is covered there and no further. Vet is read\-only and offline: it
+opens each config file for reading, never writes one, and makes no network
 call. A config file that does not exist is skipped; a config file that exists
 but cannot be read is a coverage gap that fails closed under a \-\-fail\-on
-flag. Vet surfaces risky configuration and does not change it.
+flag. Each of the per\-assistant configuration files listed below is opened
+once and its permission metadata is read off that same handle, and a path that
+is not a regular file is named as a coverage gap rather than read. The
+config\-file count the report prints, and the configFilesRead field in the
+json and sarif output, count every such file vet opened and examined,
+including the two whose contents it deliberately never reads, so a file a
+finding names is always inside the count rather than absent from it. The hook
+directories and extension manifests vet also walks keep their own older read
+path. The one file whose permission metadata decides a finding, Grok Bot's
+credential store, is additionally opened without following a symlink, so a
+symlinked store is reported as a coverage gap named SymlinkNotFollowed rather
+than measured through its target; every other config file is still read
+through a symlink, so a dotfiles\-managed configuration keeps its coverage.
+Vet surfaces risky configuration and does not change it.
 .TP
 \fB\-\-format\fR \fIfmt\fR
 Output format. json and sarif carry the same rule ids, severities, config
@@ -392,10 +454,11 @@ Exit 1 if any finding is at or above this severity. Without it, vet always
 exits 0: it surfaces, it does not gate. One of: low, medium, high, critical.
 .TP
 \fB\-\-fail\-on\-scan\-error\fR
-Fail closed (exit 6) when a config file that exists could not be read, so a
-partial view of the configuration is never reported as clean. Implied by
-\-\-fail\-on\-severity. A home directory that cannot be resolved at all exits
-6 regardless of this flag, since nothing was examined.
+Fail closed (exit 6) when a config file that exists was not read \- it could
+not be read, or it was skipped because it is not that assistant's live
+configuration \- so a partial view of the configuration is never reported as
+clean. Implied by \-\-fail\-on\-severity. A home directory that cannot be
+resolved at all exits 6 regardless of this flag, since nothing was examined.
 .TP
 \fB\-\-offline\fR
 Disable all network access. Vet never makes a network call; this is the
@@ -403,21 +466,76 @@ belt\-and\-suspenders guarantee.
 .TP
 \fB\-\-no\-color\fR
 Disable colored output.
+.SS "Mcp options"
+Run a local Model Context Protocol (MCP) server so an AI coding assistant can
+call Skarn directly. The transport is stdio: newline\-delimited JSON\-RPC 2.0
+on stdin and stdout, one server process per client, and the process exits 0
+when the client closes stdin. The negotiated protocol version is 2025\-11\-25;
+a client that asks for 2025\-06\-18 gets that version back, and any other
+request, including the batch\-era 2025\-03\-26 and the stateless 2026\-07\-28,
+is answered with 2025\-11\-25. Batched requests are not accepted: a top\-level
+JSON array is answered with one \-32600 error. Four read\-only tools are
+exposed by default, and \-\-enable\-recall adds search_sessions and
+get_session, which return transcript text and are described under that option.
+scan_sessions returns the same redacted scan report that `skarn assess
+\-\-json` prints, minus the per\-incident context snippet and minus every
+transcript\-authored label, which means the project labels on both the
+incidents and the attack chains and the tool name on an incident, and takes
+severity, hours and project. vet_configs returns the masked findings report
+that `skarn vet \-\-format json` prints and takes no arguments; those findings
+quote this machine's own configuration, including hook command lines and MCP
+server definitions, with any credential\-shaped value masked. list_sessions
+returns recent sessions as identifiers and counts only \- session id,
+assistant, the two timestamps, message and tool counts, and token totals \-
+and takes hours, limit, project and cli. session_stats returns the same
+aggregate counts across those sessions and takes hours, project and cli. Every
+tool is annotated read\-only, non\-destructive and closed\-world. No tool
+writes, changes or removes a file, no tool opens a network connection, and no
+default tool returns session message text or a label authored inside a
+transcript such as a project name, a git branch, a model id or a tool name.
+Every value a detector matched is reported only in its masked form, which
+keeps at most the first character and last two characters and discards the
+middle; a value under 16 characters, and any personal data, is replaced whole.
+That is a truncated preview rather than a one\-way transform of the whole
+value. Three classes of string are still passed through as they are: a file
+path, a session id, and a timestamp. Each is a locator the tools exist to hand
+back, and each is read from the transcript or the store rather than generated
+by Skarn, so a credential deliberately planted in a session id or a directory
+name reaches the client verbatim. A Claude Code store also encodes the project
+directory into its transcript file name, so the returned session_file carries
+that directory in encoded form. Every other Skarn surface passes those three
+through the same way. Tool results are returned to the MCP client that spawned
+the server, which is the assistant, so they travel wherever that assistant
+sends its context. The verb needs no license. Project\-level configuration for
+vet_configs is read from the server process's working directory, which is
+whatever directory the client spawned it in.
+.TP
+\fB\-\-enable\-recall\fR
+Add the content tools search_sessions and get_session to the server. Off by
+default. They return transcript content with detected credentials masked and
+other text as recorded, so anything they return leaves the machine through the
+connected MCP client and reaches the model provider.
 .SS "Baseline options"
 Interactive baseline triage. audit walks each new finding and records a
 true/false\-positive decision with a reason into the committed baseline;
-accept records a single false\-positive fingerprint non\-interactively. The
-audit scan is scoped by the same filters as check. A false positive is
-suppressed on every later scan, while a finding labeled a true positive is
-recorded and keeps firing until the credential is rotated \- the same labels
-the real\-time guard honors. A finding that carries a secret is fingerprinted
-by that secret, so its acceptance follows the secret across sessions and
-machines; a finding with no secret (a behavioral finding such as prompt
-poisoning) is fingerprinted by the session it fired in, so accepting it
-silences that rule in that session only and the same rule in any other session
-keeps firing. To accept a finding the guard flagged, use `skarn guard accept
-<fingerprint>`: it takes the fingerprint straight from the guard's audit
-record and defaults to the personal baseline the guard reads.
+accept records a single false\-positive fingerprint non\-interactively. audit
+runs the same scan check runs and requires a license the same way: any tier,
+the free one included, and it refuses with exit 7 before any scan when none is
+usable; accept scans nothing and needs no license. The audit scan is scoped by
+the same filters as check. A false positive is suppressed on every later scan,
+while a finding labeled a true positive is recorded and keeps firing until the
+credential is rotated \- the same labels the real\-time guard honors. A true
+positive wins over a false positive on the same fingerprint wherever the two
+meet, in one file or across the member files of an org baseline directory, so
+one member cannot silence a leak another member confirmed. A finding that
+carries a secret is fingerprinted by that secret, so its acceptance follows
+the secret across sessions and machines; a finding with no secret (a
+behavioral finding such as prompt poisoning) is fingerprinted by the session
+it fired in, so accepting it silences that rule in that session only and the
+same rule in any other session keeps firing. To accept a finding the guard
+flagged, use `skarn guard accept <fingerprint>`: it takes the fingerprint
+straight from the guard's audit record and defaults to the personal baseline
+the guard reads.
 .TP
 \fB\-\-reason\fR \fItext\fR
 Reason recorded with an accepted finding (audit prompts for one; accept takes
@@ -429,7 +547,7 @@ $SKARN_IDENTITY.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict the audit scan to one assistant's sessions. One of: claude, gemini,
-codex, cursor, copilot, kimi.
+codex, cursor, copilot, kimi, grok, grokbot, antigravity.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict the audit scan to matching projects: a comma\-separated list of names
@@ -451,33 +569,34 @@ Only audit findings at or above this severity. One of: low, medium, high,
 critical. The default is medium.
 .SS "Guard options"
 Control the real\-time pre\-execution hook used for editor/agent integration
-(Claude Code, Cursor, Codex CLI, Copilot CLI, and Gemini CLI). The report
-subverb reads the guard's own audit log instead of an event: it summarizes the
-flagged calls per agent (verdicts, top rules, latency, the most recent
-denies), states what enforcing that window would have cost (blocks per day,
-prompts per day), and, when the window spans at least five days with zero
-denies, prints the exact command that flips the wired hooks to enforce. Run at
-a terminal it reads one thing more, your own per\-user hook configs, so it can
-name a hook that has fallen behind this build once per release; piped or as
-json it reads nothing but the log. The guard logs only flagged calls, so every
-count and every rate report prints is over flagged actions, never over all
-traffic. The accept subverb closes that loop: an audit record whose top
-finding carries a secret gets a fingerprint (the same secret\-scoped key check
-writes to SARIF partialFingerprints), report prints it under each such deny,
-and `skarn guard accept <fingerprint>` records it as a false positive so the
-identical call stops being flagged; a secret\-less deny (a structural egress
-detector, a typosquat, a chain) carries no fingerprint and no accept line. The
-structural egress detectors are built into the engine, not rule\-pack rules,
-and tier themselves: an egress whose whole payload is visible in the command
-itself \- a bare request, a literal body, query parameters, with no file sent,
-no credential store named, no earlier secret read in the same call, and no
-payload bytes the command text does not show (a command substitution, an
-environment expansion, a shell redirect, a form read, or a pipe feeding the
-target all keep the deny) \- is held at the ask tier \- a real approval prompt
-on the primary shell surfaces (Claude Code PreToolUse, Copilot preToolUse on
-both the CLI and VS Code, Cursor shell and MCP hooks), a block on the channels
-with no ask (Codex, Claude Code PermissionRequest, Copilot permissionRequest,
-Cursor file\-read events, Gemini) \- while a payload carrying a recognized
+(Claude Code, Cursor, Codex CLI, Copilot CLI, Gemini CLI, Grok Build, and the
+Antigravity CLI). The report subverb reads the guard's own audit log instead
+of an event: it summarizes the flagged calls per agent (verdicts, top rules,
+latency, the most recent denies), states what enforcing that window would have
+cost (blocks per day, prompts per day), and, when the window spans at least
+five days with zero denies, prints the exact command that flips the wired
+hooks to enforce. Run at a terminal it reads one thing more, your own
+per\-user hook configs, so it can name a hook that has fallen behind this
+build once per release; piped or as json it reads nothing but the log. The
+guard logs only flagged calls, so every count and every rate report prints is
+over flagged actions, never over all traffic. The accept subverb closes that
+loop: an audit record whose top finding carries a secret gets a fingerprint
+(the same secret\-scoped key check writes to SARIF partialFingerprints),
+report prints it under each such deny, and `skarn guard accept <fingerprint>`
+records it as a false positive so the identical call stops being flagged; a
+secret\-less deny (a structural egress detector, a typosquat, a chain) carries
+no fingerprint and no accept line. The structural egress detectors are built
+into the engine, not rule\-pack rules, and tier themselves: an egress whose
+whole payload is visible in the command itself \- a bare request, a literal
+body, query parameters, with no file sent, no credential store named, no
+earlier secret read in the same call, and no payload bytes the command text
+does not show (a command substitution, an environment expansion, a shell
+redirect, a form read, or a pipe feeding the target all keep the deny) \- is
+held at the ask tier \- a real approval prompt on the primary shell surfaces
+(Claude Code PreToolUse, Copilot preToolUse on both the CLI and VS Code,
+Cursor shell and MCP hooks), a block on the channels with no ask (Codex,
+Claude Code PermissionRequest, Copilot permissionRequest, Cursor file\-read
+events, Gemini, Grok Build) \- while a payload carrying a recognized
 credential file or upload form, a co\-detected secret, or recon earlier in the
 same call stays a deny. Both subverbs are ungated: report reads the log (plus,
 at a terminal, your own hook configs for the line above), and accept writes
@@ -506,12 +625,18 @@ Also gate Read operations (credential\-file reconnaissance).
 Hook host (default: auto\-detect from the event shape; pass codex explicitly
 for Codex CLI, which shares Claude's event names, and copilot explicitly for
 Copilot CLI, whose Claude\-compat payloads are indistinguishable from
-Claude's; Gemini CLI's Before*/After* event names are unique, so it
-auto\-detects, and the shipped configs pin it anyway). With \-\-self\-test,
-all (the default) tests the claude, cursor, codex, copilot, and gemini
-adapters, copilot on both its CLI and VS Code dialects. With report, it
-restricts the summary to one agent (repeatable or comma\-separated). One of:
-claude, cursor, codex, copilot, gemini, all.
+Claude's; Gemini CLI's Before*/After* event names are unique, Grok Build's
+camelCase hookEventName key is unique to it, and the Antigravity CLI's
+camelCase toolCall/conversationId/workspacePaths envelope is unique to it, so
+all three auto\-detect, and the shipped configs pin them anyway). Grok is the
+one host that overrides an explicit pin: an event delivered by grok's own hook
+runner is scanned by the grok adapter even where the invoking config pins
+another host, because grok runs Claude\-config and Cursor\-config hooks with
+its own payload dialect. With \-\-self\-test, all (the default) tests the
+claude, cursor, codex, copilot, gemini, grok, and antigravity adapters,
+copilot on both its CLI and VS Code dialects. With report, it restricts the
+summary to one agent (repeatable or comma\-separated). One of: claude, cursor,
+codex, copilot, gemini, grok, antigravity, all.
 .TP
 \fB\-\-event\fR \fIname\fR
 The hook event this config entry fires on, for a host whose payload does not
@@ -577,28 +702,37 @@ With accept: override the accepted\-by identity stamped on the entry; defaults
 to $SKARN_IDENTITY.
 .SS "Setup options"
 Guided onboarding: detect installed AI coding agents (Claude Code, Cursor,
-Codex CLI, Copilot CLI, Gemini CLI), merge the skarn guard hook into each
-one's native config in audit mode, and prove the wiring with the guard
-self\-test. \-\-scope project writes committed, shareable configs whose
+Codex CLI, Copilot CLI, Gemini CLI, Grok Build), merge the skarn guard hook
+into each one's native config in audit mode, and prove the wiring with the
+guard self\-test. \-\-scope project writes committed, shareable configs whose
 commands are portable by construction (a PATH\-guarded invocation and a
 literal $HOME log path, never this machine's absolute paths) \- with one
-honest exception: Gemini CLI has a single cross\-platform command field, so a
-file committed from a POSIX machine carries the POSIX form and a
-native\-Windows teammate's hook fails open with a warning instead of running;
+honest exception: Gemini CLI and Grok Build each read a single cross\-platform
+command field, so a file committed from a POSIX machine carries the POSIX form
+and a native\-Windows teammate's hook fails open with a warning instead of
+running, and grok's project hooks additionally wait on a /hooks\-trust grant;
 \-\-plugin commits the claude plugin requirement instead of hook entries, and
 the two project routes are mutually exclusive \- each removes the other's
 skarn\-owned entries so the guard can never fire twice. Existing foreign hooks
 are never touched; every modified file is backed up first
-(*.skarn\-bak.<timestamp>) and rewritten atomically; a target file that does
-not parse as JSON is refused, never overwritten. On a terminal it runs an
-interactive wizard with default\-yes prompts; \-\-yes accepts everything,
-\-\-print writes nothing.
+(*.skarn\-bak.<timestamp>, carrying the target's own permissions) and
+rewritten atomically; a target file that does not parse as JSON is refused,
+never overwritten. At \-\-scope project a target that is a symlink, that sits
+behind a symlinked directory, or whose path skarn cannot examine at all, is
+refused too, before anything is read or created: a committed symlink can name
+any file on the machine, and following it would copy that file's bytes into a
+backup beside it and rewrite it in place. User scope still follows the link,
+because a dotfiles manager legitimately puts one there \- and the atomic
+rewrite then leaves a regular file where the link was, so a stow\-managed
+config has to be relinked afterwards. On a terminal it runs an interactive
+wizard with default\-yes prompts; \-\-yes accepts everything, \-\-print writes
+nothing.
 .TP
 \fB\-\-agent\fR \fIname\fR
 Target agents, repeatable or comma\-separated. Default: all detected (an agent
 is detected when its config directory exists or its CLI is on PATH); naming an
 agent explicitly also targets it when undetected. One of: claude, cursor,
-codex, copilot, gemini, all.
+codex, copilot, gemini, grok, all.
 .TP
 \fB\-\-mode\fR \fImode\fR
 Guard mode written into the hook commands. Audit records would\-be verdicts to
@@ -639,20 +773,24 @@ skarn from PATH on every machine. The default is this binary's absolute path.
 .TP
 \fB\-\-scope\fR \fIscope\fR
 Write user\-level configs (~/.claude/settings.json, ~/.cursor/hooks.json,
-~/.codex/hooks.json, ~/.copilot/hooks/skarn.json, ~/.gemini/settings.json) or
-project\-level ones (./.claude, ./.cursor, ./.codex,
-\&./.github/hooks/skarn.json, ./.gemini relative to the working directory),
-meant to be committed and shared. The two scopes deliberately write different
-command shapes: user scope bakes this binary's absolute path (immune to a GUI
-host's missing PATH), project scope emits a portable PATH\-guarded command (if
-command \-v skarn ...; then ...; else exit 0; fi) with a literal $HOME log
-path, so the committed file runs unmodified on every teammate's machine and
-exits 0 where skarn is not installed. Gemini is the one exception to that
-promise: it reads a single command field on every platform, so the committed
-POSIX form does not run under the PowerShell a native\-Windows teammate's
-Gemini uses \- the hook exits non\-zero, Gemini treats that as a warning and
-continues, and that machine is unprotected until it wires its own. Copilot
-honors $COPILOT_HOME as its user\-scope root. One of: user, project. The
+~/.codex/hooks.json, ~/.copilot/hooks/skarn.json, ~/.gemini/settings.json,
+~/.grok/hooks/skarn.json) or project\-level ones (./.claude, ./.cursor,
+\&./.codex, ./.github/hooks/skarn.json, ./.gemini, ./.grok/hooks/skarn.json
+relative to the working directory), meant to be committed and shared. The two
+scopes deliberately write different command shapes: user scope bakes this
+binary's absolute path (immune to a GUI host's missing PATH), project scope
+emits a portable PATH\-guarded command (if command \-v skarn ...; then ...;
+else exit 0; fi) with a literal $HOME log path, so the committed file runs
+unmodified on every teammate's machine and exits 0 where skarn is not
+installed. Gemini is the one exception to that promise: it reads a single
+command field on every platform, so the committed POSIX form does not run
+under the PowerShell a native\-Windows teammate's Gemini uses \- the hook
+exits non\-zero, Gemini treats that as a warning and continues, and that
+machine is unprotected until it wires its own. Grok reads one command field on
+every platform too, and the same caveat applies to a committed
+\&.grok/hooks/skarn.json; its project hooks additionally run only once the
+folder is trusted with /hooks\-trust. Copilot honors $COPILOT_HOME as its
+user\-scope root, and grok honors $GROK_HOME. One of: user, project. The
 default is user.
 .TP
 \fB\-\-plugin\fR
@@ -777,16 +915,31 @@ executable (the managed config alone deploys nothing \- the binary must ride
 the same MDM payload), when a declared event is not gated, or when a hook
 disagrees with the declared mode; every branch is a WARN with an exact fix,
 never a FAIL, because a policy divergence is a fleet fact, not a broken
-install. Check ids (binary, license, eula, agent_config_<agent>,
-guard_command_<agent>, guard_scope_<agent>, config_drift_<agent>,
-guard_log_<agent>, self_test_<agent>, guard_conformance_<agent>,
-session_stores, cache_dir, rule_age) are a stable, greppable contract for
-fleet scripts. A failure exits 1; a warning never does; \-\-json is a data
-mode and always exits 0. Doctor is hermetic: it makes no network call, shells
-out to nothing, and enumerates the session stores without reading a session's
-content. Set SKARN_MANAGED_ROOT to validate a staged managed payload before
-pushing it; the active root is echoed in the report header and in \-\-json, so
-a staged report can never pass as a live one.
+install. The grokbot check appears only on a machine where Grok Bot is
+installed \- xAI's always\-on desktop agents app, a different product from the
+Grok Build CLI \- and it is a warning that carries no fix, because no skarn
+command changes what it reports: skarn states this posture and leaves what to
+do about it to you. When the daemon\-connection state is present the warning
+names the always\-on local\-exec daemon that lets a cloud agent execute here,
+and its egress tunnel when that is on; when only the app root is found it
+reports plain presence and claims no channel. Detecting it is stat\-only over
+~/.grokbot/ and the macOS app root; the one file skarn opens there is
+~/.grokbot/settings.json, for its two posture flags, and it is read only once
+skarn has proved that path is that file and nothing else \- not a link, not a
+hard link to a credential file, not a pipe \- so no daemon or OAuth credential
+value can reach the report. Check ids (binary, license, eula,
+agent_config_<agent>, guard_command_<agent>, guard_scope_<agent>,
+config_drift_<agent>, guard_log_<agent>, self_test_<agent>,
+guard_conformance_<agent>, grokbot, session_stores, cache_dir, rule_age) are a
+stable, greppable contract for fleet scripts. A failure exits 1; a warning
+never does; \-\-json is a data mode that always exits 0 once a report is
+rendered, with the two refusals that precede any check: an unknown option
+exits 1, and a home directory that cannot be resolved exits 6. Doctor is
+hermetic: it makes no network call, shells out to nothing, and enumerates the
+session stores without reading a session's content. Set SKARN_MANAGED_ROOT to
+validate a staged managed payload before pushing it; the active root is echoed
+in the report header and in \-\-json, so a staged report can never pass as a
+live one.
 .TP
 \fB\-v\fR, \fB\-\-verbose\fR
 Add detail to every check: the paths searched, each wired hook command, the
@@ -798,7 +951,9 @@ notes}], summary{pass, warn, fail}}, plus managed_root at the top level when
 SKARN_MANAGED_ROOT is active, managed_registry_root when
 SKARN_MANAGED_REGISTRY_ROOT is active, and an additive layers array ([{layer,
 path, effect, lockdown, wired}]) on each agent config check, where a Windows
-registry layer carries its policy key as the path. Always exits 0.
+registry layer carries its policy key as the path. A rendered report always
+exits 0; the two refusals that precede it are an unknown option (exit 1) and a
+home directory that cannot be resolved (exit 6).
 .SS "Serve options"
 Control the localhost web UI. Access requires the per\-run token embedded in
 the URL the command prints at startup; opening that URL sets a session cookie,
@@ -836,22 +991,25 @@ roster, the aggregate also carries the coverage that roster implies, and the
 view states how many of the expected machines reported and names the ones that
 did not; assembled without a roster it carries none, because a machine that
 never reported is invisible to anything reading only the artifacts that
-arrived. Serve validates the file against the current aggregate contract
-before it binds a port: a file that declares a schemaVersion is refused with
-exit 1 when a machine's topExposure names a project absent from the projects
-that machine resolved, when a machine carries projects while declaring no
-scope, or when a topExposure secret is not a redaction\-chokepoint preview.
-Every refusal names the offending machine, and the two scope refusals name the
-project as well, so a rejected aggregate is a deliberate refusal rather than a
-crash. A file that declares no schemaVersion at all is refused the same way,
-naming the aggregator version to regenerate it with: no invariant can be
-evaluated on a file that does not say what it is, and serving one would put
-whatever it happens to carry, redacted or not, into the Fleet view. The kit
-that produces the aggregate \- the aggregator, the per\-platform scheduling
-units, the managed guard configs, and the rollout runbooks \- is published at
-integrations/fleet/ in https://github.com/skarn\-security/skarn\-dist, where
-it downloads with no credential and no license; only rendering the assembled
-aggregate here needs one. Requires an Enterprise license.
+arrived. Rendering an aggregate needs the Enterprise console entitlement:
+without it, serve refuses with exit 5 before it binds a port and before it
+reads the file. With it, serve validates the file against the current
+aggregate contract before it binds a port: a file that declares a
+schemaVersion is refused with exit 1 when a machine's topExposure names a
+project absent from the projects that machine resolved, when a machine carries
+projects while declaring no scope, or when a topExposure secret is not a
+redaction\-chokepoint preview. Every refusal names the offending machine, and
+the two scope refusals name the project as well, so a rejected aggregate is a
+deliberate refusal rather than a crash. A file that declares no schemaVersion
+at all is refused the same way, naming the aggregator version to regenerate it
+with: no invariant can be evaluated on a file that does not say what it is,
+and serving one would put whatever it happens to carry, redacted or not, into
+the Fleet view. The kit that produces the aggregate \- the aggregator, the
+per\-platform scheduling units, the managed guard configs, and the rollout
+runbooks \- is published at integrations/fleet/ in
+https://github.com/skarn\-security/skarn\-dist, where it downloads with no
+credential and no license; only rendering the assembled aggregate here needs
+one. Requires an Enterprise license.
 .SS "Global options"
 Available on a bare invocation.
 .TP
@@ -865,7 +1023,7 @@ List and filter recent sessions.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot, kimi.
+copilot, kimi, grok, grokbot, antigravity.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths, each
@@ -876,10 +1034,29 @@ canonical root path, or a parent directory of that root.
 Restrict to sessions whose working directory is under this path.
 .TP
 \fB\-\-since\fR \fIdate\fR
-Lower bound of the time window; takes priority over \-\-hours.
+Lower bound of the time window, applied to a session file's last\-modified
+time rather than to when the session started: a session begun before the bound
+but written to inside it is included, which keeps a resumed session visible
+under the day you worked on it. Takes priority over \-\-hours. Naming one
+session by id changes this: `skarn search \-\-session <id>`, `skarn stats
+<id>` and the other per\-session views ignore the window altogether, and
+`skarn messages <id>` is the single command that applies it there, reading
+BOTH bounds against the session's own start time rather than its file and
+refusing an out\-of\-window session with exit 1 instead of filtering it out. A
+bare YYYY\-MM\-DD means that day's midnight, shifted by \-\-tz\-offset; a full
+ISO timestamp is used as given.
 .TP
 \fB\-\-until\fR \fIdate\fR
-Upper bound of the time window.
+Upper bound of the time window, applied to when a session STARTED rather than
+to when its file was last written: a session that began after the bound is
+excluded even if it was already running before it. The two bounds therefore
+read different timestamps. Passing it without \-\-since also drops the
+\-\-hours lower bound, so the window becomes all history up to the bound. A
+bare YYYY\-MM\-DD covers that whole day through 23:59:59, shifted by
+\-\-tz\-offset; a full ISO timestamp is used as given. A session whose start
+time cannot be parsed is kept. A view that names one session by id ignores
+this bound, except `skarn messages <id>`, which refuses a session past it with
+exit 1 rather than dropping it from a list.
 .TP
 \fB\-\-tz\-offset\fR \fIminutes\fR
 Timezone offset in minutes for date grouping and display. The default is 0.
@@ -898,7 +1075,7 @@ the other flags only narrow which session a prefix resolves to.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot, kimi.
+copilot, kimi, grok, grokbot, antigravity.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths, each
@@ -909,10 +1086,29 @@ canonical root path, or a parent directory of that root.
 Restrict to sessions whose working directory is under this path.
 .TP
 \fB\-\-since\fR \fIdate\fR
-Lower bound of the time window; takes priority over \-\-hours.
+Lower bound of the time window, applied to a session file's last\-modified
+time rather than to when the session started: a session begun before the bound
+but written to inside it is included, which keeps a resumed session visible
+under the day you worked on it. Takes priority over \-\-hours. Naming one
+session by id changes this: `skarn search \-\-session <id>`, `skarn stats
+<id>` and the other per\-session views ignore the window altogether, and
+`skarn messages <id>` is the single command that applies it there, reading
+BOTH bounds against the session's own start time rather than its file and
+refusing an out\-of\-window session with exit 1 instead of filtering it out. A
+bare YYYY\-MM\-DD means that day's midnight, shifted by \-\-tz\-offset; a full
+ISO timestamp is used as given.
 .TP
 \fB\-\-until\fR \fIdate\fR
-Upper bound of the time window.
+Upper bound of the time window, applied to when a session STARTED rather than
+to when its file was last written: a session that began after the bound is
+excluded even if it was already running before it. The two bounds therefore
+read different timestamps. Passing it without \-\-since also drops the
+\-\-hours lower bound, so the window becomes all history up to the bound. A
+bare YYYY\-MM\-DD covers that whole day through 23:59:59, shifted by
+\-\-tz\-offset; a full ISO timestamp is used as given. A session whose start
+time cannot be parsed is kept. A view that names one session by id ignores
+this bound, except `skarn messages <id>`, which refuses a session past it with
+exit 1 rather than dropping it from a list.
 .TP
 \fB\-\-tz\-offset\fR \fIminutes\fR
 Timezone offset in minutes for date grouping and display. The default is 0.
@@ -935,7 +1131,7 @@ Search past sessions. The query is positional and flag order is free.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot, kimi.
+copilot, kimi, grok, grokbot, antigravity.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths, each
@@ -946,10 +1142,29 @@ canonical root path, or a parent directory of that root.
 Restrict to sessions whose working directory is under this path.
 .TP
 \fB\-\-since\fR \fIdate\fR
-Lower bound of the time window; takes priority over \-\-hours.
+Lower bound of the time window, applied to a session file's last\-modified
+time rather than to when the session started: a session begun before the bound
+but written to inside it is included, which keeps a resumed session visible
+under the day you worked on it. Takes priority over \-\-hours. Naming one
+session by id changes this: `skarn search \-\-session <id>`, `skarn stats
+<id>` and the other per\-session views ignore the window altogether, and
+`skarn messages <id>` is the single command that applies it there, reading
+BOTH bounds against the session's own start time rather than its file and
+refusing an out\-of\-window session with exit 1 instead of filtering it out. A
+bare YYYY\-MM\-DD means that day's midnight, shifted by \-\-tz\-offset; a full
+ISO timestamp is used as given.
 .TP
 \fB\-\-until\fR \fIdate\fR
-Upper bound of the time window.
+Upper bound of the time window, applied to when a session STARTED rather than
+to when its file was last written: a session that began after the bound is
+excluded even if it was already running before it. The two bounds therefore
+read different timestamps. Passing it without \-\-since also drops the
+\-\-hours lower bound, so the window becomes all history up to the bound. A
+bare YYYY\-MM\-DD covers that whole day through 23:59:59, shifted by
+\-\-tz\-offset; a full ISO timestamp is used as given. A session whose start
+time cannot be parsed is kept. A view that names one session by id ignores
+this bound, except `skarn messages <id>`, which refuses a session past it with
+exit 1 rather than dropping it from a list.
 .TP
 \fB\-\-tz\-offset\fR \fIminutes\fR
 Timezone offset in minutes for date grouping and display. The default is 0.
@@ -1005,10 +1220,22 @@ Session id to operate on (prefix\-matched); equivalent to the positional
 argument.
 .SS "Stats options"
 Session analytics. A positional session id switches to a per\-session view.
+Under \-\-show timing the active\-time number answers to three different key
+names depending on the output shape, and a reader that asks for the wrong one
+gets null rather than an error: a by\-date or by\-project row calls it
+active_secs, the ungrouped totals and a per\-session view call it
+active_time_secs, and a by\-date row carries a second number the other shapes
+do not, active_wall_secs. The two by\-date numbers count differently.
+active_secs adds each session's own active time to the first day that session
+touched inside the window, so two sessions you ran side by side both count in
+full and a day can total more than the clock allows. active_wall_secs merges
+the same active intervals per calendar day, so overlapping sessions count
+once, which is the number to bill from. A per\-session view lists its pauses
+under idle_gaps, keyed gap_secs and after_message.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot, kimi.
+copilot, kimi, grok, grokbot, antigravity.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths, each
@@ -1019,10 +1246,29 @@ canonical root path, or a parent directory of that root.
 Restrict to sessions whose working directory is under this path.
 .TP
 \fB\-\-since\fR \fIdate\fR
-Lower bound of the time window; takes priority over \-\-hours.
+Lower bound of the time window, applied to a session file's last\-modified
+time rather than to when the session started: a session begun before the bound
+but written to inside it is included, which keeps a resumed session visible
+under the day you worked on it. Takes priority over \-\-hours. Naming one
+session by id changes this: `skarn search \-\-session <id>`, `skarn stats
+<id>` and the other per\-session views ignore the window altogether, and
+`skarn messages <id>` is the single command that applies it there, reading
+BOTH bounds against the session's own start time rather than its file and
+refusing an out\-of\-window session with exit 1 instead of filtering it out. A
+bare YYYY\-MM\-DD means that day's midnight, shifted by \-\-tz\-offset; a full
+ISO timestamp is used as given.
 .TP
 \fB\-\-until\fR \fIdate\fR
-Upper bound of the time window.
+Upper bound of the time window, applied to when a session STARTED rather than
+to when its file was last written: a session that began after the bound is
+excluded even if it was already running before it. The two bounds therefore
+read different timestamps. Passing it without \-\-since also drops the
+\-\-hours lower bound, so the window becomes all history up to the bound. A
+bare YYYY\-MM\-DD covers that whole day through 23:59:59, shifted by
+\-\-tz\-offset; a full ISO timestamp is used as given. A session whose start
+time cannot be parsed is kept. A view that names one session by id ignores
+this bound, except `skarn messages <id>`, which refuses a session past it with
+exit 1 rather than dropping it from a list.
 .TP
 \fB\-\-tz\-offset\fR \fIminutes\fR
 Timezone offset in minutes for date grouping and display. The default is 0.
@@ -1055,7 +1301,7 @@ Export session data.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot, kimi.
+copilot, kimi, grok, grokbot, antigravity.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths, each
@@ -1066,10 +1312,29 @@ canonical root path, or a parent directory of that root.
 Restrict to sessions whose working directory is under this path.
 .TP
 \fB\-\-since\fR \fIdate\fR
-Lower bound of the time window; takes priority over \-\-hours.
+Lower bound of the time window, applied to a session file's last\-modified
+time rather than to when the session started: a session begun before the bound
+but written to inside it is included, which keeps a resumed session visible
+under the day you worked on it. Takes priority over \-\-hours. Naming one
+session by id changes this: `skarn search \-\-session <id>`, `skarn stats
+<id>` and the other per\-session views ignore the window altogether, and
+`skarn messages <id>` is the single command that applies it there, reading
+BOTH bounds against the session's own start time rather than its file and
+refusing an out\-of\-window session with exit 1 instead of filtering it out. A
+bare YYYY\-MM\-DD means that day's midnight, shifted by \-\-tz\-offset; a full
+ISO timestamp is used as given.
 .TP
 \fB\-\-until\fR \fIdate\fR
-Upper bound of the time window.
+Upper bound of the time window, applied to when a session STARTED rather than
+to when its file was last written: a session that began after the bound is
+excluded even if it was already running before it. The two bounds therefore
+read different timestamps. Passing it without \-\-since also drops the
+\-\-hours lower bound, so the window becomes all history up to the bound. A
+bare YYYY\-MM\-DD covers that whole day through 23:59:59, shifted by
+\-\-tz\-offset; a full ISO timestamp is used as given. A session whose start
+time cannot be parsed is kept. A view that names one session by id ignores
+this bound, except `skarn messages <id>`, which refuses a session past it with
+exit 1 rather than dropping it from a list.
 .TP
 \fB\-\-tz\-offset\fR \fIminutes\fR
 Timezone offset in minutes for date grouping and display. The default is 0.
@@ -1099,7 +1364,7 @@ Shell commands run across sessions.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot, kimi.
+copilot, kimi, grok, grokbot, antigravity.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths, each
@@ -1110,10 +1375,29 @@ canonical root path, or a parent directory of that root.
 Restrict to sessions whose working directory is under this path.
 .TP
 \fB\-\-since\fR \fIdate\fR
-Lower bound of the time window; takes priority over \-\-hours.
+Lower bound of the time window, applied to a session file's last\-modified
+time rather than to when the session started: a session begun before the bound
+but written to inside it is included, which keeps a resumed session visible
+under the day you worked on it. Takes priority over \-\-hours. Naming one
+session by id changes this: `skarn search \-\-session <id>`, `skarn stats
+<id>` and the other per\-session views ignore the window altogether, and
+`skarn messages <id>` is the single command that applies it there, reading
+BOTH bounds against the session's own start time rather than its file and
+refusing an out\-of\-window session with exit 1 instead of filtering it out. A
+bare YYYY\-MM\-DD means that day's midnight, shifted by \-\-tz\-offset; a full
+ISO timestamp is used as given.
 .TP
 \fB\-\-until\fR \fIdate\fR
-Upper bound of the time window.
+Upper bound of the time window, applied to when a session STARTED rather than
+to when its file was last written: a session that began after the bound is
+excluded even if it was already running before it. The two bounds therefore
+read different timestamps. Passing it without \-\-since also drops the
+\-\-hours lower bound, so the window becomes all history up to the bound. A
+bare YYYY\-MM\-DD covers that whole day through 23:59:59, shifted by
+\-\-tz\-offset; a full ISO timestamp is used as given. A session whose start
+time cannot be parsed is kept. A view that names one session by id ignores
+this bound, except `skarn messages <id>`, which refuses a session past it with
+exit 1 rather than dropping it from a list.
 .TP
 \fB\-\-tz\-offset\fR \fIminutes\fR
 Timezone offset in minutes for date grouping and display. The default is 0.
@@ -1143,7 +1427,7 @@ MCP calls made across sessions.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot, kimi.
+copilot, kimi, grok, grokbot, antigravity.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths, each
@@ -1154,10 +1438,29 @@ canonical root path, or a parent directory of that root.
 Restrict to sessions whose working directory is under this path.
 .TP
 \fB\-\-since\fR \fIdate\fR
-Lower bound of the time window; takes priority over \-\-hours.
+Lower bound of the time window, applied to a session file's last\-modified
+time rather than to when the session started: a session begun before the bound
+but written to inside it is included, which keeps a resumed session visible
+under the day you worked on it. Takes priority over \-\-hours. Naming one
+session by id changes this: `skarn search \-\-session <id>`, `skarn stats
+<id>` and the other per\-session views ignore the window altogether, and
+`skarn messages <id>` is the single command that applies it there, reading
+BOTH bounds against the session's own start time rather than its file and
+refusing an out\-of\-window session with exit 1 instead of filtering it out. A
+bare YYYY\-MM\-DD means that day's midnight, shifted by \-\-tz\-offset; a full
+ISO timestamp is used as given.
 .TP
 \fB\-\-until\fR \fIdate\fR
-Upper bound of the time window.
+Upper bound of the time window, applied to when a session STARTED rather than
+to when its file was last written: a session that began after the bound is
+excluded even if it was already running before it. The two bounds therefore
+read different timestamps. Passing it without \-\-since also drops the
+\-\-hours lower bound, so the window becomes all history up to the bound. A
+bare YYYY\-MM\-DD covers that whole day through 23:59:59, shifted by
+\-\-tz\-offset; a full ISO timestamp is used as given. A session whose start
+time cannot be parsed is kept. A view that names one session by id ignores
+this bound, except `skarn messages <id>`, which refuses a session past it with
+exit 1 rather than dropping it from a list.
 .TP
 \fB\-\-tz\-offset\fR \fIminutes\fR
 Timezone offset in minutes for date grouping and display. The default is 0.
@@ -1187,7 +1490,7 @@ Tools used across sessions.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot, kimi.
+copilot, kimi, grok, grokbot, antigravity.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths, each
@@ -1198,10 +1501,29 @@ canonical root path, or a parent directory of that root.
 Restrict to sessions whose working directory is under this path.
 .TP
 \fB\-\-since\fR \fIdate\fR
-Lower bound of the time window; takes priority over \-\-hours.
+Lower bound of the time window, applied to a session file's last\-modified
+time rather than to when the session started: a session begun before the bound
+but written to inside it is included, which keeps a resumed session visible
+under the day you worked on it. Takes priority over \-\-hours. Naming one
+session by id changes this: `skarn search \-\-session <id>`, `skarn stats
+<id>` and the other per\-session views ignore the window altogether, and
+`skarn messages <id>` is the single command that applies it there, reading
+BOTH bounds against the session's own start time rather than its file and
+refusing an out\-of\-window session with exit 1 instead of filtering it out. A
+bare YYYY\-MM\-DD means that day's midnight, shifted by \-\-tz\-offset; a full
+ISO timestamp is used as given.
 .TP
 \fB\-\-until\fR \fIdate\fR
-Upper bound of the time window.
+Upper bound of the time window, applied to when a session STARTED rather than
+to when its file was last written: a session that began after the bound is
+excluded even if it was already running before it. The two bounds therefore
+read different timestamps. Passing it without \-\-since also drops the
+\-\-hours lower bound, so the window becomes all history up to the bound. A
+bare YYYY\-MM\-DD covers that whole day through 23:59:59, shifted by
+\-\-tz\-offset; a full ISO timestamp is used as given. A session whose start
+time cannot be parsed is kept. A view that names one session by id ignores
+this bound, except `skarn messages <id>`, which refuses a session past it with
+exit 1 rather than dropping it from a list.
 .TP
 \fB\-\-tz\-offset\fR \fIminutes\fR
 Timezone offset in minutes for date grouping and display. The default is 0.
@@ -1235,18 +1557,25 @@ With renew it asks the license service for a fresh license for the current
 subscription, verifies the reply against the signing keys built into this
 binary BEFORE writing a single byte, and installs it; a reply that does not
 verify is discarded and nothing is written. Verification is not
-signature\-only: the reply must carry the same license id and move the expiry
-forward, so a valid artifact belonging to another subscription is refused too.
+signature\-only: the reply must move the expiry forward, and must carry the
+same license id when both the installed and the returned license are version 2
+claims, so a valid artifact belonging to another subscription is refused too.
 Renewal happens only when you type it \- check, the recall verbs, serve, and
 guard never renew on their own \- and it is the only network call skarn makes
 besides the opt\-in maintained\-feed fetch. The endpoint defaults to
 https://api.getskarn.com and is overridable with $SKARN_LICENSE_RENEW_URL; it
-must be https (plain http is accepted only against loopback), so a poisoned
-environment cannot send the license anywhere in cleartext. Renew exits 0 when
-the new license is installed, 1 when the service cannot be reached, 2 when the
-service declines (its reason is printed verbatim), and 3 when the reply fails
-verification. It never prints the license token itself, and it works without a
-license \- and with an expired one \- so it never exits 5.
+must be https (plain http is accepted only against loopback) and carry no
+userinfo, so a poisoned environment cannot send the license anywhere in
+cleartext nor hand credentials to the endpoint. Renew exits 0 when the new
+license is installed; 1 when the renewal could not complete and nothing was
+installed (the service could not be reached, there is nothing to renew, a
+local target was refused, the reply was unreadable, or a verified artifact
+could not be written); 2 when the service declines (its reason is printed as
+the service worded it, after any echo of the license token is redacted,
+terminal control bytes are masked, and the text is capped at 300 bytes); and 3
+when the reply fails verification. It never prints the license token itself,
+and it works without a license \- and with an expired one \- so it never exits
+5.
 .TP
 \fB\-o\fR, \fB\-\-output\fR \fIpath\fR
 Write the renewed license to this path instead of the config directory. Only
@@ -1266,14 +1595,19 @@ was resolved from). The license token is never included.
 .SH "EXIT STATUS"
 .TP
 \fB0\fR
-Clean, or informational output only.
+Clean, or informational output only. For mcp: the client closed stdin, which
+is the normal shutdown.
 .TP
 \fB1\fR
 A finding at or above the \-\-fail\-on\-severity threshold was reported. For
 setup and guard \-\-self\-test: a target was refused or a verification failed.
-For doctor: at least one check FAILED (a warning never exits nonzero, and
-\-\-json always exits 0). Also: the first\-run EULA prompt was declined, so
-the invoked operation was not performed.
+For doctor: at least one check FAILED (a warning never exits nonzero), or an
+unknown option was passed, which is refused before any check runs. For
+restore: the recorded working directory or session id could not be rendered
+safely, so nothing was printed to stdout and the refusal is named on stderr.
+Also: the first\-run EULA prompt was declined, so the invoked operation was
+not performed. For mcp: an unknown argument was passed, which is refused
+before the protocol loop starts.
 .TP
 \fB2\fR
 The session risk score exceeded the \-\-fail\-on\-risk threshold. For setup:
@@ -1285,8 +1619,10 @@ A canary token was triggered (a proven breach). This overrides every other
 gate.
 .TP
 \fB4\fR
-A policy precondition was not met: a required rule is missing, or the policy
-requires a baseline and none was supplied.
+A policy precondition was not met: a required rule is missing, the policy
+requires a baseline and none was supplied or the one supplied did not load, or
+the \-\-policy file itself could not be read or parsed. A policy that never
+loaded is never quietly replaced by the embedded default, which gates nothing.
 .TP
 \fB5\fR
 A requested paid feature is not covered by the active license (a Team or
@@ -1294,20 +1630,39 @@ Enterprise flag without a matching license). Refused before any scan. With no
 usable license at all, check exits 7 before this gate is consulted.
 .TP
 \fB6\fR
-The scan could not complete: session discovery or the scan itself failed. For
-vet: the home directory could not be resolved (so the configuration was never
-located at all), or a config file that exists could not be read, so the
-configuration was only partly seen. Fail\-closed \- the result is not
-trustworthy, so it is never reported as clean.
+The scan could not complete: session discovery or the scan itself failed,
+including a home directory that could not be resolved so no session store was
+ever located, or the detection rules could not be loaded so no scan was ever
+defined. Under \-\-fail\-on\-scan\-error an otherwise\-complete run exits 6 as
+well whenever coverage was partial: a tool source dropped out of discovery, a
+session store that exists could not be read, a session's parse failed, the
+assistant compacted a session before the scan so its transcript no longer
+holds the whole conversation, or the run read no sessions at all. That verdict
+is computed BEFORE the report is rendered, so the SARIF invocation exit code,
+the evidence pack and the audit record all carry 6 rather than describing the
+run as clean and then exiting nonzero. A \-\-baseline\-create run is refused
+on the same condition before it writes anything, so an incomplete scan is
+never recorded as the accepted set and the previous baseline survives. For
+check \-\-audit\-verify: the audit log exists but could not be read, so the
+hash chain was never examined (an absent log is a valid empty chain and exits
+0). For vet: the home directory could not be resolved (so the configuration
+was never located at all), or a config file that exists was not read \- it
+could not be read, or it was skipped because it is not that assistant's live
+configuration \- so the configuration was only partly seen. For doctor: the
+home directory could not be resolved, so every per\-agent check would have
+read an empty machine \- a diagnostic that could not be produced is never
+reported as a healthy one. Fail\-closed \- the result is not trustworthy, so
+it is never reported as clean.
 .TP
 \fB7\fR
 No usable license is present \- none was found via SKARN_LICENSE,
-SKARN_LICENSE_FILE, or the installed file \- so check refused before scanning.
-The free license is issued at https://getskarn.com/free after a quick email
-confirmation and is verified offline. Also used when a license IS present but
-cannot be used at all (revoked, tampered, or signed by an untrusted key).
-assess, the recall commands, guard, setup, doctor, vet, license, taxonomies
-and check \-\-audit\-verify never exit 7.
+SKARN_LICENSE_FILE, or the installed file \- so check, or baseline audit,
+refused before scanning. The free license is issued at
+https://getskarn.com/free after a quick email confirmation and is verified
+offline. Also used when a license IS present but cannot be used at all
+(revoked, tampered, or signed by an untrusted key). assess, baseline accept,
+guard accept, the recall commands, guard, setup, doctor, vet, mcp, license,
+taxonomies and check \-\-audit\-verify never exit 7.
 .SH ENVIRONMENT
 .TP
 \fBSKARN_SCAN_THREADS\fR
@@ -1333,8 +1688,9 @@ output and for non\-TTY stdout.
 License\-service endpoint `skarn license renew` posts to. Defaults to
 https://api.getskarn.com/v1/license/renew; set it to route renewals through an
 enterprise proxy. It must be https \- plain http is accepted only against
-loopback \- so a poisoned environment cannot redirect the license token to a
-cleartext endpoint. No other command reads it.
+loopback \- and must carry no userinfo, so a poisoned environment can neither
+redirect the license token to a cleartext endpoint nor hand credentials to the
+one it names. No other command reads it.
 .TP
 \fBSKARN_GUARD_LOG\fR
 Path to append a redacted JSONL verdict log for guard (opt\-in; off when
@@ -1366,7 +1722,9 @@ provenance. Optional.
 .TP
 \fBSKARN_FEED_URL\fR
 Default feed channel URL used by check \-\-update\-rules when \-\-feed\-url is
-not given (Team).
+not given (Team). It must be https \- plain http is accepted only against
+loopback \- and must carry no userinfo, so a poisoned environment cannot
+redirect the subscriber credential to a cleartext endpoint.
 .TP
 \fBSKARN_FEED_TOKEN\fR
 Credential presented to the subscriber feed channel when fetching a maintained
@@ -1397,11 +1755,30 @@ shell, so Skarn's own process never sees it; that root is therefore declared
 in the scanner rather than read from here, exactly as $CODEX_HOME and
 $KIMI_CODE_HOME are declared rather than guessed.
 .TP
+\fBGROK_HOME\fR
+Grok Build config directory visible in Skarn's environment; replaces the
+default ~/.grok as grok's home. Setup writes its hook file under the directory
+this names, doctor resolves grok's config, requirements, hooks, and
+folder\-trust files from it, and the guard's own behavior does not depend on
+it.
+.TP
+\fBGROK_FOLDER_TRUST\fR
+Grok Build's folder\-trust switch. Set to 0 it ungates every project\-scope
+hook, MCP server, and LSP server, the same as [folder_trust] enabled = false
+in grok's config; doctor honors it, so a machine that turned the gate off is
+not reported as having a silenced project hook layer.
+.TP
 \fBKIMI_CODE_HOME\fR
 A Kimi Code CLI data directory visible in Skarn's environment; replaces the
 default ~/.kimi\-code as the kimi root, folded into the kimi source,
 de\-duplicated, resolved via expandPath. Each root contributes its sessions/
 and user\-history/ children.
+.TP
+\fBGROK_HOME\fR
+A Grok Build data directory visible in Skarn's environment; grok itself
+REPLACES ~/.grok with $GROK_HOME rather than layering. Skarn folds both roots,
+de\-duplicated, resolved via expandPath, and accepts each only when it has a
+sessions/ child.
 .TP
 \fBCODEX_HOME\fR
 A Codex CLI data directory visible in Skarn's environment; folded into the
@@ -1410,14 +1787,15 @@ expandPath. Each root contributes its sessions/ and archived_sessions/
 children.
 .TP
 \fBSKARN_MANAGED_ROOT\fR
-Prefix doctor prepends to every managed (MDM/fleet) config path it reads, so a
+Prefix prepended to every managed (MDM/fleet) config path skarn reads, so a
 fleet admin can validate a staged payload directory before pushing it to a
 single machine (SKARN_MANAGED_ROOT=/tmp/stage skarn doctor). Empty or unset
-means the live system paths. Whenever it is active, doctor echoes the root in
-the report header and emits it as managed_root in \-\-json, so a staged report
-can never pass as a report about the live machine. Only doctor reads it. It is
-a filesystem prefix and cannot re\-root a registry key;
-SKARN_MANAGED_REGISTRY_ROOT does that.
+means the live system paths. Doctor applies it to every managed hook config it
+inspects, and vet applies it to the system Grok Build layers it reads at
+/etc/grok. Whenever it is active, doctor echoes the root in the report header
+and emits it as managed_root in \-\-json, so a staged report can never pass as
+a report about the live machine. It is a filesystem prefix and cannot re\-root
+a registry key; SKARN_MANAGED_REGISTRY_ROOT does that.
 .TP
 \fBSKARN_MANAGED_REGISTRY_ROOT\fR
 Registry key doctor reads the Windows managed policy keys under, so an
@@ -1429,6 +1807,13 @@ stage to distinct keys instead of collapsing into one. Empty or unset means
 the live policy keys. Whenever it is active, doctor echoes it in the report
 header and emits it as managed_registry_root in \-\-json, so a staged report
 can never pass as a report about the live machine. Only doctor reads it.
+.TP
+\fBGROK_HOME\fR
+Grok Build's data and configuration directory, default ~/.grok. It relocates
+the whole Grok home surface that vet reads \- config.toml,
+managed_config.toml, requirements.toml, the hooks/ directory, and the
+hooks\-paths registry \- so a relocated Grok home is examined rather than
+reported clean over an unexamined one.
 .TP
 \fBXDG_CACHE_HOME\fR
 Base directory for the rule and feed cache. Defaults to ~/.cache, so the cache
@@ -1583,6 +1968,29 @@ not stop a host application's own in\-process hooks, which arrive through the
 SDK rather than from a file, and whether it skips machine policy hooks is
 unmeasured (GitHub documents them as exempt). Read\-only; never written.
 .TP
+\fB~/.grokbot/\fR
+Grok Bot's local\-exec daemon state: the daemon connection and credential
+files, its settings.json, and its rolling daemon log. Doctor detects this
+directory and the daemon\-connection file beside it by stat alone, each one
+only when the path is of the kind its name implies, and reads exactly one body
+here, settings.json, for the egressTunnelEnabled and webauthnProxyEnabled
+posture flags, and only once the open handle itself proves the path is that
+file and nothing else, so a symlink, a hard link to a credential file, or a
+pipe left at that name is refused unread. The connection and credential files
+hold a gateway bearer token, a network token and VNC proxy tokens; skarn never
+opens them, so no value from them can reach the report. Presence is reported
+as a warning with no fix, because no skarn command changes it and what to do
+about an installed app is the operator's decision. Read\-only; never written.
+.TP
+\fB~/Library/Application Support/Grok Bot/ (macOS)\fR
+Grok Bot's desktop app root. Doctor detects the directory and its
+sand\-secrets.json and sand\-client\-persistence markers by stat alone and
+reads no body here at all; the transcript replicas under
+sand\-client\-persistence are scanned by the session commands, not by doctor,
+and the token store is never opened by either. The probe is macOS\-only, the
+platform where the app root is observed; ~/.grokbot/ is checked on every
+platform. Read\-only; never written.
+.TP
 \fB~/.skarn.json\fR
 Optional tool configuration: the set of assistant tools and their session
 paths, plus an optional projects alias map. Both the recall surface and scan
@@ -1630,6 +2038,85 @@ Scanned in addition to the session tree because it retains prompts from
 sessions that were aborted before any session record was written. Relocate
 with $KIMI_CODE_HOME.
 .TP
+\fB~/.grok/sessions/\fR
+Default Grok Build session root. One transcript per session at
+sessions/<url\-encoded\-cwd>/<session\-id>/chat_history.jsonl, with a
+summary.json sidecar beside it read for the session id, branch, timestamps,
+model, and title, and for the working directory when the path yields none. The
+session title is scanned like any other session text. The recorded working
+directory is re\-derived from the group directory name, or from its .cwd file
+when the encoded path exceeds 255 bytes, and a recorded directory always wins
+over the sidecar's copy. Relocate with $GROK_HOME. updates.jsonl,
+rewind_points.jsonl, events.jsonl, and session_search.sqlite are deliberately
+not scanned. One more sidecar, signals.json, is read for two counters only,
+compactionCount and totalTokensBeforeCompaction, and so is a non\-empty
+compaction_checkpoints or compaction directory beside the transcript: Grok
+rewrites the transcript when it compacts a session, dropping turns from the
+only file Skarn reads, so a session either signal reports as compacted is
+counted as incomplete coverage and named in the scan\-incomplete warning. The
+two signals are independent, not a fallback chain, and either alone is enough
+\- a saved checkpoint means the compaction happened whatever a sidecar written
+at some other moment says, since under\-reporting a coverage gap is the
+failure this counter exists to prevent. An empty checkpoint directory counts
+for nothing, and neither does a sidecar that is missing, unreadable, or
+malformed; the counter is raised only by a positive signal, never by the
+absence of one. No session content is taken from either.
+.TP
+\fB~/.grok/sessions/<url\-encoded\-cwd>/prompt_history.jsonl\fR
+Grok Build's per\-working\-directory prompt log, one file beside the session
+directories of that working directory. Each record carries a session id, so
+one file holds prompts from many sessions and each id is scanned as its own
+session. It is read in addition to the transcripts because it outlives them: a
+removed, pruned, or partially copied session directory takes its transcript
+and leaves its prompts, text cleared before it was sent is saved here and
+reaches no transcript at all, a shell prompt entered with a leading ! is
+recorded here as the bare command it ran, without the !, while the transcript
+keeps only a rendered narration of it, and a torn transcript still leaves the
+prompt. It is not a record of prompts written ahead of the transcript: the
+transcript is written first. A prompt the session transcript already carries
+is dropped at scan time, matched on the exact text within the same working
+directory and session id, so it is reported once; a session whose every prompt
+the transcript carries does not appear at all. Shell prompts additionally
+surface in `skarn cmds`. Relocate with $GROK_HOME.
+.TP
+\fB~/Library/Application Support/Grok Bot/sand\-client\-persistence/ (macOS), ~/.config/Grok Bot/sand\-client\-persistence/ (Linux), the same directory under %APPDATA% (Windows)\fR
+Grok Bot's local chat\-transcript store. Grok Bot is xAI's always\-on desktop
+agents app, a different product from the Grok Build CLI above, and it keeps a
+cleartext replica of every agent's conversation here, so a credential pasted
+into a Grok Bot chat lands on disk in this directory. One .blob per
+persistence slice, each filename the base32 (RFC 4648, unpadded lowercase)
+encoding of a dotted slice name; Skarn decodes the name and scans only a
+sand.client.slice.account.<account>.transcript.replicas.<agent\-id> slice, so
+the drafts, roster, send\-journal, selection, sidebar and client\-meta slices
+beside it are excluded by construction. One replica is one session, identified
+by the decoded agent id; two blobs decoding to the same agent id are reported
+once. A .blob whose filename does not decode is counted once per store as
+incomplete coverage, so it raises the unreadable\-store count in the
+scan\-incomplete warning rather than being passed over as if the store were
+fully read; the warning carries that count, not the offending filename. A
+document whose value object is missing, is not an object, or holds an entries
+member that is not an array is reported unreadable rather than as an empty
+session; an absent entries member reads as an empty replica only at the schema
+version Skarn was verified against, so a truncated envelope or a later schema
+that renamed the collection is reported unreadable too, as is a non\-empty
+entries array in which no entry declares a kind Skarn knows; an entries array
+is otherwise read whatever version the document declares, and recognized
+entries that carry no text of their own still make a valid session. On Linux
+the store list also folds $XDG_CONFIG_HOME, where Electron places userData
+when that variable is set, and an agent replicated into both roots is still
+reported once. Inside the document, whatever carries a content string is read
+\- an agent turn at message.content and a chat message at content, both
+stamped in epoch milliseconds \- whatever type the entry declares, so a body
+type a later Grok Bot release introduces is scanned rather than skipped; the
+widget, attachment and approval bodies observed keep their payload under other
+keys and so contribute no text. No entry records a working directory, so a
+Grok Bot session has no project and is left out of project grouping rather
+than named after the directory it sits in. The app names no data\-directory
+variable, so there is nothing to relocate the store with. Grok Bot's other
+local files are deliberately not read: its OAuth token store, its local\-exec
+daemon state under ~/.grokbot/, the Electron cookie stores, and its crash and
+memory telemetry.
+.TP
 \fB~/.copilot/session\-state/, ~/.scout/copilot/session\-state/\fR
 GitHub Copilot CLI session roots, one events.jsonl per session under
 <root>/session\-state/<id>/. Both are scanned automatically, each only when it
@@ -1648,14 +2135,13 @@ cwd the transcript itself names, with a .git pointer stat'd beside it. No
 session content is read from either. Verified against Scout 0.23.331,
 2026\-07\-30.
 .TP
-\fB~/.claude/settings.json, ~/.claude/settings.local.json\fR
-Claude Code hooks and permission grants. Read (never written) by vet, and by
-the project\-local ./.claude/settings.json and ./.claude/settings.local.json
-when one exists.
+\fB~/.claude/settings.json, ~/.claude/settings.local.json, ./.claude/settings.json, ./.claude/settings.local.json\fR
+Claude Code hooks and permission grants. Read, never written. The
+project\-local pair is read at the current working directory only.
 .TP
-\fB~/.claude.json, ~/.mcp.json\fR
-Claude Code MCP server definitions. Read by vet, along with a project\-local
-\&./.mcp.json when one exists.
+\fB~/.claude.json, ~/.mcp.json, ./.mcp.json\fR
+Claude Code MCP server definitions. Read, never written. The project\-local
+file is read at the current working directory only.
 .TP
 \fB~/.claude/plugins/, ~/.claude/skills/\fR
 Installed Claude Code plugins and skills. Vet reads each plugin.json and
@@ -1670,7 +2156,9 @@ preferred. Only rollout\-* files are parsed as sessions, so
 session_index.jsonl is never scanned.
 .TP
 \fB~/.codex/config.toml, ~/.codex/hooks.json\fR
-Codex CLI MCP server definitions and hooks. Read by vet.
+Codex CLI MCP server definitions and hooks. Read by vet through a scoped
+reader that keeps only the launcher command, its arguments, and the endpoint
+url.
 .TP
 \fB~/.cursor/mcp.json, ~/.cursor/hooks.json\fR
 Cursor MCP server definitions and hooks. Read by vet.
@@ -1688,10 +2176,118 @@ Microsoft Scout MCP server definitions. Read by vet. A user\-added server
 nests its launcher or endpoint under a config object; a built\-in server has
 none, because Scout generates its command at run time.
 .TP
+\fB~/Library/Application Support/Grok Bot/sand\-secrets.json\fR
+Grok Bot's plaintext third\-party credential store, on macOS. Grok Bot is
+xAI's always\-on desktop agents app, a different product from the Grok Build
+CLI. Vet opens this file, reads its POSIX mode off that handle, and reads not
+one byte of its contents: the store is never parsed, so no key name and no
+value from it can reach a finding and the only thing reported is whether the
+mode grants group or other read. The path is opened without following a
+symlink, so a symlinked store is reported as a coverage gap rather than
+measured through its target. The path carries no platform branch, so the store
+is vetted on macOS only; the Linux and Windows locations are not read.
+.TP
+\fB~/.grokbot/settings.json\fR
+Grok Bot's local\-exec daemon settings. Vet reads two declared posture flags
+from this file, egressTunnelEnabled and webauthnProxyEnabled, and records only
+whether each is present and true. A flag that is absent or false raises
+nothing, so a default install stays silent.
+.TP
+\fB~/.grokbot/local\-exec\-daemon\-connection.json\fR
+Grok Bot's local\-exec daemon connection state: the gateway base URL and the
+bearer, network and VNC proxy tokens the cloud side uses to execute on this
+machine. Vet treats the file as a presence signal and never parses it, so the
+gateway URL and every token stay out of the process as well as out of every
+output format. Its presence declares that the channel is configured, not that
+a daemon is running.
+.TP
 \fB~/.gemini/settings.json\fR
 Gemini CLI's user settings: MCP server definitions read by vet, and the hooks
 object skarn setup \-\-agent gemini merges the guard into and doctor reads as
 the user precedence layer.
+.TP
+\fB~/.grok/hooks/skarn.json\fR
+Grok Build's user hook file for skarn, written whole by skarn setup \-\-agent
+grok and read by doctor as the setup\-owned half of grok's user layer. Grok
+loads every *.json in ~/.grok/hooks, so skarn owns a file of its own there and
+never merges into a foreign one; doctor folds the directory's other files into
+the same layer, so a hook wired by hand under another name still counts.
+$GROK_HOME moves the whole directory.
+.TP
+\fB.grok/hooks/skarn.json\fR
+Grok Build's project hook file for skarn, written by skarn setup \-\-agent
+grok \-\-scope project and meant to be committed. Grok runs a project hook
+only after the folder is trusted (/hooks\-trust, or launching with \-\-trust);
+until then it skips the file silently, so doctor reports that layer as inert
+rather than as protection.
+.TP
+\fB~/.grok/trusted_folders.toml\fR
+Grok Build's folder\-trust store, the single gate for whether a repository's
+own hooks, MCP servers, and LSP servers run. Doctor reads it to decide whether
+a project hook layer counts: a grant covers its folder and cascades to
+subdirectories, the nearest recorded folder wins (so an explicit untrust beats
+an ancestor's grant), and an over\-broad key naming the filesystem root or the
+home directory is ignored the way grok ignores it. A store skarn cannot read
+or parse is reported as a coverage gap, never as an absent grant. Read\-only;
+never written.
+.TP
+\fB/etc/grok/managed_config.toml, ~/.grok/managed_config.toml\fR
+Grok Build's organization\-distributed config, root\-owned at the system path
+and server\-synced at the user path. Doctor reads the [[hooks.<Event>]] groups
+through a scoped reader that takes both documented handler notations (an
+inline\-table array and the nested [[hooks.<Event>.hooks]] form) and reports
+them as managed precedence layers. Grok has no managed\-only lockdown key, so
+these layers add hooks and never silence the others. The system path exists on
+Unix only; grok resolves no system config directory on Windows. Read\-only;
+never written.
+.TP
+\fB/etc/grok/requirements.toml, ~/.grok/requirements.toml\fR
+Grok Build's requirements layer, the highest\-authority config tier an
+organization distributes. Doctor reads its hooks with the same scoped reader
+as managed_config.toml and reports them as managed layers, which is what makes
+a skarn hook declared there visible to the fleet conformance check. The system
+path exists on Unix only. Read\-only; never written.
+.TP
+\fB~/.grok/config.toml\fR
+Grok Build's user config. Doctor reads two things from it: the
+[[hooks.<Event>]] groups a user can declare there instead of in a hook file,
+and [folder_trust] enabled, which when false ungates every project hook (as
+does GROK_FOLDER_TRUST=0) and so decides whether an untrusted project layer is
+reported inert at all. Read\-only; never written.
+.TP
+\fB~/.grok/config.toml, ~/.grok/managed_config.toml, ~/.grok/requirements.toml\fR
+Grok Build's user, managed, and requirements configuration layers. Read by vet
+through a scoped TOML reader that collects MCP server launchers and endpoints,
+the variable NAMES (never the values) of an MCP env table, the [ui]
+permission_mode and yolo settings, allow\-action [permission] rules in both
+the compact string\-array and the structured rules forms, hook handlers in
+both TOML notations, and [[ui.notifications.hooks]] commands. Relocate the
+whole directory with $GROK_HOME. Syntax the reader does not model, such as a
+multiline string, is reported as a coverage gap naming the file and line
+rather than skipped silently.
+.TP
+\fB/etc/grok/managed_config.toml, /etc/grok/requirements.toml\fR
+Grok Build's system\-wide managed and requirements layers, deployed by an
+organization. Read by vet exactly as the user layers are; SKARN_MANAGED_ROOT
+prefixes both paths, so a staged payload can be vetted before it reaches a
+machine.
+.TP
+\fB~/.grok/hooks/, ~/.grok/hooks\-paths\fR
+Grok Build's global JSON hook directory and the registry file naming extra
+hook sources. Vet reads the .json files one level down in the directory,
+regular files only, and loads each ABSOLUTE line of the registry as a further
+hook source; relative lines are ignored the way Grok ignores them, and a UNC
+or //host/share target is recorded as a coverage gap and never opened. Both
+are bounded per directory and per registry, and exceeding a bound is reported
+rather than silently truncated.
+.TP
+\fB./.grok/config.toml, ./.grok/hooks/\fR
+Grok Build's project\-scoped configuration and hook directory, contributing
+MCP servers, plugins, and permission rules. Vet reads them at the current
+working directory only, while Grok itself discovers a .grok/config.toml at
+every level from the repository root down. Project hooks are collected
+whatever the folder\-trust state, because a declared hook becomes live the
+moment the folder is trusted, with no configuration change.
 .SH EXAMPLES
 Show which license this machine is using, where it came from, and when it
 expires.
@@ -1722,6 +2318,30 @@ in one command; no flags, no license.
 .RS 4
 .EX
 skarn assess
+.EE
+.RE
+.PP
+Drive the MCP handshake by hand: the server answers one JSON\-RPC line on
+stdout and exits 0 when stdin closes.
+.RS 4
+.EX
+printf '%s\en' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025\-11\-25","capabilities":{},"clientInfo":{"name":"probe","version":"0"}}}' | skarn mcp
+.EE
+.RE
+.PP
+Run the MCP server with the two content tools enabled; put the argument in the
+client's own mcpServers args, never in a shipped plugin.
+.RS 4
+.EX
+skarn mcp \-\-enable\-recall
+.EE
+.RE
+.PP
+Print what the MCP server exposes and how to register it in a client; it
+returns before the protocol loop starts.
+.RS 4
+.EX
+skarn mcp \-\-help
 .EE
 .RE
 .PP
@@ -1778,7 +2398,8 @@ skarn doctor
 .RE
 .PP
 The same checks as one JSON object for fleet scripts; the check ids are stable
-and always exits 0.
+and a rendered report always exits 0 (an unknown option is refused with exit 1
+and an unresolvable home directory with exit 6, both before any check runs).
 .RS 4
 .EX
 skarn doctor \-\-json
@@ -1917,25 +2538,47 @@ skarn baseline accept .skarn\-baseline.json 7d343e3a105ae026589b3371d565a4ad2943
 .RE
 .SH SECURITY
 Skarn scans locally and makes no network connection by default. Secrets are
-redacted in every output format unless \-\-no\-redact is given.
+redacted in every output format. \-\-no\-redact lifts that only where it is
+honored \- check's text, json and sarif reports, and export's raw session
+content; the ndjson stream, the evidence pack, the artifacts written by
+\-\-drop, serve and assess, the baseline files, and the guard ignore it and
+stay redacted.
 .PP
-The only feature that transmits anything off the machine is the maintained
-feed: \-\-update\-rules and \-\-feed\-url fetch a signed feed bundle from the
-subscriber channel. No secret ever leaves the machine. It is off by default
-and is disabled by \-\-offline.
+Two commands transmit anything off the machine, and only when you type them.
+skarn check \-\-update\-rules fetches a signed feed bundle from the subscriber
+channel, presenting $SKARN_FEED_TOKEN as a bearer credential; \-\-feed\-url
+names that channel when $SKARN_FEED_URL does not. The feed is off by default
+and is disabled by \-\-offline. skarn license renew posts the installed
+license token to the license service to receive a re\-signed one. Both refuse
+any endpoint that is not https, or http against loopback, and any endpoint
+carrying userinfo. No session content, no finding, and no scanned secret ever
+leaves the machine through a connection skarn makes. skarn mcp makes no
+network connection; the results it hands to the connected MCP client (redacted
+findings by default, redacted session content only with \-\-enable\-recall)
+are forwarded by that client to its model provider \- that egress is the
+client's, and it happens only when you configure the server.
 .PP
 skarn vet reads the AI assistant configuration files listed under FILES
 read\-only: it opens each one for reading, never writes, rewrites, or removes
 one, and makes no network call. It reports what it finds and leaves every
 decision about the configuration to you. \-\-offline is accepted for parity
 and changes nothing.
+.PP
+skarn mcp reads the same session stores as assess and the same configuration
+files as vet, read\-only and with no network call, and answers only the AI
+coding assistant that spawned it over stdin and stdout. Its results are the
+redacted scan report, the masked vet report, and session metadata carrying
+neither message text nor any label authored inside a transcript. Because the
+assistant receives those results, they travel wherever that assistant sends
+its context, so treat them as leaving the machine even though skarn itself
+opens no socket.
 .SH "SEE ALSO"
-skarn\-check(1), skarn\-assess(1), skarn\-vet(1), skarn\-baseline(1),
-skarn\-search(1), skarn\-recent(1), skarn\-restore(1), skarn\-messages(1),
-skarn\-stats(1), skarn\-tools(1), skarn\-mcps(1), skarn\-cmds(1),
-skarn\-export(1), skarn\-guard(1), skarn\-setup(1), skarn\-doctor(1),
-skarn\-serve(1), skarn\-license(1), skarn\-eula(1), https://getskarn.com,
-gitleaks(1)
+skarn\-check(1), skarn\-assess(1), skarn\-vet(1), skarn\-mcp(1),
+skarn\-baseline(1), skarn\-search(1), skarn\-recent(1), skarn\-restore(1),
+skarn\-messages(1), skarn\-stats(1), skarn\-tools(1), skarn\-mcps(1),
+skarn\-cmds(1), skarn\-export(1), skarn\-guard(1), skarn\-setup(1),
+skarn\-doctor(1), skarn\-serve(1), skarn\-license(1), skarn\-eula(1),
+https://getskarn.com, gitleaks(1)
 .SH AUTHOR
 Skarn is developed by the Skarn project. See https://getskarn.com.
 .SH "REPORTING BUGS"

@@ -1,30 +1,53 @@
-.TH "SKARN-VET" "1" "2026-06-23" "skarn 0.24.0" "Skarn Manual"
+.TH "SKARN-VET" "1" "2026-06-23" "skarn 0.25.0" "Skarn Manual"
 .SH NAME
 skarn\-vet \- Statically vet the local AI assistant configuration (hooks, MCP
 servers, permission grants, plugins and skills) for risky patterns across
-Claude Code, Codex CLI, Cursor, Copilot, Gemini CLI, and Microsoft Scout.
-Read\-only and offline; free, no license
+Claude Code, Codex CLI, Cursor, Copilot, Gemini CLI, Grok Build, Grok Bot, and
+Microsoft Scout. Read\-only and offline; free, no license
 .SH SYNOPSIS
 \fBskarn\fR \fBvet\fR [options]
 .SH DESCRIPTION
 Statically vet the local AI assistant configuration (hooks, MCP servers,
 permission grants, plugins and skills) for risky patterns across Claude Code,
-Codex CLI, Cursor, Copilot, Gemini CLI, and Microsoft Scout. Read\-only and
-offline; free, no license.
+Codex CLI, Cursor, Copilot, Gemini CLI, Grok Build, Grok Bot, and Microsoft
+Scout. Read\-only and offline; free, no license.
 .PP
 Statically vet this machine's AI assistant configuration \- hook commands, MCP
 server definitions, permission grants, and installed plugins and skills across
-Claude Code, Codex CLI, Cursor, Copilot, Gemini CLI, and Microsoft Scout \-
-and report the risky patterns it finds: hooks that exfiltrate local content or
-fetch\-and\-execute remote code, hooks that rewrite an assistant's own config,
-MCP endpoints on remote hosts, MCP launchers with no pinned version or digest,
-permission grants that approve a whole class of actions, grants that let the
-assistant ask to widen its own authority, and extensions installed from a
-remote source or carrying no integrity marker. Vet is read\-only and offline:
-it opens each config file for reading, never writes one, and makes no network
+Claude Code, Codex CLI, Cursor, Copilot, Gemini CLI, Grok Build, Grok Bot, and
+Microsoft Scout \- and report the risky patterns it finds: hooks that
+exfiltrate local content or fetch\-and\-execute remote code, hooks that post
+the session event envelope to a remote http endpoint, hooks that rewrite an
+assistant's own config, MCP endpoints on remote hosts, MCP launchers with no
+pinned version or digest, permission grants that approve a whole class of
+actions, grants that let the assistant ask to widen its own authority, and
+extensions installed from a remote source or carrying no integrity marker,
+plus two file\-level patterns read from permission metadata and declared
+posture flags alone: a plaintext credential store whose file mode grants group
+or other read, and an assistant configured with an always\-on local\-exec and
+egress channel. Vet reports declared configuration, not the effective merge
+across layers: a grant a higher layer denies, or a permission mode an
+administrator lock disables, is still surfaced, because the declaration exists
+and is one edit away from active. Project configuration is read at the
+cwd\-level file only, so a host that also loads configuration from parent
+directories is covered there and no further. Vet is read\-only and offline: it
+opens each config file for reading, never writes one, and makes no network
 call. A config file that does not exist is skipped; a config file that exists
 but cannot be read is a coverage gap that fails closed under a \-\-fail\-on
-flag. Vet surfaces risky configuration and does not change it.
+flag. Each of the per\-assistant configuration files listed below is opened
+once and its permission metadata is read off that same handle, and a path that
+is not a regular file is named as a coverage gap rather than read. The
+config\-file count the report prints, and the configFilesRead field in the
+json and sarif output, count every such file vet opened and examined,
+including the two whose contents it deliberately never reads, so a file a
+finding names is always inside the count rather than absent from it. The hook
+directories and extension manifests vet also walks keep their own older read
+path. The one file whose permission metadata decides a finding, Grok Bot's
+credential store, is additionally opened without following a symlink, so a
+symlinked store is reported as a coverage gap named SymlinkNotFollowed rather
+than measured through its target; every other config file is still read
+through a symlink, so a dotfiles\-managed configuration keeps its coverage.
+Vet surfaces risky configuration and does not change it.
 .SH OPTIONS
 .TP
 \fB\-\-format\fR \fIfmt\fR
@@ -37,10 +60,11 @@ Exit 1 if any finding is at or above this severity. Without it, vet always
 exits 0: it surfaces, it does not gate. One of: low, medium, high, critical.
 .TP
 \fB\-\-fail\-on\-scan\-error\fR
-Fail closed (exit 6) when a config file that exists could not be read, so a
-partial view of the configuration is never reported as clean. Implied by
-\-\-fail\-on\-severity. A home directory that cannot be resolved at all exits
-6 regardless of this flag, since nothing was examined.
+Fail closed (exit 6) when a config file that exists was not read \- it could
+not be read, or it was skipped because it is not that assistant's live
+configuration \- so a partial view of the configuration is never reported as
+clean. Implied by \-\-fail\-on\-severity. A home directory that cannot be
+resolved at all exits 6 regardless of this flag, since nothing was examined.
 .TP
 \fB\-\-offline\fR
 Disable all network access. Vet never makes a network call; this is the
@@ -48,6 +72,104 @@ belt\-and\-suspenders guarantee.
 .TP
 \fB\-\-no\-color\fR
 Disable colored output.
+.SH FILES
+.TP
+\fB~/.claude/settings.json, ~/.claude/settings.local.json, ./.claude/settings.json, ./.claude/settings.local.json\fR
+Claude Code hooks and permission grants. Read, never written. The
+project\-local pair is read at the current working directory only.
+.TP
+\fB~/.claude.json, ~/.mcp.json, ./.mcp.json\fR
+Claude Code MCP server definitions. Read, never written. The project\-local
+file is read at the current working directory only.
+.TP
+\fB~/.claude/plugins/, ~/.claude/skills/\fR
+Installed Claude Code plugins and skills. Vet reads each plugin.json and
+skill.json manifest for its install source and integrity marker.
+.TP
+\fB~/.codex/config.toml, ~/.codex/hooks.json\fR
+Codex CLI MCP server definitions and hooks. Read by vet through a scoped
+reader that keeps only the launcher command, its arguments, and the endpoint
+url.
+.TP
+\fB~/.cursor/mcp.json, ~/.cursor/hooks.json\fR
+Cursor MCP server definitions and hooks. Read by vet.
+.TP
+\fB~/.copilot/mcp\-config.json, ~/.copilot/config.json\fR
+Copilot CLI MCP server definitions and configuration. Read by vet.
+.TP
+\fB~/.scout/m\-settings.json\fR
+Microsoft Scout's permission grants, auto\-approve settings, and experiment
+flags. Read by vet. The path has no platform branch: Scout resolves its config
+root to ~/.scout on macOS and Windows alike.
+.TP
+\fB~/.scout/m\-mcp\-servers.json\fR
+Microsoft Scout MCP server definitions. Read by vet. A user\-added server
+nests its launcher or endpoint under a config object; a built\-in server has
+none, because Scout generates its command at run time.
+.TP
+\fB~/Library/Application Support/Grok Bot/sand\-secrets.json\fR
+Grok Bot's plaintext third\-party credential store, on macOS. Grok Bot is
+xAI's always\-on desktop agents app, a different product from the Grok Build
+CLI. Vet opens this file, reads its POSIX mode off that handle, and reads not
+one byte of its contents: the store is never parsed, so no key name and no
+value from it can reach a finding and the only thing reported is whether the
+mode grants group or other read. The path is opened without following a
+symlink, so a symlinked store is reported as a coverage gap rather than
+measured through its target. The path carries no platform branch, so the store
+is vetted on macOS only; the Linux and Windows locations are not read.
+.TP
+\fB~/.grokbot/settings.json\fR
+Grok Bot's local\-exec daemon settings. Vet reads two declared posture flags
+from this file, egressTunnelEnabled and webauthnProxyEnabled, and records only
+whether each is present and true. A flag that is absent or false raises
+nothing, so a default install stays silent.
+.TP
+\fB~/.grokbot/local\-exec\-daemon\-connection.json\fR
+Grok Bot's local\-exec daemon connection state: the gateway base URL and the
+bearer, network and VNC proxy tokens the cloud side uses to execute on this
+machine. Vet treats the file as a presence signal and never parses it, so the
+gateway URL and every token stay out of the process as well as out of every
+output format. Its presence declares that the channel is configured, not that
+a daemon is running.
+.TP
+\fB~/.gemini/settings.json\fR
+Gemini CLI's user settings: MCP server definitions read by vet, and the hooks
+object skarn setup \-\-agent gemini merges the guard into and doctor reads as
+the user precedence layer.
+.TP
+\fB~/.grok/config.toml, ~/.grok/managed_config.toml, ~/.grok/requirements.toml\fR
+Grok Build's user, managed, and requirements configuration layers. Read by vet
+through a scoped TOML reader that collects MCP server launchers and endpoints,
+the variable NAMES (never the values) of an MCP env table, the [ui]
+permission_mode and yolo settings, allow\-action [permission] rules in both
+the compact string\-array and the structured rules forms, hook handlers in
+both TOML notations, and [[ui.notifications.hooks]] commands. Relocate the
+whole directory with $GROK_HOME. Syntax the reader does not model, such as a
+multiline string, is reported as a coverage gap naming the file and line
+rather than skipped silently.
+.TP
+\fB/etc/grok/managed_config.toml, /etc/grok/requirements.toml\fR
+Grok Build's system\-wide managed and requirements layers, deployed by an
+organization. Read by vet exactly as the user layers are; SKARN_MANAGED_ROOT
+prefixes both paths, so a staged payload can be vetted before it reaches a
+machine.
+.TP
+\fB~/.grok/hooks/, ~/.grok/hooks\-paths\fR
+Grok Build's global JSON hook directory and the registry file naming extra
+hook sources. Vet reads the .json files one level down in the directory,
+regular files only, and loads each ABSOLUTE line of the registry as a further
+hook source; relative lines are ignored the way Grok ignores them, and a UNC
+or //host/share target is recorded as a coverage gap and never opened. Both
+are bounded per directory and per registry, and exceeding a bound is reported
+rather than silently truncated.
+.TP
+\fB./.grok/config.toml, ./.grok/hooks/\fR
+Grok Build's project\-scoped configuration and hook directory, contributing
+MCP servers, plugins, and permission rules. Vet reads them at the current
+working directory only, while Grok itself discovers a .grok/config.toml at
+every level from the repository root down. Project hooks are collected
+whatever the folder\-trust state, because a declared hook becomes live the
+moment the folder is trusted, with no configuration change.
 .SH "SEE ALSO"
 skarn(1)
 .SH COPYRIGHT

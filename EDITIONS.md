@@ -1,6 +1,6 @@
 # Skarn editions - the free/paid boundary
 
-Generated from docs/cli-model.toml by docs/build_manpage.py (regenerate with `zig build man`); do not edit by hand. skarn 0.24.0.
+Generated from docs/cli-model.toml by docs/build_manpage.py (regenerate with `zig build man`); do not edit by hand. skarn 0.25.0.
 
 One binary for every tier. The free tier is the full local product, not a trial: the entire detection engine, every output format except the Team evidence pack, and redaction, under a free license available to anyone who registers - an individual or an organization alike. Paid tiers unlock org capabilities: distributing policy and accepted-findings baselines across a team, compliance evidence, the maintained feed, and real-time enforcement.
 
@@ -11,6 +11,7 @@ skarn check and the serve security view require a license; the free license is i
 | Capability | Why it is free |
 |---|---|
 | skarn assess - the zero-config machine-scan wedge | One command scans every AI session on the machine and prints a friendly risk summary plus an optional shareable redacted report; no flags, no config, no license. Add --dossier to scope a shareable incident dossier to one finding or session. |
+| skarn mcp - the local MCP server | Read-only tools over the operator's own sessions and configuration, answered to the operator's own agent. Nothing here is gated: the local detection engine is not a paid line, and org distribution and the maintained feed are. |
 | skarn vet - static vetting of the local AI assistant configuration | A read-only, offline pass over the operator's own hooks, MCP servers, permission grants, and installed extensions. The entire local detection engine is free; the paid asset is org distribution and the maintained feed, not the engine. |
 | skarn check - the full local scan | Every bundled detection rule, behavioral attack-chain correlation, the risk score, decode-then-rescan, canary checks - under the free license, issued at https://getskarn.com/free after a quick email confirmation. The scanner is not crippled. |
 | Output formats text, json, sarif, ndjson | Output formats are not a paid line; CI and SIEM ingest work on the free tier. The one exception is --format evidence, the Team evidence pack. |
@@ -36,7 +37,7 @@ skarn check and the serve security view require a license; the free license is i
 | --baseline-merge | No - refuses fail-closed with exit 5 before any scan | Org-distributed accepted-findings sets with per-entry provenance; a personal baseline file is free. |
 | --audit-log | No - refuses fail-closed with exit 5 before any scan | Tamper-evident scan records are org compliance evidence. |
 | --baseline <directory> (org union) | No - refuses fail-closed with exit 5 before any scan | Unions every member's accepted-findings set at scan time; a personal baseline file is free. |
-| Evidence pack: check --format evidence | No - with a registered free license, check --format evidence refuses fail-closed with exit 5 before any scan runs (a machine with no usable license is refused earlier, at exit 7); the free formats text, json, sarif, and ndjson are unaffected | A redacted Markdown record of one scan - coverage, findings and dispositions, baseline triage, and the audit-chain reference - shaped to file into a product technical file, with release-lineage fields (--product, --product-version, --build-id, --sbom-ref) binding it to a build. Org compliance evidence, the same class as the Team audit log it references. It is tamper-evident against in-place edits and reordering of the referenced audit records; it is NOT signed and does NOT provide cryptographic non-repudiation. |
+| Evidence pack: check --format evidence | No - with a registered free license, check --format evidence refuses fail-closed with exit 5 before any scan runs (a machine with no usable license is refused earlier, at exit 7); the free formats text, json, sarif, and ndjson are unaffected | A redacted Markdown record of one scan - coverage, findings and dispositions, baseline triage, and the audit-chain reference - shaped to file into a product technical file, with release-lineage fields (--product, --product-version, --build-id, --sbom-ref) binding it to a build. Org compliance evidence, the same class as the Team audit log it references. It is tamper-evident against in-place edits and reordering of the referenced audit records; it is NOT signed and does NOT provide cryptographic non-repudiation. Trailing truncation of an append-only log is not self-detectable. For stronger assurance, anchor the audit-log head hash off-machine. |
 
 ## Enterprise
 

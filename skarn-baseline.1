@@ -1,4 +1,4 @@
-.TH "SKARN-BASELINE" "1" "2026-06-23" "skarn 0.24.0" "Skarn Manual"
+.TH "SKARN-BASELINE" "1" "2026-06-23" "skarn 0.25.0" "Skarn Manual"
 .SH NAME
 skarn\-baseline \- Interactively triage findings into a committed baseline
 (audit), or record a false\-positive fingerprint (accept)
@@ -10,18 +10,24 @@ false\-positive fingerprint (accept).
 .PP
 Interactive baseline triage. audit walks each new finding and records a
 true/false\-positive decision with a reason into the committed baseline;
-accept records a single false\-positive fingerprint non\-interactively. The
-audit scan is scoped by the same filters as check. A false positive is
-suppressed on every later scan, while a finding labeled a true positive is
-recorded and keeps firing until the credential is rotated \- the same labels
-the real\-time guard honors. A finding that carries a secret is fingerprinted
-by that secret, so its acceptance follows the secret across sessions and
-machines; a finding with no secret (a behavioral finding such as prompt
-poisoning) is fingerprinted by the session it fired in, so accepting it
-silences that rule in that session only and the same rule in any other session
-keeps firing. To accept a finding the guard flagged, use `skarn guard accept
-<fingerprint>`: it takes the fingerprint straight from the guard's audit
-record and defaults to the personal baseline the guard reads.
+accept records a single false\-positive fingerprint non\-interactively. audit
+runs the same scan check runs and requires a license the same way: any tier,
+the free one included, and it refuses with exit 7 before any scan when none is
+usable; accept scans nothing and needs no license. The audit scan is scoped by
+the same filters as check. A false positive is suppressed on every later scan,
+while a finding labeled a true positive is recorded and keeps firing until the
+credential is rotated \- the same labels the real\-time guard honors. A true
+positive wins over a false positive on the same fingerprint wherever the two
+meet, in one file or across the member files of an org baseline directory, so
+one member cannot silence a leak another member confirmed. A finding that
+carries a secret is fingerprinted by that secret, so its acceptance follows
+the secret across sessions and machines; a finding with no secret (a
+behavioral finding such as prompt poisoning) is fingerprinted by the session
+it fired in, so accepting it silences that rule in that session only and the
+same rule in any other session keeps firing. To accept a finding the guard
+flagged, use `skarn guard accept <fingerprint>`: it takes the fingerprint
+straight from the guard's audit record and defaults to the personal baseline
+the guard reads.
 .SH OPTIONS
 .TP
 \fB\-\-reason\fR \fItext\fR
@@ -34,7 +40,7 @@ $SKARN_IDENTITY.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict the audit scan to one assistant's sessions. One of: claude, gemini,
-codex, cursor, copilot, kimi.
+codex, cursor, copilot, kimi, grok, grokbot, antigravity.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict the audit scan to matching projects: a comma\-separated list of names

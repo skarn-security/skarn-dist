@@ -1,10 +1,14 @@
-.TH "SKARN-RESTORE" "1" "2026-06-23" "skarn 0.24.0" "Skarn Manual"
+.TH "SKARN-RESTORE" "1" "2026-06-23" "skarn 0.25.0" "Skarn Manual"
 .SH NAME
 skarn\-restore \- Restore a session
 .SH SYNOPSIS
 \fBskarn\fR \fBrestore\fR \fIsession\fR
 .SH DESCRIPTION
-Restore a session.
+Print the shell command that resumes a session, so `eval $(skarn restore
+<session>)` returns you to its working directory. When the recorded working
+directory or session id carries a byte the running shell would read back as
+something else, skarn refuses to render the command: stdout stays empty, the
+refusal is named on stderr, and restore exits 1.
 .PP
 Restore a session by id.
 .SH OPTIONS

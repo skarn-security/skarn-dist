@@ -1,4 +1,4 @@
-.TH "SKARN-GUARD" "1" "2026-06-23" "skarn 0.24.0" "Skarn Manual"
+.TH "SKARN-GUARD" "1" "2026-06-23" "skarn 0.25.0" "Skarn Manual"
 .SH NAME
 skarn\-guard \- Real\-time pre\-execution hook for editor/agent integration;
 reads an event on stdin and emits a verdict. guard report summarizes the audit
@@ -17,33 +17,34 @@ config that has fallen behind this build; guard accept records a flagged
 finding as a false positive so the guard stops blocking it.
 .PP
 Control the real\-time pre\-execution hook used for editor/agent integration
-(Claude Code, Cursor, Codex CLI, Copilot CLI, and Gemini CLI). The report
-subverb reads the guard's own audit log instead of an event: it summarizes the
-flagged calls per agent (verdicts, top rules, latency, the most recent
-denies), states what enforcing that window would have cost (blocks per day,
-prompts per day), and, when the window spans at least five days with zero
-denies, prints the exact command that flips the wired hooks to enforce. Run at
-a terminal it reads one thing more, your own per\-user hook configs, so it can
-name a hook that has fallen behind this build once per release; piped or as
-json it reads nothing but the log. The guard logs only flagged calls, so every
-count and every rate report prints is over flagged actions, never over all
-traffic. The accept subverb closes that loop: an audit record whose top
-finding carries a secret gets a fingerprint (the same secret\-scoped key check
-writes to SARIF partialFingerprints), report prints it under each such deny,
-and `skarn guard accept <fingerprint>` records it as a false positive so the
-identical call stops being flagged; a secret\-less deny (a structural egress
-detector, a typosquat, a chain) carries no fingerprint and no accept line. The
-structural egress detectors are built into the engine, not rule\-pack rules,
-and tier themselves: an egress whose whole payload is visible in the command
-itself \- a bare request, a literal body, query parameters, with no file sent,
-no credential store named, no earlier secret read in the same call, and no
-payload bytes the command text does not show (a command substitution, an
-environment expansion, a shell redirect, a form read, or a pipe feeding the
-target all keep the deny) \- is held at the ask tier \- a real approval prompt
-on the primary shell surfaces (Claude Code PreToolUse, Copilot preToolUse on
-both the CLI and VS Code, Cursor shell and MCP hooks), a block on the channels
-with no ask (Codex, Claude Code PermissionRequest, Copilot permissionRequest,
-Cursor file\-read events, Gemini) \- while a payload carrying a recognized
+(Claude Code, Cursor, Codex CLI, Copilot CLI, Gemini CLI, Grok Build, and the
+Antigravity CLI). The report subverb reads the guard's own audit log instead
+of an event: it summarizes the flagged calls per agent (verdicts, top rules,
+latency, the most recent denies), states what enforcing that window would have
+cost (blocks per day, prompts per day), and, when the window spans at least
+five days with zero denies, prints the exact command that flips the wired
+hooks to enforce. Run at a terminal it reads one thing more, your own
+per\-user hook configs, so it can name a hook that has fallen behind this
+build once per release; piped or as json it reads nothing but the log. The
+guard logs only flagged calls, so every count and every rate report prints is
+over flagged actions, never over all traffic. The accept subverb closes that
+loop: an audit record whose top finding carries a secret gets a fingerprint
+(the same secret\-scoped key check writes to SARIF partialFingerprints),
+report prints it under each such deny, and `skarn guard accept <fingerprint>`
+records it as a false positive so the identical call stops being flagged; a
+secret\-less deny (a structural egress detector, a typosquat, a chain) carries
+no fingerprint and no accept line. The structural egress detectors are built
+into the engine, not rule\-pack rules, and tier themselves: an egress whose
+whole payload is visible in the command itself \- a bare request, a literal
+body, query parameters, with no file sent, no credential store named, no
+earlier secret read in the same call, and no payload bytes the command text
+does not show (a command substitution, an environment expansion, a shell
+redirect, a form read, or a pipe feeding the target all keep the deny) \- is
+held at the ask tier \- a real approval prompt on the primary shell surfaces
+(Claude Code PreToolUse, Copilot preToolUse on both the CLI and VS Code,
+Cursor shell and MCP hooks), a block on the channels with no ask (Codex,
+Claude Code PermissionRequest, Copilot permissionRequest, Cursor file\-read
+events, Gemini, Grok Build) \- while a payload carrying a recognized
 credential file or upload form, a co\-detected secret, or recon earlier in the
 same call stays a deny. Both subverbs are ungated: report reads the log (plus,
 at a terminal, your own hook configs for the line above), and accept writes
@@ -73,12 +74,18 @@ Also gate Read operations (credential\-file reconnaissance).
 Hook host (default: auto\-detect from the event shape; pass codex explicitly
 for Codex CLI, which shares Claude's event names, and copilot explicitly for
 Copilot CLI, whose Claude\-compat payloads are indistinguishable from
-Claude's; Gemini CLI's Before*/After* event names are unique, so it
-auto\-detects, and the shipped configs pin it anyway). With \-\-self\-test,
-all (the default) tests the claude, cursor, codex, copilot, and gemini
-adapters, copilot on both its CLI and VS Code dialects. With report, it
-restricts the summary to one agent (repeatable or comma\-separated). One of:
-claude, cursor, codex, copilot, gemini, all.
+Claude's; Gemini CLI's Before*/After* event names are unique, Grok Build's
+camelCase hookEventName key is unique to it, and the Antigravity CLI's
+camelCase toolCall/conversationId/workspacePaths envelope is unique to it, so
+all three auto\-detect, and the shipped configs pin them anyway). Grok is the
+one host that overrides an explicit pin: an event delivered by grok's own hook
+runner is scanned by the grok adapter even where the invoking config pins
+another host, because grok runs Claude\-config and Cursor\-config hooks with
+its own payload dialect. With \-\-self\-test, all (the default) tests the
+claude, cursor, codex, copilot, gemini, grok, and antigravity adapters,
+copilot on both its CLI and VS Code dialects. With report, it restricts the
+summary to one agent (repeatable or comma\-separated). One of: claude, cursor,
+codex, copilot, gemini, grok, antigravity, all.
 .TP
 \fB\-\-event\fR \fIname\fR
 The hook event this config entry fires on, for a host whose payload does not
@@ -508,8 +515,17 @@ guard keys MCP treatment on that prefix rather than on the canonical mcp__
 form.
 .PP
 Fail mode: A non\-2 non\-zero exit is a warning and fails open; exit 2 blocks
-with stderr as the reason. \-\-strict plus enforce exits 2 on an unparseable
-event.
+with stderr as the reason. \-\-strict plus a licensed enforce exits 2 on an
+event the guard cannot parse (malformed or oversized) and on a scan that
+cannot run (unreadable rules); an out\-of\-scope action still fast\-allows,
+and an unlicensed guard is forced to audit and exits 0. A hook that runs past
+its timeout has its decision discarded and the call proceeds, and the observed
+wait tracks the hook's own runtime up to about 30 seconds rather than the
+configured value, so the timeout bounds nothing \- a fast guard is the real
+protection. From gemini\-cli 0.56.0 a crashed, timed\-out, or exit\-2 hook
+also prints a 'Hook execution for <event>: N succeeded, M failed' summary and
+a '[WARNING] Hook(s) [skarn\-guard] failed' line on stderr; only the exit\-2
+case blocks.
 .TP
 \fBBeforeTool\fR
 Scans tool_name (mapped from Gemini's own vocabulary: run_shell_command,
@@ -537,15 +553,194 @@ Scans prompt. The channel ships content off the machine, so a secret on it is
 exfiltration. Enforce: top\-level decision = deny, with the redacted reason in
 reason. Audit: systemMessage. Wired by the shipped configs. A lone secret is
 enough to deny here \- the destination is not ambiguous. A deny blocks the
-turn and discards the message from history; it is recoverable, the user edits
-and resubmits.
+turn before any request leaves for the model provider and discards the message
+from history (gemini\-cli 0.56.0 renders it as 'Agent execution blocked:
+<reason>' on stderr and exits 0); it is recoverable, the user edits and
+resubmits.
 .TP
 \fBAfterTool\fR
 Scans tool_response, an object carrying llmContent, returnDisplay, and an
-optional error, flattened into the scanned bytes. Enforce: top\-level decision
-= deny, with the reason replacing the tool result before the model sees it.
-Audit: systemMessage. Supported but opt\-in: not wired by the shipped configs.
+optional error, flattened into the scanned bytes; from gemini\-cli 0.56.0
+llmContent arrives wrapped in <untrusted_context> tags, which are scanned
+through and trigger nothing on their own. Enforce: top\-level decision = deny,
+with the reason replacing the tool result before the model sees it. Audit:
+systemMessage. Supported but opt\-in: not wired by the shipped configs. Output
+scanning. Opt\-in \- it fires on every tool result.
+.SS "Grok Build"
+Grok Build fires a PascalCase event set with a JSON envelope on stdin, in a
+camelCase dialect of its own: hookEventName carries a snake_case VALUE
+("pre_tool_use"), the tool fields are
+toolName/toolInput/toolUseId/toolInputTruncated, and PostToolUse adds
+toolResult. Skarn gates three of those events \- PreToolUse (the only
+enforcement point grok offers), UserPromptSubmit (the submitted prompt, an
+egress channel), and PostToolUse (the tool result, opt\-in) \- and every other
+event fast\-allows. Grok has NO non\-deciding channel: its passive events
+ignore stdout entirely and every recognized PreToolUse output decides, so the
+guard emits nothing at all in audit mode and the would\-be verdict lands only
+in the guard log, which skarn guard report reads. Timeouts are seconds (the
+shipped entries use grok's 5\-second default). The honest posture is
+fail\-open: every grok hook failure, timeout, crash or malformed output is
+recorded for the session scrollback and blocks nothing, so an explicit deny is
+the only thing that stops a call.
+.PP
+Routing: The camelCase hookEventName key is unique to grok \- Claude, Codex,
+Cursor and VS Code Copilot spell it hook_event_name, and the Copilot CLI
+carries no event\-name field \- so an unpinned grok payload auto\-detects on
+key presence, before the Copilot CLI's toolName/sessionId structural tells
+that it would otherwise trip. Grok is also the ONE place the guard overrides
+an explicit \-\-agent pin: grok natively runs the hooks configured in
+~/.claude/settings.json and ~/.cursor/hooks.json and invokes them with its own
+dialect, so a hook pinned \-\-agent claude is handed grok events it cannot
+read. When the process environment carries GROK_HOOK_EVENT (grok's runner
+injects it for every hook and strips any value a config sets) AND the payload
+carries hookEventName, the event routes to the grok adapter whatever the pin
+says. Neither signal alone moves a pin, and a real Claude payload under a
+claude pin is unaffected either way. MCP tools arrive under their resolved
+server__tool name with no prefix; the guard rewrites that to the canonical
+mcp__ form so every tool\-keyed detector sees an MCP call, and an MCP call
+never fast\-allows.
+.PP
+Fail mode: Every failure fails open, which is grok's own posture for hooks: a
+non\-zero exit other than 2 is recorded and blocks nothing. Exit 2 is an
+explicit PreToolUse deny, and a deny on stdout is honored regardless of the
+exit code (a stdout allow paired with exit 2 still denies, so the guard never
+pairs the two). \-\-strict plus enforce turns an unparseable event into one
+stderr line and exit 2.
+.TP
+\fBPreToolUse\fR
+Scans toolName (mapped from grok's own vocabulary: run_terminal_command,
+search_replace, read_file, web_fetch, web_search, spawn_subagent) plus the
+flattened toolInput; a run_terminal_command command is also carried raw so a
+tool description cannot poison the package parse. Enforce: top\-level decision
+= deny, with the redacted reason in reason (a would\-be ask degrades to deny:
+grok's schema has no ask value). Audit: nothing \- grok has no non\-deciding
+channel, so the would\-be verdict goes to the guard log only. Wired by the
+shipped configs. The shipped entry carries NO matcher: an omitted matcher
+matches every tool and the guard scopes in\-process, which also keeps the file
+free of a matcher list that would drift from the adapter. grep and list_dir
+are deliberately unmapped, so they pass through and fall out of scope.
+toolInputTruncated is tolerated: the guard scans the bytes grok hands it and
+claims nothing about what was cut.
+.TP
+\fBUserPromptSubmit\fR
+Scans prompt. The channel ships content off the machine, so a secret on it is
+exfiltration. Enforce: nothing \- grok ignores stdout on this event, so it is
+detection and audit only. Audit: nothing \- the would\-be verdict goes to the
+guard log only. Wired by the shipped configs. A lone secret is enough to flag
+here \- the destination is not ambiguous \- but grok gives the hook no way to
+stop the turn, so the record is the whole product. A matcher on this event is
+ignored with a warning by grok, which is the second reason the shipped file
+carries none.
+.TP
+\fBPostToolUse\fR
+Scans toolResult, typed as arbitrary JSON, so a string result and an object
+one are both flattened into the scanned bytes. Enforce: nothing \- grok
+ignores stdout on this event. Audit: nothing \- the would\-be verdict goes to
+the guard log only. Supported but opt\-in: not wired by the shipped configs.
 Output scanning. Opt\-in \- it fires on every tool result.
+.TP
+\fBpre_tool_use\fR
+Scans the same event as PreToolUse. Enforce: top\-level decision = deny.
+Audit: nothing. Supported but opt\-in: not wired by the shipped configs. The
+wire form of PreToolUse: grok's stdin envelope spells the event value in
+snake_case while its config files use the PascalCase name, and the adapter
+recognizes both.
+.TP
+\fBuser_prompt_submit\fR
+Scans the same event as UserPromptSubmit. The channel ships content off the
+machine, so a secret on it is exfiltration. Enforce: nothing. Audit: nothing.
+Supported but opt\-in: not wired by the shipped configs. The wire form of
+UserPromptSubmit.
+.TP
+\fBpost_tool_use\fR
+Scans the same event as PostToolUse. Enforce: nothing. Audit: nothing.
+Supported but opt\-in: not wired by the shipped configs. The wire form of
+PostToolUse.
+.SS "Antigravity CLI (agy)"
+The Antigravity CLI (agy) fires five PascalCase events \- PreToolUse,
+PostToolUse, PreInvocation, PostInvocation, Stop \- with a camelCase protojson
+envelope on stdin and NO event\-name field: the hooks.json entry that fired is
+the only thing that names the event, so the adapter reads the event off the
+payload shape (a toolCall with no error key is the PreToolUse it gates; every
+other shape fast\-allows). PreToolUse is the whole guard surface on this host:
+PreInvocation carries no prompt text and PostToolUse carries no tool output,
+so there is no prompt\-submit gate and no result scan (verified on agy 1.1.18
+and 1.1.19). The stdout contract is a flat {"decision","reason"} object, and
+agy FAILS CLOSED on everything but an explicit allow: a deny blocks, and a
+crash, a timeout (seconds; the shipped entries use 5), invalid JSON, and an
+empty {} (a missing decision) all block the call and the model sees the
+hook\-failure text; only an empty stdout was observed to proceed (1.1.19),
+which is undocumented and which the guard never relies on. The guard therefore
+answers EVERY tool event with an explicit decision: enforce prints deny or
+allow, audit prints allow with the would\-be verdict in reason (agy has no
+non\-deciding channel), an out\-of\-scope tool gets an explicit allow, and a
+non\-tool event gets the empty object. ask is not a block on agy (it hands the
+call to the permission layer, which auto\-denies in print mode), so a
+would\-be ask degrades to deny. An allow never grants a permission: agy's own
+permission check still runs after the hook.
+.PP
+Routing: The camelCase toolCall / conversationId / workspacePaths /
+artifactDirectoryPath field set is unique to agy \- Claude, Codex, Cursor,
+Gemini, and VS Code Copilot use snake_case envelopes, the Copilot CLI spells
+its fields toolName/toolArgs/sessionId, and grok's tell is hookEventName \- so
+an unpinned agy payload auto\-detects (before the Claude PascalCase fallback,
+so a future payload that adds hook_event_name still routes here); the shipped
+configs pin \-\-agent antigravity anyway, uniform policy. The agy tool
+vocabulary on the hook wire was pinned live (1.1.19): a file write fires as
+write_to_file (TargetFile/CodeContent) and an edit as replace_file_content or
+multi_replace_file_content (TargetFile/ReplacementContent), while run_command,
+view_file, browser_*, the read_url_content/open_browser_url/search_web network
+steps, and the agency_tool_call/invoke_subagent/browser_subagent subagent
+steps keep their step\-type spellings; the step\-type spellings of the write
+tools (file_change, code_action, edit_notebook) stay mapped and matched as
+drift aliases. The MCP dispatch is call_mcp_tool on the hook wire (the
+binary's hook tool table) and mcp_tool in the transcript the scan parser
+reads; both are rewritten to the canonical mcp__ form (from the
+ServerName/ToolName args), so an MCP call never fast\-allows. The grok
+override still applies: a hook process grok spawned routes to grok whatever
+the pin.
+.PP
+Fail mode: Fail\-closed by the host's design, on every outcome but an explicit
+allow: a crashed, slow (past the entry's timeout, in seconds), or malformed
+skarn BLOCKS the tool call, and a missing skarn binary blocks every matched
+call the same way (sh \-c exits 127). Enforce and audit are both hard gates
+here \- audit cannot fail more open than enforce, so a machine where the hook
+is wired and the binary is gone blocks matched calls until the binary is back
+or the entry is removed. \-\-strict plus a licensed enforce answers an event
+the guard cannot parse with an explicit deny; without \-\-strict it answers an
+explicit allow, which is the only way to fail open on this host.
+.TP
+\fBPreToolUse\fR
+Scans toolCall.name mapped to canonical (run_command to Bash; write_to_file,
+file_change, and code_action to Write; replace_file_content and
+multi_replace_file_content to Edit; notebook_edit and edit_notebook to
+NotebookEdit; view_file to Read; browser_subagent, invoke_subagent, and
+agency_tool_call to spawn_agent; every other browser_* plus
+execute_browser_javascript, capture_browser_screenshot, read_url_content, and
+open_browser_url to WebFetch; search_web to WebSearch; call_mcp_tool and
+mcp_tool to mcp__) plus the flattened toolCall.args, with the
+TargetFile/AbsolutePath path lifted to a canonical file_path line for the
+write\-target detectors; a run_command's CommandLine is also carried raw so
+toolSummary and toolAction cannot poison the package parse. Enforce:
+top\-level decision = deny, with the redacted reason in reason (a would\-be
+ask degrades to deny: ask is not a block on agy); an allow is printed
+explicitly, because the contract requires a decision and an empty {} is a
+deny. Audit: top\-level decision = allow, with the would\-be verdict (and the
+unlicensed advisory) in reason \- agy has no non\-deciding channel. Wired by
+the shipped configs. The shipped matcher names the scoped tools
+(run_command|write_to_file|replace_file_content|multi_replace_file_content|file_change|code_action|notebook_edit|edit_notebook|browser_.*|execute_browser_javascript|capture_browser_screenshot|read_url_content|open_browser_url|search_web|call_mcp_tool|mcp_tool|agency_tool_call|invoke_subagent)
+rather than * so a fail\-closed host does not pay a hook round\-trip, and its
+failure modes, on read\-only steps. view_file is deliberately NOT in the
+shipped matcher: without \-\-strict the adapter fast\-allows every read, so
+wiring it would put agy's fail\-closed exposure on every file view for no
+scan; a \-\-strict install adds view_file| to the matcher, which then
+path\-gates the named credential stores (content\-keyed read detectors need
+tool output agy never provides, so a dotenv read is not detected on this
+host). The event name is not in the payload: a PreToolUse is recognized by its
+toolCall with no error key, and a PostToolUse (toolCall plus error) is
+answered with the empty object it expects and scanned for nothing, since it
+carries no tool output. The hook runs before agy's permission check, and
+skarn's allow grants nothing.
 .SH "SEE ALSO"
 skarn(1)
 .SH COPYRIGHT

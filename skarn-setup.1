@@ -1,4 +1,4 @@
-.TH "SKARN-SETUP" "1" "2026-06-23" "skarn 0.24.0" "Skarn Manual"
+.TH "SKARN-SETUP" "1" "2026-06-23" "skarn 0.25.0" "Skarn Manual"
 .SH NAME
 skarn\-setup \- Wire the skarn guard hook into detected AI coding agents
 (merge\-based, reversible), then verify it with the guard self\-test
@@ -9,29 +9,38 @@ Wire the skarn guard hook into detected AI coding agents (merge\-based,
 reversible), then verify it with the guard self\-test.
 .PP
 Guided onboarding: detect installed AI coding agents (Claude Code, Cursor,
-Codex CLI, Copilot CLI, Gemini CLI), merge the skarn guard hook into each
-one's native config in audit mode, and prove the wiring with the guard
-self\-test. \-\-scope project writes committed, shareable configs whose
+Codex CLI, Copilot CLI, Gemini CLI, Grok Build), merge the skarn guard hook
+into each one's native config in audit mode, and prove the wiring with the
+guard self\-test. \-\-scope project writes committed, shareable configs whose
 commands are portable by construction (a PATH\-guarded invocation and a
 literal $HOME log path, never this machine's absolute paths) \- with one
-honest exception: Gemini CLI has a single cross\-platform command field, so a
-file committed from a POSIX machine carries the POSIX form and a
-native\-Windows teammate's hook fails open with a warning instead of running;
+honest exception: Gemini CLI and Grok Build each read a single cross\-platform
+command field, so a file committed from a POSIX machine carries the POSIX form
+and a native\-Windows teammate's hook fails open with a warning instead of
+running, and grok's project hooks additionally wait on a /hooks\-trust grant;
 \-\-plugin commits the claude plugin requirement instead of hook entries, and
 the two project routes are mutually exclusive \- each removes the other's
 skarn\-owned entries so the guard can never fire twice. Existing foreign hooks
 are never touched; every modified file is backed up first
-(*.skarn\-bak.<timestamp>) and rewritten atomically; a target file that does
-not parse as JSON is refused, never overwritten. On a terminal it runs an
-interactive wizard with default\-yes prompts; \-\-yes accepts everything,
-\-\-print writes nothing.
+(*.skarn\-bak.<timestamp>, carrying the target's own permissions) and
+rewritten atomically; a target file that does not parse as JSON is refused,
+never overwritten. At \-\-scope project a target that is a symlink, that sits
+behind a symlinked directory, or whose path skarn cannot examine at all, is
+refused too, before anything is read or created: a committed symlink can name
+any file on the machine, and following it would copy that file's bytes into a
+backup beside it and rewrite it in place. User scope still follows the link,
+because a dotfiles manager legitimately puts one there \- and the atomic
+rewrite then leaves a regular file where the link was, so a stow\-managed
+config has to be relinked afterwards. On a terminal it runs an interactive
+wizard with default\-yes prompts; \-\-yes accepts everything, \-\-print writes
+nothing.
 .SH OPTIONS
 .TP
 \fB\-\-agent\fR \fIname\fR
 Target agents, repeatable or comma\-separated. Default: all detected (an agent
 is detected when its config directory exists or its CLI is on PATH); naming an
 agent explicitly also targets it when undetected. One of: claude, cursor,
-codex, copilot, gemini, all.
+codex, copilot, gemini, grok, all.
 .TP
 \fB\-\-mode\fR \fImode\fR
 Guard mode written into the hook commands. Audit records would\-be verdicts to
@@ -72,20 +81,24 @@ skarn from PATH on every machine. The default is this binary's absolute path.
 .TP
 \fB\-\-scope\fR \fIscope\fR
 Write user\-level configs (~/.claude/settings.json, ~/.cursor/hooks.json,
-~/.codex/hooks.json, ~/.copilot/hooks/skarn.json, ~/.gemini/settings.json) or
-project\-level ones (./.claude, ./.cursor, ./.codex,
-\&./.github/hooks/skarn.json, ./.gemini relative to the working directory),
-meant to be committed and shared. The two scopes deliberately write different
-command shapes: user scope bakes this binary's absolute path (immune to a GUI
-host's missing PATH), project scope emits a portable PATH\-guarded command (if
-command \-v skarn ...; then ...; else exit 0; fi) with a literal $HOME log
-path, so the committed file runs unmodified on every teammate's machine and
-exits 0 where skarn is not installed. Gemini is the one exception to that
-promise: it reads a single command field on every platform, so the committed
-POSIX form does not run under the PowerShell a native\-Windows teammate's
-Gemini uses \- the hook exits non\-zero, Gemini treats that as a warning and
-continues, and that machine is unprotected until it wires its own. Copilot
-honors $COPILOT_HOME as its user\-scope root. One of: user, project. The
+~/.codex/hooks.json, ~/.copilot/hooks/skarn.json, ~/.gemini/settings.json,
+~/.grok/hooks/skarn.json) or project\-level ones (./.claude, ./.cursor,
+\&./.codex, ./.github/hooks/skarn.json, ./.gemini, ./.grok/hooks/skarn.json
+relative to the working directory), meant to be committed and shared. The two
+scopes deliberately write different command shapes: user scope bakes this
+binary's absolute path (immune to a GUI host's missing PATH), project scope
+emits a portable PATH\-guarded command (if command \-v skarn ...; then ...;
+else exit 0; fi) with a literal $HOME log path, so the committed file runs
+unmodified on every teammate's machine and exits 0 where skarn is not
+installed. Gemini is the one exception to that promise: it reads a single
+command field on every platform, so the committed POSIX form does not run
+under the PowerShell a native\-Windows teammate's Gemini uses \- the hook
+exits non\-zero, Gemini treats that as a warning and continues, and that
+machine is unprotected until it wires its own. Grok reads one command field on
+every platform too, and the same caveat applies to a committed
+\&.grok/hooks/skarn.json; its project hooks additionally run only once the
+folder is trusted with /hooks\-trust. Copilot honors $COPILOT_HOME as its
+user\-scope root, and grok honors $GROK_HOME. One of: user, project. The
 default is user.
 .TP
 \fB\-\-plugin\fR
@@ -149,6 +162,21 @@ that folder is trusted.
 Gemini CLI's user settings: MCP server definitions read by vet, and the hooks
 object skarn setup \-\-agent gemini merges the guard into and doctor reads as
 the user precedence layer.
+.TP
+\fB~/.grok/hooks/skarn.json\fR
+Grok Build's user hook file for skarn, written whole by skarn setup \-\-agent
+grok and read by doctor as the setup\-owned half of grok's user layer. Grok
+loads every *.json in ~/.grok/hooks, so skarn owns a file of its own there and
+never merges into a foreign one; doctor folds the directory's other files into
+the same layer, so a hook wired by hand under another name still counts.
+$GROK_HOME moves the whole directory.
+.TP
+\fB.grok/hooks/skarn.json\fR
+Grok Build's project hook file for skarn, written by skarn setup \-\-agent
+grok \-\-scope project and meant to be committed. Grok runs a project hook
+only after the folder is trusted (/hooks\-trust, or launching with \-\-trust);
+until then it skips the file silently, so doctor reports that layer as inert
+rather than as protection.
 .SH "SEE ALSO"
 skarn(1)
 .SH COPYRIGHT

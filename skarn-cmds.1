@@ -1,4 +1,4 @@
-.TH "SKARN-CMDS" "1" "2026-06-23" "skarn 0.24.0" "Skarn Manual"
+.TH "SKARN-CMDS" "1" "2026-06-23" "skarn 0.25.0" "Skarn Manual"
 .SH NAME
 skarn\-cmds \- Show the shell commands run across sessions
 .SH SYNOPSIS
@@ -11,7 +11,7 @@ Shell commands run across sessions.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot, kimi.
+copilot, kimi, grok, grokbot, antigravity.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths, each
@@ -22,10 +22,29 @@ canonical root path, or a parent directory of that root.
 Restrict to sessions whose working directory is under this path.
 .TP
 \fB\-\-since\fR \fIdate\fR
-Lower bound of the time window; takes priority over \-\-hours.
+Lower bound of the time window, applied to a session file's last\-modified
+time rather than to when the session started: a session begun before the bound
+but written to inside it is included, which keeps a resumed session visible
+under the day you worked on it. Takes priority over \-\-hours. Naming one
+session by id changes this: `skarn search \-\-session <id>`, `skarn stats
+<id>` and the other per\-session views ignore the window altogether, and
+`skarn messages <id>` is the single command that applies it there, reading
+BOTH bounds against the session's own start time rather than its file and
+refusing an out\-of\-window session with exit 1 instead of filtering it out. A
+bare YYYY\-MM\-DD means that day's midnight, shifted by \-\-tz\-offset; a full
+ISO timestamp is used as given.
 .TP
 \fB\-\-until\fR \fIdate\fR
-Upper bound of the time window.
+Upper bound of the time window, applied to when a session STARTED rather than
+to when its file was last written: a session that began after the bound is
+excluded even if it was already running before it. The two bounds therefore
+read different timestamps. Passing it without \-\-since also drops the
+\-\-hours lower bound, so the window becomes all history up to the bound. A
+bare YYYY\-MM\-DD covers that whole day through 23:59:59, shifted by
+\-\-tz\-offset; a full ISO timestamp is used as given. A session whose start
+time cannot be parsed is kept. A view that names one session by id ignores
+this bound, except `skarn messages <id>`, which refuses a session past it with
+exit 1 rather than dropping it from a list.
 .TP
 \fB\-\-tz\-offset\fR \fIminutes\fR
 Timezone offset in minutes for date grouping and display. The default is 0.

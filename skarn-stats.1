@@ -1,4 +1,4 @@
-.TH "SKARN-STATS" "1" "2026-06-23" "skarn 0.24.0" "Skarn Manual"
+.TH "SKARN-STATS" "1" "2026-06-23" "skarn 0.25.0" "Skarn Manual"
 .SH NAME
 skarn\-stats \- Session analytics: tokens, models, tools, and timing (text,
 json, csv, or html)
@@ -9,11 +9,23 @@ Session analytics: tokens, models, tools, and timing (text, json, csv, or
 html).
 .PP
 Session analytics. A positional session id switches to a per\-session view.
+Under \-\-show timing the active\-time number answers to three different key
+names depending on the output shape, and a reader that asks for the wrong one
+gets null rather than an error: a by\-date or by\-project row calls it
+active_secs, the ungrouped totals and a per\-session view call it
+active_time_secs, and a by\-date row carries a second number the other shapes
+do not, active_wall_secs. The two by\-date numbers count differently.
+active_secs adds each session's own active time to the first day that session
+touched inside the window, so two sessions you ran side by side both count in
+full and a day can total more than the clock allows. active_wall_secs merges
+the same active intervals per calendar day, so overlapping sessions count
+once, which is the number to bill from. A per\-session view lists its pauses
+under idle_gaps, keyed gap_secs and after_message.
 .SH OPTIONS
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot, kimi.
+copilot, kimi, grok, grokbot, antigravity.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths, each
@@ -24,10 +36,29 @@ canonical root path, or a parent directory of that root.
 Restrict to sessions whose working directory is under this path.
 .TP
 \fB\-\-since\fR \fIdate\fR
-Lower bound of the time window; takes priority over \-\-hours.
+Lower bound of the time window, applied to a session file's last\-modified
+time rather than to when the session started: a session begun before the bound
+but written to inside it is included, which keeps a resumed session visible
+under the day you worked on it. Takes priority over \-\-hours. Naming one
+session by id changes this: `skarn search \-\-session <id>`, `skarn stats
+<id>` and the other per\-session views ignore the window altogether, and
+`skarn messages <id>` is the single command that applies it there, reading
+BOTH bounds against the session's own start time rather than its file and
+refusing an out\-of\-window session with exit 1 instead of filtering it out. A
+bare YYYY\-MM\-DD means that day's midnight, shifted by \-\-tz\-offset; a full
+ISO timestamp is used as given.
 .TP
 \fB\-\-until\fR \fIdate\fR
-Upper bound of the time window.
+Upper bound of the time window, applied to when a session STARTED rather than
+to when its file was last written: a session that began after the bound is
+excluded even if it was already running before it. The two bounds therefore
+read different timestamps. Passing it without \-\-since also drops the
+\-\-hours lower bound, so the window becomes all history up to the bound. A
+bare YYYY\-MM\-DD covers that whole day through 23:59:59, shifted by
+\-\-tz\-offset; a full ISO timestamp is used as given. A session whose start
+time cannot be parsed is kept. A view that names one session by id ignores
+this bound, except `skarn messages <id>`, which refuses a session past it with
+exit 1 rather than dropping it from a list.
 .TP
 \fB\-\-tz\-offset\fR \fIminutes\fR
 Timezone offset in minutes for date grouping and display. The default is 0.
