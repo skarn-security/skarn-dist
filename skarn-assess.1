@@ -1,4 +1,4 @@
-.TH "SKARN-ASSESS" "1" "2026-06-23" "skarn 0.27.0" "Skarn Manual"
+.TH "SKARN-ASSESS" "1" "2026-06-23" "skarn 0.28.0" "Skarn Manual"
 .SH NAME
 skarn\-assess \- Scan every AI session on this machine and print a friendly
 risk summary, with an optional shareable redacted report and a scoped incident
@@ -51,7 +51,7 @@ Restrict the scan to one assistant's sessions. A name this machine has no tool
 for is refused with exit 6 rather than scanned as empty, so a typo cannot pass
 for a clean result. A custom tool declared in ~/.skarn.json is accepted by its
 configured name. One of: claude, gemini, codex, cursor, copilot, kimi, grok,
-grokbot, antigravity.
+grokbot, antigravity, opencode.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict the scan to matching projects: a comma\-separated list of names or

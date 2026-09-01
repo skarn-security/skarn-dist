@@ -1,4 +1,4 @@
-.TH "SKARN-CHECK" "1" "2026-06-23" "skarn 0.27.0" "Skarn Manual"
+.TH "SKARN-CHECK" "1" "2026-06-23" "skarn 0.28.0" "Skarn Manual"
 .SH NAME
 skarn\-check \- Scan AI sessions for leaked credentials and attack patterns
 .SH SYNOPSIS
@@ -65,7 +65,7 @@ Restrict the scan to one assistant's sessions. A name this machine has no tool
 for is refused with exit 6 rather than scanned as empty, so a typo cannot pass
 for a clean result. A custom tool declared in ~/.skarn.json is accepted by its
 configured name. One of: claude, gemini, codex, cursor, copilot, kimi, grok,
-grokbot, antigravity.
+grokbot, antigravity, opencode.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict the scan to matching projects: a comma\-separated list of names or
@@ -221,10 +221,11 @@ setup and guard \-\-self\-test: a target was refused or a verification failed.
 For doctor: at least one check FAILED (a warning never exits nonzero), or an
 unknown option was passed, which is refused before any check runs. For
 restore: the recorded working directory or session id could not be rendered
-safely, so nothing was printed to stdout and the refusal is named on stderr.
-Also: the first\-run EULA prompt was declined, so the invoked operation was
-not performed. For mcp: an unknown argument was passed, which is refused
-before the protocol loop starts.
+safely, or the working directory carries a detected secret and \-\-no\-redact
+was not passed, so nothing was printed to stdout and the refusal is named on
+stderr. Also: the first\-run EULA prompt was declined, so the invoked
+operation was not performed. For mcp: an unknown argument was passed, which is
+refused before the protocol loop starts.
 .TP
 \fB2\fR
 The session risk score exceeded the \-\-fail\-on\-risk threshold. For setup:
@@ -282,11 +283,13 @@ guard accept, the recall commands, guard, setup, doctor, vet, mcp, license,
 taxonomies and check \-\-audit\-verify never exit 7.
 .SH SECURITY
 Skarn scans locally and makes no network connection by default. Secrets are
-redacted in every output format. \-\-no\-redact lifts that only where it is
-honored \- check's text, json and sarif reports, and export's raw session
-content; the ndjson stream, the evidence pack, the artifacts written by
-\-\-drop, serve and assess, the baseline files, and the guard ignore it and
-stay redacted.
+redacted in check's reports and in everything the recall commands print
+(search, recent, messages, stats, cmds, tools, mcps, restore, export).
+\-\-no\-redact lifts the mask only where it is honored \- check's text, json
+and sarif reports, and the session content the recall commands print; the
+ndjson stream, the evidence pack, the artifacts written by \-\-drop, serve and
+assess, the baseline files, the mcp tools, the guard, and every serve API
+route that returns session content ignore it and stay redacted.
 .PP
 Two commands transmit anything off the machine, and only when you type them.
 skarn check \-\-update\-rules fetches a signed feed bundle from the subscriber
@@ -312,10 +315,12 @@ skarn mcp reads the same session stores as assess and the same configuration
 files as vet, read\-only and with no network call, and answers only the AI
 coding assistant that spawned it over stdin and stdout. Its results are the
 redacted scan report, the masked vet report, and session metadata carrying
-neither message text nor any label authored inside a transcript. Because the
-assistant receives those results, they travel wherever that assistant sends
-its context, so treat them as leaving the machine even though skarn itself
-opens no socket.
+neither message text nor any label authored inside a transcript; with
+\-\-enable\-recall the two content tools add session text and labels with
+every detected secret masked, and the search response carries no echo of the
+query or of the project filter. Because the assistant receives those results,
+they travel wherever that assistant sends its context, so treat them as
+leaving the machine even though skarn itself opens no socket.
 .SH "SEE ALSO"
 skarn(1)
 .SH COPYRIGHT

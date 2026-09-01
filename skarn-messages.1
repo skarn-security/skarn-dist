@@ -1,4 +1,4 @@
-.TH "SKARN-MESSAGES" "1" "2026-06-23" "skarn 0.27.0" "Skarn Manual"
+.TH "SKARN-MESSAGES" "1" "2026-06-23" "skarn 0.28.0" "Skarn Manual"
 .SH NAME
 skarn\-messages \- Show the messages of a session
 .SH SYNOPSIS
@@ -7,12 +7,19 @@ skarn\-messages \- Show the messages of a session
 Show the messages of a session.
 .PP
 Show one session's messages. The session is a positional id or \-\-session;
-the other flags only narrow which session a prefix resolves to.
+the other flags only narrow which session a prefix resolves to. Every message
+and every label is printed with detected secrets masked; \-\-no\-redact prints
+the session as recorded.
 .SH OPTIONS
+.TP
+\fB\-\-no\-redact\fR
+Print raw session content and skip the detection scan. By default every
+detected secret is masked in the output; the match and every filter run on the
+raw text either way, so a masked value still finds its session.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot, kimi, grok, grokbot, antigravity.
+copilot, kimi, grok, grokbot, antigravity, opencode.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths, each

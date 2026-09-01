@@ -1,4 +1,4 @@
-.TH "SKARN-GUARD" "1" "2026-06-23" "skarn 0.27.0" "Skarn Manual"
+.TH "SKARN-GUARD" "1" "2026-06-23" "skarn 0.28.0" "Skarn Manual"
 .SH NAME
 skarn\-guard \- Real\-time pre\-execution hook for editor/agent integration;
 reads an event on stdin and emits a verdict. guard report summarizes the audit
@@ -75,36 +75,51 @@ Hook host (default: auto\-detect from the event shape; pass codex explicitly
 for Codex CLI, which shares Claude's event names, and copilot explicitly for
 Copilot CLI, whose Claude\-compat payloads are indistinguishable from
 Claude's; Gemini CLI's Before*/After* event names are unique, Grok Build's
-camelCase hookEventName key is unique to it, and the Antigravity CLI's
-camelCase toolCall/conversationId/workspacePaths envelope is unique to it, so
-all three auto\-detect, and the shipped configs pin them anyway). Grok is the
-one host that overrides an explicit pin: an event delivered by grok's own hook
-runner is scanned by the grok adapter even where the invoking config pins
-another host, because grok runs Claude\-config and Cursor\-config hooks with
-its own payload dialect. With \-\-self\-test, all (the default) tests the
-claude, cursor, codex, copilot, gemini, grok, and antigravity adapters,
-copilot on both its CLI and VS Code dialects. With report, it restricts the
-summary to one agent (repeatable or comma\-separated). One of: claude, cursor,
-codex, copilot, gemini, grok, antigravity, all.
+camelCase hookEventName key is unique to it, the Antigravity CLI's camelCase
+toolCall/conversationId/workspacePaths envelope is unique to it, and Kimi Code
+stamps client_type on every payload, so all four auto\-detect, and the shipped
+configs pin them anyway \- on kimi the pin is load\-bearing rather than
+uniform policy, because a host embedding kimi's older hook engine sends no
+client_type and its Claude\-shaped prompt event then fails open under the
+Claude adapter. Grok is the one host that overrides an explicit pin: an event
+delivered by grok's own hook runner is scanned by the grok adapter even where
+the invoking config pins another host, because grok runs Claude\-config and
+Cursor\-config hooks with its own payload dialect. With \-\-self\-test, all
+(the default) tests the claude, cursor, codex, copilot, gemini, grok,
+antigravity, and kimi adapters, copilot on both its CLI and VS Code dialects.
+With report, it restricts the summary to one agent (repeatable or
+comma\-separated). One of: claude, cursor, codex, copilot, gemini, grok,
+antigravity, kimi, all.
 .TP
 \fB\-\-event\fR \fIname\fR
 The hook event this config entry fires on, for a host whose payload does not
-name its own event. Only the Copilot CLI needs it: its permissionRequest
-payload carries a subset of preToolUse's documented fields and nothing
-separates the two, so a permissionRequest entry must say so or the guard reads
-it as a preToolUse and answers in a schema that event does not understand.
-Default: the event is inferred from the payload shape, which never yields
-permissionRequest. Ignored by every host whose payload names its own event,
-and by the VS Code Copilot dialect. One of: preToolUse, permissionRequest.
+name its own event. The Copilot CLI needs it: its permissionRequest payload
+carries a subset of preToolUse's documented fields and nothing separates the
+two, so a permissionRequest entry must say so or the guard reads it as a
+preToolUse and answers in a schema that event does not understand. Default:
+the event is inferred from the payload shape, which never yields
+permissionRequest. Codex names its own event and the pin never overrides that
+name; it is read only where the name is missing, so a strict deny for a
+payload that never parsed, or a call whose payload carries no hook_event_name,
+takes the pinned shape instead of the PreToolUse default. Ignored by every
+other host, and by the VS Code Copilot dialect. One of: preToolUse,
+permissionRequest.
 .TP
 \fB\-\-self\-test\fR
-Verify the guard wiring instead of reading an event: feed two synthetic
-fixture events (one benign, one carrying a fake credential) through each
-adapter's real code path and report the verdicts, latency, and a guard\-log
+Verify the guard's own code path instead of reading an event: feed two
+synthetic fixture events (one benign, one carrying a fake credential) through
+each adapter's real code path (the kimi pair carries kimi's own client_type
+stamp and content\-block prompt shape, so the fixture proves the routing the
+shipped pin also asserts) and report the verdicts, latency, and a guard\-log
 write probe. The fake credential is only ever printed redacted, and the
 self\-test deliberately ignores the accepted\-findings baseline, so an
-accepted fingerprint can never make a dead hook look alive. Exit 0 when every
-adapter passes, 1 otherwise; works unlicensed (audit semantics).
+accepted fingerprint can never make a dead hook look alive. What it proves is
+the binary, the adapter and the log write \- it runs entirely in this process
+and reads no host config, so it never proves that a host is calling the hook:
+skarn doctor reads the host configs for that, and on a host doctor does not
+cover (kimi today) the only proof is a flagged action driven through the host
+itself. Exit 0 when every adapter passes, 1 otherwise; works unlicensed (audit
+semantics).
 .TP
 \fB\-\-log\fR \fIpath\fR
 On the hook invocation, `skarn guard \-\-log <path|none>`: where this call
@@ -273,7 +288,7 @@ near\-identical PreToolUse JSON \- but its verdict semantics differ:
 permissionDecision ask and a bare allow both FAIL OPEN, so a would\-be ask
 degrades to deny. Codex fires more events than Skarn wires; the rest are
 evaluated and deliberately left off the matrix (verified against the OpenAI
-Hooks guide, 2026\-07\-21): SessionStart and SubagentStart carry only session
+Hooks guide, 2026\-08\-30): SessionStart and SubagentStart carry only session
 and subagent metadata (model, permission_mode, agent_id/type), no
 credential\-bearing tool or prompt content; PreCompact and PostCompact carry
 only a compaction trigger over already\-seen transcript the recall scan
@@ -281,8 +296,17 @@ covers; SubagentStop carries last_assistant_message (so it is NOT
 content\-free), but that post\-hoc subagent output lands in the session store
 the recall scan and the turn\-end advisory already cover, so it is a
 deliberate deferral pending the cross\-action daemon the codex README names.
-Codex has no SessionEnd event in the current reference; if one lands in a
-later release it is additive.
+SessionEnd, which the previous sweep recorded as absent and the reference now
+documents, carries a session id, a transcript path where one exists, and a
+reason (always other); it fires on archive, on deletion, on a normal close,
+and after 30 minutes idle, so it reaches a lifecycle moment the turn\-scoped
+Stop row cannot \- a codex session that ends without another turn produces no
+Stop, and if the shared hourly advisory budget was spent on the other host in
+the meantime that session's nudge is simply lost. It stays unwired anyway: its
+output is advisory and cannot steer Codex, so the nudge has no committed
+surface there, and Codex runs it synchronously under a 1\-second default
+timeout capped at 3 seconds, which the recent\-session scan can exceed on a
+large store. The gap is recorded rather than closed.
 .PP
 Routing: Codex shares Claude's event names, so pass \-\-agent codex
 explicitly. Auto\-detection falls back to a Codex\-only tell: turn_id (on
@@ -296,24 +320,29 @@ deny JSON on an unparseable event.
 Scans tool_name plus the flattened tool_input; only Bash carries a raw shell
 command (apply_patch's command field is patch text). Enforce:
 hookSpecificOutput.permissionDecision = deny, with the redacted reason in
-permissionDecisionReason. Audit: continue = true plus systemMessage (Codex
-PreToolUse has no additionalContext). Wired by the shipped configs.
+permissionDecisionReason. Audit: systemMessage alone \- the Codex reference
+lists continue, stopReason and suppressOutput as unsupported on this event, so
+Skarn sends none of them (its parser today rejects only continue:false, but
+Skarn does not rely on that). Wired by the shipped configs.
 .TP
 \fBPermissionRequest\fR
 Scans the same tool_name plus tool_input as PreToolUse. Enforce:
 hookSpecificOutput.decision.behavior = deny, with the redacted reason in
-message. Audit: systemMessage. Wired by the shipped configs. The
-approval\-flow gate: any deny wins, closing PreToolUse's updatedInput and ask
-fail\-open edges.
+message. Audit: systemMessage alone \- the reference lists the same three
+universal fields as unsupported here as on PreToolUse. Wired by the shipped
+configs. The approval\-flow gate: any deny wins, closing PreToolUse's
+updatedInput and ask fail\-open edges.
 .TP
 \fBUserPromptSubmit\fR
 Scans prompt. The channel ships content off the machine, so a secret on it is
 exfiltration. Enforce: top\-level decision = block, with the redacted reason
-in reason. Audit: systemMessage. Wired by the shipped configs.
+in reason. Audit: continue = true plus systemMessage \- this event supports
+the universal fields. Wired by the shipped configs.
 .TP
 \fBPostToolUse\fR
 Scans tool_response of an in\-scope tool. Enforce: top\-level decision =
-block, with the redacted reason in reason. Audit: systemMessage. Supported but
+block, with the redacted reason in reason. Audit: continue = true plus
+systemMessage \- this event supports the universal fields. Supported but
 opt\-in: not wired by the shipped configs. Output scanning. Opt\-in \- it
 fires on every tool result.
 .TP
@@ -332,15 +361,18 @@ host can suppress the other's nudge for that hour \- a deliberate global
 budget, not a per\-host one. Never egresses, never prints a secret value.
 .SS "GitHub Copilot CLI"
 The Copilot CLI's native payload is camelCase (toolName / toolArgs /
-sessionId) and carries no event\-name field, so the event is inferred from the
-field shape \- except permissionRequest, whose payload is a subset of
-preToolUse's and which the config entry therefore names with \-\-event
-permissionRequest. preToolUse and permissionRequest both block; the other
-events run full detection and write the audit log but cannot decide. GitHub
-documents fourteen Copilot CLI hook events; Skarn declares five of them
+sessionId) and carries no event\-name field on most events, so the event is
+inferred from the field shape; permissionRequest is the exception: on CLI
+1.0.82 its payload names itself with hookName and carries the arguments as
+toolInput rather than toolArgs (measured live 2026\-08\-30), the guard reads
+both keys, and the shipped config entry still pins it with \-\-event
+permissionRequest so an older CLI that sends the preToolUse shape there is
+answered in the right schema. preToolUse and permissionRequest both block; the
+other events run full detection and write the audit log but cannot decide.
+GitHub documents fourteen Copilot CLI hook events; Skarn declares five of them
 (preToolUse, permissionRequest, userPromptSubmitted, userPromptTransformed,
 postToolUse) plus preMcpToolCall, and evaluates the rest as deliberately not
-wired (verified against the GitHub hooks reference, 2026\-07\-30):
+wired (verified against the GitHub hooks reference, 2026\-08\-30):
 sessionStart carries an initialPrompt (scannable), but a session\-open
 detection arm beyond userPromptTransformed is out of this round's scope;
 subagentStart and subagentStop carry subagent metadata (agentName,
@@ -360,25 +392,35 @@ that the event can never carry a credential.
 Routing: The camelCase field set is the CLI tell. A Copilot payload in
 Claude\-compat mode is byte\-indistinguishable from a real Claude event (field
 names AND tool names), so the shipped Copilot configs always pass \-\-agent
-copilot explicitly. The CLI loads hooks from policy, then the repository, then
-the user, then inline repository settings, then inline user settings, then
-plugins, and how several hooks for one event compose differs by event. On
-preToolUse any hook returning deny blocks the tool, so a Skarn deny there is
-final; measured on CLI 1.0.70 the entries after the denying one did not run at
-all, and on 1.0.61 under SDK 1.0.1 the host's own SDK\-registered callback was
-never invoked for that call either. On permissionRequest every configured hook
-runs and their outputs are MERGED with later outputs overriding earlier ones,
-so a Skarn deny there is not final: a hook loading after it that answers allow
-replaces the decision. That is why preToolUse remains the durable gate and
-permissionRequest is a second chokepoint rather than a stronger one. A
+copilot explicitly. The CLI loads hooks from policy, then the user, then the
+repository (its hook files and its inline settings block), then plugins
+(GitHub hooks reference, 2026\-08\-30), and how several hooks for one event
+compose differs by event. On preToolUse any hook returning deny blocks the
+tool, so a Skarn deny there is final; measured on CLI 1.0.70 the entries after
+the denying one did not run at all, and on 1.0.61 under SDK 1.0.1 the host's
+own SDK\-registered callback was never invoked for that call either. On
+permissionRequest every configured hook runs and their outputs are MERGED with
+later outputs overriding earlier ones, so a Skarn deny there is not final: a
+hook loading after it that answers allow replaces the decision. That is why
+preToolUse remains the durable gate and permissionRequest is a second
+chokepoint rather than a stronger one. A sandbox escape narrows what the merge
+can produce: when toolInput carries requestSandboxBypass: true, GitHub's
+reference states that a hook allow never pre\-approves the request or
+short\-circuits the user prompt and only a deny propagates, so the merged
+permissionRequest decision on such a call can block it or leave it to the
+interactive prompt, never pre\-approve it; a hook loading after Skarn can
+still replace the deny with an allow that falls through to the user. A
 top\-level disableAllHooks: true in the repository's
-\&.github/copilot/settings.json skips the user\- and repository\-delivered hooks
-for that repository, the operator's own included, and logs nothing when it
-does; whether machine policy hooks survive it is unverified. It silences the
-layers it reaches across events (sessionStart as well as preToolUse) and
-leaves the host application's own SDK\-registered callbacks running, so doctor
-reads that file and reports the file layer as inert rather than counting it as
-protection or calling the machine unprotected.
+\&.github/copilot/settings.json skips every hook from repository files, user
+files, plugins and inline blocks for that repository, the operator's own
+included, and logs nothing when it does; machine policy hooks keep running
+under it (GitHub documents them as unaffected; measured on CLI 1.0.82 in a
+trusted repository, where the same session suppressed the user hook and
+honored the policy hook's deny). It silences the layers it reaches across
+events (sessionStart as well as preToolUse) and leaves the host application's
+own SDK\-registered callbacks running, so doctor reads that file and reports
+the file layer as inert rather than counting it as protection or calling the
+machine unprotected.
 .PP
 Fail mode: preToolUse fails CLOSED on a non\-zero exit, but a hook TIMEOUT
 fails OPEN (the shipped configs set timeoutSec 10). permissionRequest treats
@@ -394,25 +436,29 @@ is also the only Copilot event where ask is a real interactive prompt rather
 than a degraded deny.
 .TP
 \fBpermissionRequest\fR
-Scans toolName, plus toolArgs when the payload carries it. Enforce: top\-level
+Scans toolName plus the arguments under toolInput (the key CLI 1.0.82 sends on
+this event, an object or a JSON string that is parsed and flattened) or
+toolArgs (the preToolUse key, read for an older CLI). Enforce: top\-level
 behavior = deny, with the redacted reason in message; that decision
 short\-circuits the normal permission flow, but not other hooks \- every
 configured permissionRequest hook runs and later outputs override earlier
 ones, so a hook loading after Skarn can answer allow and replace the deny.
 Audit: none. Wired by the shipped configs. The second chokepoint on this host:
-the permission\-decision step for a call preToolUse deferred or allowed.
-GitHub documents its payload as a subset of preToolUse's and no field
-separates the two, so the guard never infers it \- the shipped config entries
-pass \-\-event permissionRequest, and an unpinned payload is read as
-preToolUse. A would\-be ask degrades to deny (the schema has allow and deny
+the permission\-decision step for a call preToolUse deferred or allowed. On
+CLI 1.0.82 the payload carries hookName: permissionRequest, toolInput and
+permissionSuggestions (measured live 2026\-08\-30), and the guard infers the
+event from hookName; the shipped config entries still pass \-\-event
+permissionRequest, because an older CLI sends the preToolUse shape here with
+nothing separating the two, and an unpinned payload without hookName is read
+as preToolUse. A would\-be ask degrades to deny (the schema has allow and deny
 and no ask value). Its deny is not final the way a preToolUse deny is: outputs
 from several permissionRequest hooks merge last\-writer\-wins, and the load
-order is policy, repository, user, inline settings, plugins \- so a
-policy\-delivered Skarn deny is the MOST overridable placement and a
-plugin\-delivered one the least. Audit is silent by design: the only other
-output fields are message and an interrupt that stops the whole agent, and a
-message with no behavior would ride into another hook's merged decision, so
-there is no channel here that advises without deciding.
+order is policy, user, repository, plugins \- so a policy\-delivered Skarn
+deny is the MOST overridable placement and a plugin\-delivered one the least.
+Audit is silent by design: the only other output fields are message and an
+interrupt that stops the whole agent, and a message with no behavior would
+ride into another hook's merged decision, so there is no channel here that
+advises without deciding.
 .TP
 \fBuserPromptSubmitted\fR
 Scans prompt. The channel ships content off the machine, so a secret on it is
@@ -448,7 +494,7 @@ Audit: none. Supported but opt\-in: not wired by the shipped configs.
 Supported but not wired in the shipped configs: it cannot block or advise, so
 it buys detection coverage in the guard log only. Added in Copilot CLI 1.0.51
 and still firing (no removal through 1.0.73), and still absent from GitHub's
-hooks\-reference event table on re\-verification 2026\-07\-30, which is why it
+hooks\-reference event table on re\-verification 2026\-08\-30, which is why it
 gains no decision channel here: the one output the SDK documents for it is
 metaToUse, MCP request metadata, and Skarn does not emit a verdict schema the
 vendor does not publish. The row is kept version\-scoped because older
@@ -741,6 +787,69 @@ toolCall with no error key, and a PostToolUse (toolCall plus error) is
 answered with the empty object it expects and scanned for nothing, since it
 carries no tool output. The hook runs before agy's permission check, and
 skarn's allow grants nothing.
+.SS "Kimi Code"
+Kimi Code fires PascalCase events with a JSON envelope on stdin \-
+hook_event_name, session_id, cwd \- because its hook runner builds the payload
+from camelCase keys and snake\-cases them on the way out, so the shape is
+Claude's with two differences that matter: every payload carries a client_type
+naming the host, and UserPromptSubmit delivers prompt as an ARRAY of content
+blocks rather than a string (verified on kimi\-code 0.39.1). Of the twenty
+events kimi defines, only PreToolUse, UserPromptSubmit and Stop can block; the
+rest are fire\-and\-forget, so a verdict on one would be a claim the host does
+not honor. Both blocking events skarn gates are wired by default.
+PermissionRequest is deliberately not wired \- it is observation\-only on
+kimi, unlike Claude Code, where it is a real second gate \- and Stop stays
+unwired because blocking it forces the agent to keep going.
+.PP
+Routing: Kimi shares Claude's envelope and event names, so the tell is the
+client_type field its own hook runner stamps on every payload: no other host
+emits it, and the value is matched rather than just the key, so only kimi's
+own CLI identity routes here. The pin still matters and every shipped entry
+carries it: a host embedding kimi's older hook engine sends no client_type,
+and that payload is byte\-shaped like Claude's. The misroute is not symmetric
+\- a claude\-routed PreToolUse deny happens to be schema\-compatible and still
+blocks, but a claude\-routed UserPromptSubmit answers with a top\-level
+decision block that kimi does not honor, so the prompt is allowed while the
+guard log records a deny that never happened, under a claude label that
+corrupts the per\-agent denominators guard report is built from. The kimi tool
+vocabulary is Claude's for everything skarn gates except FetchURL (mapped to
+WebFetch), Agent and AgentSwarm (mapped to spawn_agent) and ReadMediaFile
+(mapped to Read); MCP calls already arrive in Claude's own
+mcp__<server>__<tool> form.
+.PP
+Fail mode: Fail\-open by the host's design: exit 2 blocks, exit 0 with a deny
+object blocks, and every other non\-zero exit, every hook error and every
+timeout allows the action. The shipped entries set timeout = 10, below kimi's
+30\-second default. \-\-strict plus a licensed enforce answers an unparseable
+event with exit 2 and one stderr line.
+.TP
+\fBPreToolUse\fR
+Scans tool_name mapped to canonical (FetchURL to WebFetch, Agent and
+AgentSwarm to spawn_agent, ReadMediaFile to Read; Bash, Write, Edit,
+WebSearch, Read and the mcp__ form are already Claude's names) plus the
+flattened tool_input; a Bash command is also carried raw so a tool description
+cannot poison the package parse. Enforce:
+hookSpecificOutput.permissionDecision = deny, with the redacted reason in
+permissionDecisionReason and exit 0. Audit: none \- kimi has no non\-deciding
+channel; the guard log carries the audit trail. Wired by the shipped configs.
+A would\-be ask degrades to deny: kimi documents no ask value. The blocked
+call's reason reaches the model as the tool's failure text. Read and
+ReadMediaFile are gated only under \-\-strict and are left out of the shipped
+matcher for the same reason Claude's Read is.
+.TP
+\fBUserPromptSubmit\fR
+Scans prompt, flattened across the content\-block array kimi delivers it in (a
+bare string is still accepted). The channel ships content off the machine, so
+a secret on it is exfiltration. Enforce: exit 2 with the redacted reason on
+stderr, which kimi takes as the block message; stdout untouched. Audit: none
+\- kimi has no non\-deciding channel; the guard log carries the audit trail.
+Wired by the shipped configs. The deny object blocks this event too, verified
+live, but exit 2 is the process\-level channel and is not coupled to kimi's
+stdout parser \- the same parser that appends unrecognized hook stdout to the
+model's context, so a schema kimi later changes would fail open here AND
+inject the reason into the turn. The block is recoverable: the user edits and
+resubmits. The entry carries no matcher, because kimi matches this event
+against the prompt text rather than a tool name.
 .SH "SEE ALSO"
 skarn(1)
 .SH COPYRIGHT

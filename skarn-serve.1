@@ -1,25 +1,45 @@
-.TH "SKARN-SERVE" "1" "2026-06-23" "skarn 0.27.0" "Skarn Manual"
+.TH "SKARN-SERVE" "1" "2026-06-23" "skarn 0.28.0" "Skarn Manual"
 .SH NAME
 skarn\-serve \- Start the local web UI (search, recent, stats, and a redacted
-scan view) bound to 127.0.0.1
+scan view) bound to 127.0.0.1, with every detected secret masked
 .SH SYNOPSIS
 \fBskarn\fR \fBserve\fR [options]
 .SH DESCRIPTION
 Start the local web UI (search, recent, stats, and a redacted scan view) bound
-to 127.0.0.1.
+to 127.0.0.1, with every detected secret masked.
 .PP
 Control the localhost web UI. Access requires the per\-run token embedded in
 the URL the command prints at startup; opening that URL sets a session cookie,
-and scripts may pass it as a token= query parameter instead. The recall views
-(search, recent, stats) need no license; the security view (/api/scan) is the
-same engine as check and requires one the same way \- without it the endpoint
-answers 403 and the Security tab shows how to register free. Opening a finding
-in the Security view shows a detail drawer (severity, taxonomy crosswalk,
-attack\-chain context, and the redacted code context) from which you can
-accept the finding into your baseline as a false positive \- the same write
-path as skarn baseline accept, recording only the finding's fingerprint, never
-its secret. The license is resolved once at startup, so installing one while
-the server is running needs a restart.
+and scripts may pass it as a token= query parameter instead. Every route that
+returns session content masks each detected secret first, and there is no
+opt\-out: the response crosses into a browser, so the no\-redact flag the
+recall commands honor is not a parameter here. Search masks before it runs the
+query, so a raw credential typed as the query returns no rows while an
+adjacent word returns the row with the value masked. The recent rows, the four
+session views, the filter facets and the by\-date totals mask every label a
+transcript authored, which means the project name, the repository root, the
+working directory, the git branch, the model id and the assistant name. A
+facet whose displayed value the mask rewrote is marked filterable false,
+because sending that value back as a filter would match nothing; the UI
+renders it as a label with its count. Two detection scans run at a time and a
+further request answers 503 with redaction_busy and a Retry\-After header
+rather than waiting, so a caller retries instead of treating the refusal as
+permanent; a scan that cannot start at all answers 500 with
+redaction_unavailable and no rows. A session whose file changes on disk while
+it is being read is left out of that answer rather than served unmasked,
+because the scan indexed the older bytes; the search stream, the recent page,
+the meta response and the by\-date trend each report how many they left out in
+a skipped field (search appends it as one final line after its rows, only when
+a session was left out), and reloading picks the session up again. The recall
+views (search, recent, stats) need no license; the security view (/api/scan)
+is the same engine as check and requires one the same way \- without it the
+endpoint answers 403 and the Security tab shows how to register free. Opening
+a finding in the Security view shows a detail drawer (severity, taxonomy
+crosswalk, attack\-chain context, and the redacted code context) from which
+you can accept the finding into your baseline as a false positive \- the same
+write path as skarn baseline accept, recording only the finding's fingerprint,
+never its secret. The license is resolved once at startup, so installing one
+while the server is running needs a restart.
 .SH OPTIONS
 .TP
 \fB\-\-port\fR \fIn\fR
@@ -28,7 +48,8 @@ The default is 7777.
 .TP
 \fB\-\-rules\fR \fIpath\fR
 Load a custom TOML rules file in addition to the bundled rules; the web
-Security scan then also surfaces its findings.
+Security scan then also surfaces its findings, and every value the pack
+detects is masked in the recall views too.
 .TP
 \fB\-\-baseline\fR \fIpath\fR
 Suppress findings recorded in this accepted\-findings baseline; the Security

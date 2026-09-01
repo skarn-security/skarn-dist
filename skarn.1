@@ -1,4 +1,4 @@
-.TH "SKARN" "1" "2026-06-23" "skarn 0.27.0" "Skarn Manual"
+.TH "SKARN" "1" "2026-06-23" "skarn 0.28.0" "Skarn Manual"
 .SH NAME
 skarn \- AI coding session security scanner with built\-in session search
 .SH SYNOPSIS
@@ -33,22 +33,24 @@ Skarn is an AI coding session security scanner with built\-in session search.
 It detects leaked credentials and the attack patterns that cause or exploit
 them in the local session transcripts of AI coding assistants (Claude Code,
 Gemini CLI, Codex CLI, Cursor, VS Code Copilot Chat, Kimi Code CLI, Grok
-Build, Grok Bot, and Antigravity), and it lets you search, browse, and analyze
-those sessions.
+Build, Grok Bot, Antigravity, and OpenCode), and it lets you search, browse,
+and analyze those sessions.
 .PP
 Skarn is a single static binary. It scans locally and makes no network
 connection by default; the only features that transmit data off the machine
 are opt\-in and named explicitly in the SECURITY section below.
 .PP
 Skarn has two faces over one parsing engine. The recall commands (search,
-recent, stats, and friends) are the daily\-use surface and never trigger a
-scan, with one exception: export redacts by default, which runs the detector
-over the sessions it emits to mask every secret, and \-\-no\-redact dumps raw
-content and skips that scan. The check command is the security scanner: it
-runs the detection rules, correlates attack chains, and computes a session
-risk score for CI/CD gating. Every finding is mapped to MITRE ATLAS, the OWASP
-Top 10 for LLM Applications 2025, and CWE; run skarn taxonomies to print the
-crosswalk and the pinned framework versions.
+recent, stats, and friends) are the daily\-use surface. They match and filter
+on the raw session text, then mask every detected secret in what they print,
+which runs the detector over the sessions a command emits; a value the
+detector matches in any session of that output is masked in every session of
+it, while a value it matches nowhere in that set prints as recorded;
+\-\-no\-redact prints raw content and skips that scan. The check command is
+the security scanner: it runs the detection rules, correlates attack chains,
+and computes a session risk score for CI/CD gating. Every finding is mapped to
+MITRE ATLAS, the OWASP Top 10 for LLM Applications 2025, and CWE; run skarn
+taxonomies to print the crosswalk and the pinned framework versions.
 .SH COMMANDS
 .TP
 \fBcheck\fR [options]
@@ -126,7 +128,7 @@ Print a shell completion script for bash, zsh, or fish.
 .TP
 \fBserve\fR [options]
 Start the local web UI (search, recent, stats, and a redacted scan view) bound
-to 127.0.0.1.
+to 127.0.0.1, with every detected secret masked.
 .TP
 \fBtaxonomies\fR
 Print the standards crosswalk (MITRE ATLAS, OWASP LLM Top 10, CWE) and the EU
@@ -200,7 +202,7 @@ Restrict the scan to one assistant's sessions. A name this machine has no tool
 for is refused with exit 6 rather than scanned as empty, so a typo cannot pass
 for a clean result. A custom tool declared in ~/.skarn.json is accepted by its
 configured name. One of: claude, gemini, codex, cursor, copilot, kimi, grok,
-grokbot, antigravity.
+grokbot, antigravity, opencode.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict the scan to matching projects: a comma\-separated list of names or
@@ -377,7 +379,7 @@ Restrict the scan to one assistant's sessions. A name this machine has no tool
 for is refused with exit 6 rather than scanned as empty, so a typo cannot pass
 for a clean result. A custom tool declared in ~/.skarn.json is accepted by its
 configured name. One of: claude, gemini, codex, cursor, copilot, kimi, grok,
-grokbot, antigravity.
+grokbot, antigravity, opencode.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict the scan to matching projects: a comma\-separated list of names or
@@ -513,8 +515,13 @@ whatever directory the client spawned it in.
 \fB\-\-enable\-recall\fR
 Add the content tools search_sessions and get_session to the server. Off by
 default. They return transcript content with detected credentials masked and
-other text as recorded, so anything they return leaves the machine through the
-connected MCP client and reaches the model provider.
+other text as recorded, masking a detected value in every session of the
+response rather than only where it was detected, so anything they return
+leaves the machine through the connected MCP client and reaches the model
+provider. The search_sessions response carries no echo of the query or of the
+project filter, and its skipped count names how many sessions were left out
+because their file changed on disk while it was being read; those sessions
+contribute no row rather than being masked from stale bytes.
 .SS "Baseline options"
 Interactive baseline triage. audit walks each new finding and records a
 true/false\-positive decision with a reason into the committed baseline;
@@ -547,7 +554,7 @@ $SKARN_IDENTITY.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict the audit scan to one assistant's sessions. One of: claude, gemini,
-codex, cursor, copilot, kimi, grok, grokbot, antigravity.
+codex, cursor, copilot, kimi, grok, grokbot, antigravity, opencode.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict the audit scan to matching projects: a comma\-separated list of names
@@ -626,36 +633,51 @@ Hook host (default: auto\-detect from the event shape; pass codex explicitly
 for Codex CLI, which shares Claude's event names, and copilot explicitly for
 Copilot CLI, whose Claude\-compat payloads are indistinguishable from
 Claude's; Gemini CLI's Before*/After* event names are unique, Grok Build's
-camelCase hookEventName key is unique to it, and the Antigravity CLI's
-camelCase toolCall/conversationId/workspacePaths envelope is unique to it, so
-all three auto\-detect, and the shipped configs pin them anyway). Grok is the
-one host that overrides an explicit pin: an event delivered by grok's own hook
-runner is scanned by the grok adapter even where the invoking config pins
-another host, because grok runs Claude\-config and Cursor\-config hooks with
-its own payload dialect. With \-\-self\-test, all (the default) tests the
-claude, cursor, codex, copilot, gemini, grok, and antigravity adapters,
-copilot on both its CLI and VS Code dialects. With report, it restricts the
-summary to one agent (repeatable or comma\-separated). One of: claude, cursor,
-codex, copilot, gemini, grok, antigravity, all.
+camelCase hookEventName key is unique to it, the Antigravity CLI's camelCase
+toolCall/conversationId/workspacePaths envelope is unique to it, and Kimi Code
+stamps client_type on every payload, so all four auto\-detect, and the shipped
+configs pin them anyway \- on kimi the pin is load\-bearing rather than
+uniform policy, because a host embedding kimi's older hook engine sends no
+client_type and its Claude\-shaped prompt event then fails open under the
+Claude adapter. Grok is the one host that overrides an explicit pin: an event
+delivered by grok's own hook runner is scanned by the grok adapter even where
+the invoking config pins another host, because grok runs Claude\-config and
+Cursor\-config hooks with its own payload dialect. With \-\-self\-test, all
+(the default) tests the claude, cursor, codex, copilot, gemini, grok,
+antigravity, and kimi adapters, copilot on both its CLI and VS Code dialects.
+With report, it restricts the summary to one agent (repeatable or
+comma\-separated). One of: claude, cursor, codex, copilot, gemini, grok,
+antigravity, kimi, all.
 .TP
 \fB\-\-event\fR \fIname\fR
 The hook event this config entry fires on, for a host whose payload does not
-name its own event. Only the Copilot CLI needs it: its permissionRequest
-payload carries a subset of preToolUse's documented fields and nothing
-separates the two, so a permissionRequest entry must say so or the guard reads
-it as a preToolUse and answers in a schema that event does not understand.
-Default: the event is inferred from the payload shape, which never yields
-permissionRequest. Ignored by every host whose payload names its own event,
-and by the VS Code Copilot dialect. One of: preToolUse, permissionRequest.
+name its own event. The Copilot CLI needs it: its permissionRequest payload
+carries a subset of preToolUse's documented fields and nothing separates the
+two, so a permissionRequest entry must say so or the guard reads it as a
+preToolUse and answers in a schema that event does not understand. Default:
+the event is inferred from the payload shape, which never yields
+permissionRequest. Codex names its own event and the pin never overrides that
+name; it is read only where the name is missing, so a strict deny for a
+payload that never parsed, or a call whose payload carries no hook_event_name,
+takes the pinned shape instead of the PreToolUse default. Ignored by every
+other host, and by the VS Code Copilot dialect. One of: preToolUse,
+permissionRequest.
 .TP
 \fB\-\-self\-test\fR
-Verify the guard wiring instead of reading an event: feed two synthetic
-fixture events (one benign, one carrying a fake credential) through each
-adapter's real code path and report the verdicts, latency, and a guard\-log
+Verify the guard's own code path instead of reading an event: feed two
+synthetic fixture events (one benign, one carrying a fake credential) through
+each adapter's real code path (the kimi pair carries kimi's own client_type
+stamp and content\-block prompt shape, so the fixture proves the routing the
+shipped pin also asserts) and report the verdicts, latency, and a guard\-log
 write probe. The fake credential is only ever printed redacted, and the
 self\-test deliberately ignores the accepted\-findings baseline, so an
-accepted fingerprint can never make a dead hook look alive. Exit 0 when every
-adapter passes, 1 otherwise; works unlicensed (audit semantics).
+accepted fingerprint can never make a dead hook look alive. What it proves is
+the binary, the adapter and the log write \- it runs entirely in this process
+and reads no host config, so it never proves that a host is calling the hook:
+skarn doctor reads the host configs for that, and on a host doctor does not
+cover (kimi today) the only proof is a flagged action driven through the host
+itself. Exit 0 when every adapter passes, 1 otherwise; works unlicensed (audit
+semantics).
 .TP
 \fB\-\-log\fR \fIpath\fR
 On the hook invocation, `skarn guard \-\-log <path|none>`: where this call
@@ -957,16 +979,36 @@ home directory that cannot be resolved (exit 6).
 .SS "Serve options"
 Control the localhost web UI. Access requires the per\-run token embedded in
 the URL the command prints at startup; opening that URL sets a session cookie,
-and scripts may pass it as a token= query parameter instead. The recall views
-(search, recent, stats) need no license; the security view (/api/scan) is the
-same engine as check and requires one the same way \- without it the endpoint
-answers 403 and the Security tab shows how to register free. Opening a finding
-in the Security view shows a detail drawer (severity, taxonomy crosswalk,
-attack\-chain context, and the redacted code context) from which you can
-accept the finding into your baseline as a false positive \- the same write
-path as skarn baseline accept, recording only the finding's fingerprint, never
-its secret. The license is resolved once at startup, so installing one while
-the server is running needs a restart.
+and scripts may pass it as a token= query parameter instead. Every route that
+returns session content masks each detected secret first, and there is no
+opt\-out: the response crosses into a browser, so the no\-redact flag the
+recall commands honor is not a parameter here. Search masks before it runs the
+query, so a raw credential typed as the query returns no rows while an
+adjacent word returns the row with the value masked. The recent rows, the four
+session views, the filter facets and the by\-date totals mask every label a
+transcript authored, which means the project name, the repository root, the
+working directory, the git branch, the model id and the assistant name. A
+facet whose displayed value the mask rewrote is marked filterable false,
+because sending that value back as a filter would match nothing; the UI
+renders it as a label with its count. Two detection scans run at a time and a
+further request answers 503 with redaction_busy and a Retry\-After header
+rather than waiting, so a caller retries instead of treating the refusal as
+permanent; a scan that cannot start at all answers 500 with
+redaction_unavailable and no rows. A session whose file changes on disk while
+it is being read is left out of that answer rather than served unmasked,
+because the scan indexed the older bytes; the search stream, the recent page,
+the meta response and the by\-date trend each report how many they left out in
+a skipped field (search appends it as one final line after its rows, only when
+a session was left out), and reloading picks the session up again. The recall
+views (search, recent, stats) need no license; the security view (/api/scan)
+is the same engine as check and requires one the same way \- without it the
+endpoint answers 403 and the Security tab shows how to register free. Opening
+a finding in the Security view shows a detail drawer (severity, taxonomy
+crosswalk, attack\-chain context, and the redacted code context) from which
+you can accept the finding into your baseline as a false positive \- the same
+write path as skarn baseline accept, recording only the finding's fingerprint,
+never its secret. The license is resolved once at startup, so installing one
+while the server is running needs a restart.
 .TP
 \fB\-\-port\fR \fIn\fR
 Port to listen on; 0 asks the OS to assign one. Always binds 127.0.0.1 only.
@@ -974,7 +1016,8 @@ The default is 7777.
 .TP
 \fB\-\-rules\fR \fIpath\fR
 Load a custom TOML rules file in addition to the bundled rules; the web
-Security scan then also surfaces its findings.
+Security scan then also surfaces its findings, and every value the pack
+detects is masked in the recall views too.
 .TP
 \fB\-\-baseline\fR \fIpath\fR
 Suppress findings recorded in this accepted\-findings baseline; the Security
@@ -1019,11 +1062,18 @@ Print the version and exit.
 \fB\-h\fR, \fB\-\-help\fR
 Print help and exit.
 .SS "Recent options"
-List and filter recent sessions.
+List and filter recent sessions. The project, branch, model and assistant
+columns are masked wherever a detected secret appears in them; \-\-no\-redact
+prints them as recorded.
+.TP
+\fB\-\-no\-redact\fR
+Print raw session content and skip the detection scan. By default every
+detected secret is masked in the output; the match and every filter run on the
+raw text either way, so a masked value still finds its session.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot, kimi, grok, grokbot, antigravity.
+copilot, kimi, grok, grokbot, antigravity, opencode.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths, each
@@ -1071,11 +1121,18 @@ Output format. One of: text, json, csv. The default is text.
 Include sessions with no user or assistant messages (off by default).
 .SS "Messages options"
 Show one session's messages. The session is a positional id or \-\-session;
-the other flags only narrow which session a prefix resolves to.
+the other flags only narrow which session a prefix resolves to. Every message
+and every label is printed with detected secrets masked; \-\-no\-redact prints
+the session as recorded.
+.TP
+\fB\-\-no\-redact\fR
+Print raw session content and skip the detection scan. By default every
+detected secret is masked in the output; the match and every filter run on the
+raw text either way, so a masked value still finds its session.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot, kimi, grok, grokbot, antigravity.
+copilot, kimi, grok, grokbot, antigravity, opencode.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths, each
@@ -1127,11 +1184,20 @@ Verbose output.
 Time window in hours used only to resolve a session prefix; 0 applies no
 filter. The default is 0.
 .SS "Search options"
-Search past sessions. The query is positional and flag order is free.
+Search past sessions. The query is positional and flag order is free. The
+match runs on the raw text and the printed snippet is masked: when the match
+falls inside a masked value, the row carries the mask's offset instead, with
+match_in_secret set in json output and no highlight in text, and a no\-result
+or error message names the query only under \-\-no\-redact.
+.TP
+\fB\-\-no\-redact\fR
+Print raw session content and skip the detection scan. By default every
+detected secret is masked in the output; the match and every filter run on the
+raw text either way, so a masked value still finds its session.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot, kimi, grok, grokbot, antigravity.
+copilot, kimi, grok, grokbot, antigravity, opencode.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths, each
@@ -1213,7 +1279,16 @@ Treat the query as a PCRE2 regular expression.
 \fB\-\-case\-sensitive\fR
 Case\-sensitive matching (default: case\-insensitive).
 .SS "Restore options"
-Restore a session by id.
+Restore a session by id. The resume command is printed from the raw session,
+because a masked working directory would not be a usable command: when the
+recorded working directory carries a detected secret, restore refuses with
+exit 1 and prints nothing to stdout, and \-\-no\-redact prints it as recorded.
+The match hint on stderr masks the project, branch and assistant name.
+.TP
+\fB\-\-no\-redact\fR
+Print raw session content and skip the detection scan. By default every
+detected secret is masked in the output; the match and every filter run on the
+raw text either way, so a masked value still finds its session.
 .TP
 \fB\-\-session\fR \fIid\fR
 Session id to operate on (prefix\-matched); equivalent to the positional
@@ -1231,11 +1306,18 @@ touched inside the window, so two sessions you ran side by side both count in
 full and a day can total more than the clock allows. active_wall_secs merges
 the same active intervals per calendar day, so overlapping sessions count
 once, which is the number to bill from. A per\-session view lists its pauses
-under idle_gaps, keyed gap_secs and after_message.
+under idle_gaps, keyed gap_secs and after_message. Every shape, the html
+report included, prints its model names, tool names and project labels with
+detected secrets masked; \-\-no\-redact prints them as recorded.
+.TP
+\fB\-\-no\-redact\fR
+Print raw session content and skip the detection scan. By default every
+detected secret is masked in the output; the match and every filter run on the
+raw text either way, so a masked value still finds its session.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot, kimi, grok, grokbot, antigravity.
+copilot, kimi, grok, grokbot, antigravity, opencode.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths, each
@@ -1297,11 +1379,17 @@ Open the HTML report in a browser after writing it (\-\-format html only).
 \fB\-o\fR, \fB\-\-out\fR \fIfile\fR
 Destination file for \-\-format html. The default is skarn\-report.html.
 .SS "Export options"
-Export session data.
+Export session data. Every exported field is masked by default; \-\-no\-redact
+exports the sessions as recorded.
+.TP
+\fB\-\-no\-redact\fR
+Print raw session content and skip the detection scan. By default every
+detected secret is masked in the output; the match and every filter run on the
+raw text either way, so a masked value still finds its session.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot, kimi, grok, grokbot, antigravity.
+copilot, kimi, grok, grokbot, antigravity, opencode.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths, each
@@ -1348,9 +1436,6 @@ Restrict to a single session by id (prefix\-matched).
 \fB\-\-format\fR \fIfmt\fR
 Output format. One of: text, json, ndjson, html. The default is text.
 .TP
-\fB\-\-no\-redact\fR
-Emit raw session content; by default every detected secret is redacted.
-.TP
 \fB\-\-out\fR \fIfile\fR
 Write to this file instead of stdout.
 .TP
@@ -1360,11 +1445,18 @@ Open the written file in the default viewer (needs \-\-out).
 \fB\-\-gzip\fR
 Gzip\-compress the output (needs \-\-out, or \-\-format html).
 .SS "Cmds options"
-Shell commands run across sessions.
+Shell commands run across sessions. Commands, their output and the labels are
+printed with detected secrets masked, while \-\-cmd and \-\-failed match the
+raw text; \-\-no\-redact prints them as recorded.
+.TP
+\fB\-\-no\-redact\fR
+Print raw session content and skip the detection scan. By default every
+detected secret is masked in the output; the match and every filter run on the
+raw text either way, so a masked value still finds its session.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot, kimi, grok, grokbot, antigravity.
+copilot, kimi, grok, grokbot, antigravity, opencode.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths, each
@@ -1423,11 +1515,18 @@ Collapse duplicates, keeping the latest occurrence.
 \fB\-\-cmd\fR \fItext\fR
 Case\-insensitive substring filter on the command text.
 .SS "Mcps options"
-MCP calls made across sessions.
+MCP calls made across sessions. Server names, tool names and call arguments
+are printed with detected secrets masked, while \-\-mcp and \-\-failed match
+the raw text; \-\-no\-redact prints them as recorded.
+.TP
+\fB\-\-no\-redact\fR
+Print raw session content and skip the detection scan. By default every
+detected secret is masked in the output; the match and every filter run on the
+raw text either way, so a masked value still finds its session.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot, kimi, grok, grokbot, antigravity.
+copilot, kimi, grok, grokbot, antigravity, opencode.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths, each
@@ -1486,11 +1585,18 @@ Collapse duplicates, keeping the latest occurrence.
 \fB\-\-mcp\fR \fIname\fR
 Substring filter on the MCP tool name.
 .SS "Tools options"
-Tools used across sessions.
+Tools used across sessions. Tool names, inputs and results are printed with
+detected secrets masked, while \-\-tool and \-\-failed match the raw text;
+\-\-no\-redact prints them as recorded.
+.TP
+\fB\-\-no\-redact\fR
+Print raw session content and skip the detection scan. By default every
+detected secret is masked in the output; the match and every filter run on the
+raw text either way, so a masked value still finds its session.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot, kimi, grok, grokbot, antigravity.
+copilot, kimi, grok, grokbot, antigravity, opencode.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths, each
@@ -1604,10 +1710,11 @@ setup and guard \-\-self\-test: a target was refused or a verification failed.
 For doctor: at least one check FAILED (a warning never exits nonzero), or an
 unknown option was passed, which is refused before any check runs. For
 restore: the recorded working directory or session id could not be rendered
-safely, so nothing was printed to stdout and the refusal is named on stderr.
-Also: the first\-run EULA prompt was declined, so the invoked operation was
-not performed. For mcp: an unknown argument was passed, which is refused
-before the protocol loop starts.
+safely, or the working directory carries a detected secret and \-\-no\-redact
+was not passed, so nothing was printed to stdout and the refusal is named on
+stderr. Also: the first\-run EULA prompt was declined, so the invoked
+operation was not performed. For mcp: an unknown argument was passed, which is
+refused before the protocol loop starts.
 .TP
 \fB2\fR
 The session risk score exceeded the \-\-fail\-on\-risk threshold. For setup:
@@ -1747,9 +1854,15 @@ A Claude Code config directory visible in Skarn's environment; folded into the
 claude source like an SKARN_CLAUDE_DIRS entry.
 .TP
 \fBCOPILOT_HOME\fR
-GitHub Copilot CLI config directory visible in Skarn's environment; replaces
-the default ~/.copilot as the Copilot CLI session root, folded into the
-copilot source. Microsoft Scout sets this variable to ~/.scout/copilot in the
+GitHub Copilot CLI config directory visible in Skarn's environment. The CLI
+itself treats it as REPLACING ~/.copilot, and vet follows that: it reads
+mcp\-config.json, config.json and settings.json from the directory this names
+and not from the default. Scanning deliberately diverges \- the copilot source
+scans this root AND the default ~/.copilot, because a scanner's subject is
+every local store and sessions stranded in an abandoned default root still
+hold the secrets they held the day they were written. A store present under
+both roots is two real files, and both are read: either may hold a secret the
+other lost. Microsoft Scout sets this variable to ~/.scout/copilot in the
 environment of the Copilot CLI child process it spawns, not in the user's
 shell, so Skarn's own process never sees it; that root is therefore declared
 in the scanner rather than read from here, exactly as $CODEX_HOME and
@@ -1963,10 +2076,14 @@ is a false alarm the named file settles, reporting a silenced hook as
 protection is not. Comments are tolerated on a retry, since the CLI documents
 JSONC for its settings. When the switch is on, doctor reports the user and
 project hook layers as inert instead of counting them as protection, and
-reports a managed policy layer as unverified rather than as either: it does
-not stop a host application's own in\-process hooks, which arrive through the
-SDK rather than from a file, and whether it skips machine policy hooks is
-unmeasured (GitHub documents them as exempt). Read\-only; never written.
+reports a managed policy layer with a note rather than as either: it does not
+stop a host application's own in\-process hooks, which arrive through the SDK
+rather than from a file, and machine policy hooks kept running under it on CLI
+1.0.82, the one version measured (GitHub documents them as exempt). The switch
+takes effect only once the CLI trusts the folder: on 1.0.82 an untrusted
+repository carrying the switch still ran the user hook, and doctor reads the
+switch but not the CLI's trustedFolders list, so in an untrusted folder it can
+call a user hook inert that the CLI still runs. Read\-only; never written.
 .TP
 \fB~/.grokbot/\fR
 Grok Bot's local\-exec daemon state: the daemon connection and credential
@@ -2037,6 +2154,22 @@ Kimi Code CLI's per\-working\-directory prompt log, one file per workdir.
 Scanned in addition to the session tree because it retains prompts from
 sessions that were aborted before any session record was written. Relocate
 with $KIMI_CODE_HOME.
+.TP
+\fB~/.local/share/opencode/opencode*.db\fR
+OpenCode's SQLite session store, since v1.2.0. The filename carries the
+release channel, so a non\-stable channel writes opencode\-<channel>.db beside
+it and every matching file in the directory is read. Relocate the whole data
+root with $XDG_DATA_HOME, which OpenCode honours on macOS and Windows too \-
+it uses the XDG path on every platform, not Application Support or %APPDATA%.
+The store is WAL\-mode and OpenCode holds it open while running, so skarn
+reads it read\-only inside one transaction and never writes to it; a store it
+cannot read is reported as an incomplete scan rather than counted clean.
+.TP
+\fB~/.local/share/opencode/storage/\fR
+OpenCode's pre\-v1.2 session tree, one JSON record per session, message and
+part. Upgrading to the SQLite store neither imports nor deletes it, so
+sessions written before v1.2 live only here and both layouts are scanned. A
+session id present in both is reported once, preferring the database copy.
 .TP
 \fB~/.grok/sessions/\fR
 Default Grok Build session root. One transcript per session at
@@ -2163,8 +2296,33 @@ url.
 \fB~/.cursor/mcp.json, ~/.cursor/hooks.json\fR
 Cursor MCP server definitions and hooks. Read by vet.
 .TP
-\fB~/.copilot/mcp\-config.json, ~/.copilot/config.json\fR
-Copilot CLI MCP server definitions and configuration. Read by vet.
+\fB~/.copilot/mcp\-config.json, ~/.copilot/config.json, ~/.copilot/settings.json\fR
+Copilot CLI MCP server definitions, application state, and user settings, all
+resolved under $COPILOT_HOME when it is set, which replaces the default root
+rather than layering over it. A declared root holding no Copilot store reads
+exactly as an absent default one does: installation is decided by a config
+file that was actually read or by the session\-state and hooks markers under
+whichever root is in force, never by the root's own existence. Read by vet.
+From settings.json vet resolves whether CLI sessions are exported to GitHub.
+remoteExport: false is the opt\-out GitHub documents as the way to stop
+session syncing, remoteSessions: true forces export back on regardless of it,
+and the documented default with neither set is sync on. remote is recorded as
+a contributing key but never decides, and GitHub documents it two ways that do
+not agree: the settings table says off keeps session data local only, while
+the page on session syncing names remoteExport as the opt\-out and does not
+mention remote at all. Skarn resolves that conflict in the direction where
+being wrong is recoverable. A config carrying only remote: off is reported as
+exporting, and the finding lists every key that was set, so a reader who has
+decided the settings table is authoritative can see exactly what skarn read
+and dismiss it. The opposite resolution would report a machine as local\-only
+on a reading the syncing page contradicts, and a scanner that says nothing is
+a scanner nobody can correct. Where no settings.json exists at all \- the
+state a fresh install is in, since neither the CLI nor its
+\-\-no\-remote\-export flag writes one \- the documented default is reported
+against the path the file would occupy, so an untouched machine is not
+mistaken for an opted\-out one. Comments are tolerated, since GitHub documents
+JSONC for this file and the CLI writes a comment header into config.json
+beside it. Read\-only; never written.
 .TP
 \fB~/.scout/m\-settings.json\fR
 Microsoft Scout's permission grants, auto\-approve settings, and experiment
@@ -2176,16 +2334,30 @@ Microsoft Scout MCP server definitions. Read by vet. A user\-added server
 nests its launcher or endpoint under a config object; a built\-in server has
 none, because Scout generates its command at run time.
 .TP
+\fB~/.copilot/data.db\fR
+The Copilot CLI's SQLite state store, which holds the signed\-in GitHub
+account's access token and any bring\-your\-own\-key provider headers
+alongside projects, workflows and review comments. Vet reads this file's POSIX
+mode by a non\-following stat and never opens it: no byte of its contents is
+read, the database is never opened as a database, so no token and no header
+value can reach a finding and the only thing reported is whether the mode
+grants group or other read; a symlinked store is reported as a coverage gap
+rather than measured through its target, and a store whose owner\-read bit is
+off is still measured. Its presence marks ~/.copilot as a live Copilot CLI
+install for the Microsoft Scout residue rule, the same way session\-state/ and
+hooks/ do, so the row is never skipped as residue. Never a scan source: the
+session commands do not read it.
+.TP
 \fB~/Library/Application Support/Grok Bot/sand\-secrets.json\fR
 Grok Bot's plaintext third\-party credential store, on macOS. Grok Bot is
 xAI's always\-on desktop agents app, a different product from the Grok Build
-CLI. Vet opens this file, reads its POSIX mode off that handle, and reads not
-one byte of its contents: the store is never parsed, so no key name and no
-value from it can reach a finding and the only thing reported is whether the
-mode grants group or other read. The path is opened without following a
-symlink, so a symlinked store is reported as a coverage gap rather than
-measured through its target. The path carries no platform branch, so the store
-is vetted on macOS only; the Linux and Windows locations are not read.
+CLI. Vet reads this file's POSIX mode by a non\-following stat and never opens
+it: not one byte of its contents is read and the store is never parsed, so no
+key name and no value from it can reach a finding and the only thing reported
+is whether the mode grants group or other read; a symlinked store is reported
+as a coverage gap rather than measured through its target. The path carries no
+platform branch, so the store is vetted on macOS only; the Linux and Windows
+locations are not read.
 .TP
 \fB~/.grokbot/settings.json\fR
 Grok Bot's local\-exec daemon settings. Vet reads two declared posture flags
@@ -2538,11 +2710,13 @@ skarn baseline accept .skarn\-baseline.json 7d343e3a105ae026589b3371d565a4ad2943
 .RE
 .SH SECURITY
 Skarn scans locally and makes no network connection by default. Secrets are
-redacted in every output format. \-\-no\-redact lifts that only where it is
-honored \- check's text, json and sarif reports, and export's raw session
-content; the ndjson stream, the evidence pack, the artifacts written by
-\-\-drop, serve and assess, the baseline files, and the guard ignore it and
-stay redacted.
+redacted in check's reports and in everything the recall commands print
+(search, recent, messages, stats, cmds, tools, mcps, restore, export).
+\-\-no\-redact lifts the mask only where it is honored \- check's text, json
+and sarif reports, and the session content the recall commands print; the
+ndjson stream, the evidence pack, the artifacts written by \-\-drop, serve and
+assess, the baseline files, the mcp tools, the guard, and every serve API
+route that returns session content ignore it and stay redacted.
 .PP
 Two commands transmit anything off the machine, and only when you type them.
 skarn check \-\-update\-rules fetches a signed feed bundle from the subscriber
@@ -2568,10 +2742,12 @@ skarn mcp reads the same session stores as assess and the same configuration
 files as vet, read\-only and with no network call, and answers only the AI
 coding assistant that spawned it over stdin and stdout. Its results are the
 redacted scan report, the masked vet report, and session metadata carrying
-neither message text nor any label authored inside a transcript. Because the
-assistant receives those results, they travel wherever that assistant sends
-its context, so treat them as leaving the machine even though skarn itself
-opens no socket.
+neither message text nor any label authored inside a transcript; with
+\-\-enable\-recall the two content tools add session text and labels with
+every detected secret masked, and the search response carries no echo of the
+query or of the project filter. Because the assistant receives those results,
+they travel wherever that assistant sends its context, so treat them as
+leaving the machine even though skarn itself opens no socket.
 .SH "SEE ALSO"
 skarn\-check(1), skarn\-assess(1), skarn\-vet(1), skarn\-mcp(1),
 skarn\-baseline(1), skarn\-search(1), skarn\-recent(1), skarn\-restore(1),

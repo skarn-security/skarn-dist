@@ -1,6 +1,6 @@
 # Skarn editions - the free/paid boundary
 
-Generated from docs/cli-model.toml by docs/build_manpage.py (regenerate with `zig build man`); do not edit by hand. skarn 0.27.0.
+Generated from docs/cli-model.toml by docs/build_manpage.py (regenerate with `zig build man`); do not edit by hand. skarn 0.28.0.
 
 One binary for every tier. The free tier is the full local product, not a trial: the entire detection engine, every output format except the Team evidence pack, and redaction, under a free license available to anyone who registers - an individual or an organization alike. Paid tiers unlock org capabilities: distributing policy and accepted-findings baselines across a team, compliance evidence, the maintained feed, and real-time enforcement.
 
@@ -21,7 +21,7 @@ skarn check and the serve security view require a license; the free license is i
 | Custom rules and local detectors: --rules, --no-default-rules, --check-code, --check-packages, --sbom | The entire local detection engine is free; the paid asset is the maintained feed, not the engine. Reconciling your own SBOM against your own sessions on your own machine is local surfacing, not distribution. |
 | Fleet drop: check --drop <dir> | Producing a drop artifact for your own machine is local surfacing, exactly like --format ndjson: a single developer can drop artifacts for their own use under the free license. Aggregating many machines' drops and viewing the fleet is Enterprise. Combining --drop with --audit-log still needs Team for the audit log itself; a free drop simply omits it. |
 | All recall commands: search, recent, stats, tools, mcps, cmds, export, messages, restore | The daily-use surface: session search, browsing, and analytics need no license. |
-| skarn serve - the localhost web UI | Single-user, 127.0.0.1 only; the paid surface is the future fleet console, not your own browser. The recall views need no license; the security view requires the free license, exactly like check. |
+| skarn serve - the localhost web UI | Single-user, 127.0.0.1 only; the paid surface is the future fleet console, not your own browser. The recall views need no license and mask every detected secret; the security view requires the free license, exactly like check. |
 | skarn guard - audit mode | Reports would-be verdicts and does not block; a lapsed license does not break an editor. |
 | skarn guard accept and the guard's baseline consult | The audit-to-enforce ramp needs an accept path or a pilot with recurring false positives can never reach a flippable window; the personal baseline is already free, and the guard only ever reads its file form. |
 | skarn setup and skarn guard --self-test - guided onboarding and wiring verification | The path TO the guard: agent detection, merge-based hook install with backups, and the end-to-end self-test work unlicensed. |

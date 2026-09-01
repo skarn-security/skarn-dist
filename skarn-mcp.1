@@ -1,4 +1,4 @@
-.TH "SKARN-MCP" "1" "2026-06-23" "skarn 0.27.0" "Skarn Manual"
+.TH "SKARN-MCP" "1" "2026-06-23" "skarn 0.28.0" "Skarn Manual"
 .SH NAME
 skarn\-mcp \- Run a local stdio MCP server exposing read\-only, redacted scan,
 config\-vetting and session\-metadata tools to an AI coding assistant
@@ -80,8 +80,13 @@ whatever directory the client spawned it in.
 \fB\-\-enable\-recall\fR
 Add the content tools search_sessions and get_session to the server. Off by
 default. They return transcript content with detected credentials masked and
-other text as recorded, so anything they return leaves the machine through the
-connected MCP client and reaches the model provider.
+other text as recorded, masking a detected value in every session of the
+response rather than only where it was detected, so anything they return
+leaves the machine through the connected MCP client and reaches the model
+provider. The search_sessions response carries no echo of the query or of the
+project filter, and its skipped count names how many sessions were left out
+because their file changed on disk while it was being read; those sessions
+contribute no row rather than being masked from stale bytes.
 .SH "SEE ALSO"
 skarn(1)
 .SH COPYRIGHT

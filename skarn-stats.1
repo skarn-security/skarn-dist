@@ -1,4 +1,4 @@
-.TH "SKARN-STATS" "1" "2026-06-23" "skarn 0.27.0" "Skarn Manual"
+.TH "SKARN-STATS" "1" "2026-06-23" "skarn 0.28.0" "Skarn Manual"
 .SH NAME
 skarn\-stats \- Session analytics: tokens, models, tools, and timing (text,
 json, csv, or html)
@@ -20,12 +20,19 @@ touched inside the window, so two sessions you ran side by side both count in
 full and a day can total more than the clock allows. active_wall_secs merges
 the same active intervals per calendar day, so overlapping sessions count
 once, which is the number to bill from. A per\-session view lists its pauses
-under idle_gaps, keyed gap_secs and after_message.
+under idle_gaps, keyed gap_secs and after_message. Every shape, the html
+report included, prints its model names, tool names and project labels with
+detected secrets masked; \-\-no\-redact prints them as recorded.
 .SH OPTIONS
+.TP
+\fB\-\-no\-redact\fR
+Print raw session content and skip the detection scan. By default every
+detected secret is masked in the output; the match and every filter run on the
+raw text either way, so a masked value still finds its session.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot, kimi, grok, grokbot, antigravity.
+copilot, kimi, grok, grokbot, antigravity, opencode.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths, each

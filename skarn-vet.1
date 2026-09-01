@@ -1,4 +1,4 @@
-.TH "SKARN-VET" "1" "2026-06-23" "skarn 0.27.0" "Skarn Manual"
+.TH "SKARN-VET" "1" "2026-06-23" "skarn 0.28.0" "Skarn Manual"
 .SH NAME
 skarn\-vet \- Statically vet the local AI assistant configuration (hooks, MCP
 servers, permission grants, plugins and skills) for risky patterns across
@@ -94,8 +94,33 @@ url.
 \fB~/.cursor/mcp.json, ~/.cursor/hooks.json\fR
 Cursor MCP server definitions and hooks. Read by vet.
 .TP
-\fB~/.copilot/mcp\-config.json, ~/.copilot/config.json\fR
-Copilot CLI MCP server definitions and configuration. Read by vet.
+\fB~/.copilot/mcp\-config.json, ~/.copilot/config.json, ~/.copilot/settings.json\fR
+Copilot CLI MCP server definitions, application state, and user settings, all
+resolved under $COPILOT_HOME when it is set, which replaces the default root
+rather than layering over it. A declared root holding no Copilot store reads
+exactly as an absent default one does: installation is decided by a config
+file that was actually read or by the session\-state and hooks markers under
+whichever root is in force, never by the root's own existence. Read by vet.
+From settings.json vet resolves whether CLI sessions are exported to GitHub.
+remoteExport: false is the opt\-out GitHub documents as the way to stop
+session syncing, remoteSessions: true forces export back on regardless of it,
+and the documented default with neither set is sync on. remote is recorded as
+a contributing key but never decides, and GitHub documents it two ways that do
+not agree: the settings table says off keeps session data local only, while
+the page on session syncing names remoteExport as the opt\-out and does not
+mention remote at all. Skarn resolves that conflict in the direction where
+being wrong is recoverable. A config carrying only remote: off is reported as
+exporting, and the finding lists every key that was set, so a reader who has
+decided the settings table is authoritative can see exactly what skarn read
+and dismiss it. The opposite resolution would report a machine as local\-only
+on a reading the syncing page contradicts, and a scanner that says nothing is
+a scanner nobody can correct. Where no settings.json exists at all \- the
+state a fresh install is in, since neither the CLI nor its
+\-\-no\-remote\-export flag writes one \- the documented default is reported
+against the path the file would occupy, so an untouched machine is not
+mistaken for an opted\-out one. Comments are tolerated, since GitHub documents
+JSONC for this file and the CLI writes a comment header into config.json
+beside it. Read\-only; never written.
 .TP
 \fB~/.scout/m\-settings.json\fR
 Microsoft Scout's permission grants, auto\-approve settings, and experiment
@@ -107,16 +132,30 @@ Microsoft Scout MCP server definitions. Read by vet. A user\-added server
 nests its launcher or endpoint under a config object; a built\-in server has
 none, because Scout generates its command at run time.
 .TP
+\fB~/.copilot/data.db\fR
+The Copilot CLI's SQLite state store, which holds the signed\-in GitHub
+account's access token and any bring\-your\-own\-key provider headers
+alongside projects, workflows and review comments. Vet reads this file's POSIX
+mode by a non\-following stat and never opens it: no byte of its contents is
+read, the database is never opened as a database, so no token and no header
+value can reach a finding and the only thing reported is whether the mode
+grants group or other read; a symlinked store is reported as a coverage gap
+rather than measured through its target, and a store whose owner\-read bit is
+off is still measured. Its presence marks ~/.copilot as a live Copilot CLI
+install for the Microsoft Scout residue rule, the same way session\-state/ and
+hooks/ do, so the row is never skipped as residue. Never a scan source: the
+session commands do not read it.
+.TP
 \fB~/Library/Application Support/Grok Bot/sand\-secrets.json\fR
 Grok Bot's plaintext third\-party credential store, on macOS. Grok Bot is
 xAI's always\-on desktop agents app, a different product from the Grok Build
-CLI. Vet opens this file, reads its POSIX mode off that handle, and reads not
-one byte of its contents: the store is never parsed, so no key name and no
-value from it can reach a finding and the only thing reported is whether the
-mode grants group or other read. The path is opened without following a
-symlink, so a symlinked store is reported as a coverage gap rather than
-measured through its target. The path carries no platform branch, so the store
-is vetted on macOS only; the Linux and Windows locations are not read.
+CLI. Vet reads this file's POSIX mode by a non\-following stat and never opens
+it: not one byte of its contents is read and the store is never parsed, so no
+key name and no value from it can reach a finding and the only thing reported
+is whether the mode grants group or other read; a symlinked store is reported
+as a coverage gap rather than measured through its target. The path carries no
+platform branch, so the store is vetted on macOS only; the Linux and Windows
+locations are not read.
 .TP
 \fB~/.grokbot/settings.json\fR
 Grok Bot's local\-exec daemon settings. Vet reads two declared posture flags

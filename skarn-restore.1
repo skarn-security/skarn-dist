@@ -1,4 +1,4 @@
-.TH "SKARN-RESTORE" "1" "2026-06-23" "skarn 0.27.0" "Skarn Manual"
+.TH "SKARN-RESTORE" "1" "2026-06-23" "skarn 0.28.0" "Skarn Manual"
 .SH NAME
 skarn\-restore \- Restore a session
 .SH SYNOPSIS
@@ -10,8 +10,17 @@ directory or session id carries a byte the running shell would read back as
 something else, skarn refuses to render the command: stdout stays empty, the
 refusal is named on stderr, and restore exits 1.
 .PP
-Restore a session by id.
+Restore a session by id. The resume command is printed from the raw session,
+because a masked working directory would not be a usable command: when the
+recorded working directory carries a detected secret, restore refuses with
+exit 1 and prints nothing to stdout, and \-\-no\-redact prints it as recorded.
+The match hint on stderr masks the project, branch and assistant name.
 .SH OPTIONS
+.TP
+\fB\-\-no\-redact\fR
+Print raw session content and skip the detection scan. By default every
+detected secret is masked in the output; the match and every filter run on the
+raw text either way, so a masked value still finds its session.
 .TP
 \fB\-\-session\fR \fIid\fR
 Session id to operate on (prefix\-matched); equivalent to the positional

@@ -1,4 +1,4 @@
-.TH "SKARN-EXPORT" "1" "2026-06-23" "skarn 0.27.0" "Skarn Manual"
+.TH "SKARN-EXPORT" "1" "2026-06-23" "skarn 0.28.0" "Skarn Manual"
 .SH NAME
 skarn\-export \- Export sessions as text, json, ndjson, or html (redacted by
 default)
@@ -7,12 +7,18 @@ default)
 .SH DESCRIPTION
 Export sessions as text, json, ndjson, or html (redacted by default).
 .PP
-Export session data.
+Export session data. Every exported field is masked by default; \-\-no\-redact
+exports the sessions as recorded.
 .SH OPTIONS
+.TP
+\fB\-\-no\-redact\fR
+Print raw session content and skip the detection scan. By default every
+detected secret is masked in the output; the match and every filter run on the
+raw text either way, so a masked value still finds its session.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot, kimi, grok, grokbot, antigravity.
+copilot, kimi, grok, grokbot, antigravity, opencode.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths, each
@@ -58,9 +64,6 @@ Restrict to a single session by id (prefix\-matched).
 .TP
 \fB\-\-format\fR \fIfmt\fR
 Output format. One of: text, json, ndjson, html. The default is text.
-.TP
-\fB\-\-no\-redact\fR
-Emit raw session content; by default every detected secret is redacted.
 .TP
 \fB\-\-out\fR \fIfile\fR
 Write to this file instead of stdout.

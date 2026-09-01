@@ -1,4 +1,4 @@
-.TH "SKARN-DOCTOR" "1" "2026-06-23" "skarn 0.27.0" "Skarn Manual"
+.TH "SKARN-DOCTOR" "1" "2026-06-23" "skarn 0.28.0" "Skarn Manual"
 .SH NAME
 skarn\-doctor \- Check whether skarn is actually protecting this machine:
 binary, license, wired agent hooks, guard log, session stores, and the guard
@@ -270,10 +270,14 @@ is a false alarm the named file settles, reporting a silenced hook as
 protection is not. Comments are tolerated on a retry, since the CLI documents
 JSONC for its settings. When the switch is on, doctor reports the user and
 project hook layers as inert instead of counting them as protection, and
-reports a managed policy layer as unverified rather than as either: it does
-not stop a host application's own in\-process hooks, which arrive through the
-SDK rather than from a file, and whether it skips machine policy hooks is
-unmeasured (GitHub documents them as exempt). Read\-only; never written.
+reports a managed policy layer with a note rather than as either: it does not
+stop a host application's own in\-process hooks, which arrive through the SDK
+rather than from a file, and machine policy hooks kept running under it on CLI
+1.0.82, the one version measured (GitHub documents them as exempt). The switch
+takes effect only once the CLI trusts the folder: on 1.0.82 an untrusted
+repository carrying the switch still ran the user hook, and doctor reads the
+switch but not the CLI's trustedFolders list, so in an untrusted folder it can
+call a user hook inert that the CLI still runs. Read\-only; never written.
 .TP
 \fB~/.grokbot/\fR
 Grok Bot's local\-exec daemon state: the daemon connection and credential
