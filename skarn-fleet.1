@@ -1,0 +1,66 @@
+.TH "SKARN-FLEET" "1" "2026-06-23" "skarn 0.32.0" "Skarn Manual"
+.SH NAME
+skarn\-fleet \- Fold drops into the org aggregate; render the executive
+readout
+.SH SYNOPSIS
+\fBskarn\fR \fBfleet\fR \fIaggregate|readout\fR \fIpath\fR [options]
+.SH DESCRIPTION
+Fold a directory of per\-machine drop artifacts into the fleet aggregate that
+serve \-\-fleet renders (aggregate), or render the leadership readout from one
+or two aggregates (readout). Both are Enterprise: without a covering license
+they refuse with exit 5 before reading any file, and with no usable license at
+all they exit 7; \-\-help stays ungated.
+.PP
+The consuming half of the fleet kit, inside the binary. fleet aggregate reads
+the drop artifacts under <dropdir> (flat <dropdir>/*.json, or one
+<dropdir>/<identity>/ subdirectory per machine named the way check \-\-drop
+names it), validates every one of them against the drop schema and against the
+scope it declares, refuses the run outright when any drop is rejected (naming
+the drop and the reason on stderr, writing nothing, exit 1), and writes
+aggregate schema version 4 atomically to \-o. Given \-\-roster it also refuses
+a drop from a machine the roster does not name or a project the roster does
+not permit that machine, accepts an unscoped drop only from a machine the
+roster marks allowUnscoped, and records coverage: how many machines were
+expected, how many reported, and which did not. fleet readout renders the
+Markdown readout a leadership audience reads from one aggregate, or from two
+when \-\-prior names the previous period's aggregate, which is what turns
+positions into movements; \-\-json emits the underlying comparison object.
+Both subcommands are Enterprise: without a covering license they refuse with
+exit 5 before reading any file, and with no usable license at all they exit 7
+like check; \-\-help is ungated. The aggregate carries only what the drops
+carry, and the readout prints machine identities, counts and months, never a
+finding, a rule id, a project name or a secret preview.
+.SH OPTIONS
+.TP
+\fB\-o\fR, \fB\-\-output\fR \fIfile\fR
+With aggregate: the aggregate file to write, required; it is written
+atomically through a temporary file in the same directory, so a refused run
+leaves no partial aggregate behind. With readout: write the rendered readout
+there instead of standard output.
+.TP
+\fB\-\-roster\fR \fIfile\fR
+With aggregate: the org\-controlled roster of the machines expected to report
+and the projects each may report on. A drop from a machine the roster does not
+name is refused; a drop that resolved a project the roster does not permit
+that machine is refused naming both; an unscoped drop is accepted only from a
+machine the roster marks allowUnscoped; and the aggregate gains a coverage
+block naming every rostered machine that sent nothing. Without it the machine
+set is discovered from the drops and a machine that never reported is
+invisible.
+.TP
+\fB\-\-prior\fR \fIaggregate\fR
+With readout: the previous period's aggregate. The readout then reports
+movements against it; omitted, it states that this is the baseline
+measurement. The prior must be for the same organization and older than the
+current aggregate.
+.TP
+\fB\-\-json\fR
+With readout: emit the underlying comparison object (coverage, fleet totals,
+per\-machine movement, the ranked risk list) instead of Markdown; without
+\-\-prior the movement fields are null.
+.SH "SEE ALSO"
+skarn(1)
+.SH COPYRIGHT
+Copyright (c) 2026 Skarn Software OÜ. All rights reserved. Skarn is
+proprietary software; see the LICENSE distributed with the binary and
+https://getskarn.com.

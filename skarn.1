@@ -1,0 +1,2419 @@
+.TH "SKARN" "1" "2026-06-23" "skarn 0.32.0" "Skarn Manual"
+.SH NAME
+skarn \- AI coding session security scanner with built\-in session search
+.SH SYNOPSIS
+.nf
+\fBskarn\fR \fBcheck\fR [options]
+\fBskarn\fR \fBassess\fR [options]
+\fBskarn\fR \fBvet\fR [options]
+\fBskarn\fR \fBmcp\fR
+\fBskarn\fR \fBbaseline\fR \fIaudit|accept\fR \fIfile\fR [<fingerprint>] [options]
+\fBskarn\fR \fBsearch\fR \fIquery\fR [options]
+\fBskarn\fR \fBrecent\fR [options]
+\fBskarn\fR \fBrestore\fR \fIsession\fR
+\fBskarn\fR \fBmessages\fR \fIsession\fR [options]
+\fBskarn\fR \fBstats\fR [options]
+\fBskarn\fR \fBtools\fR [options]
+\fBskarn\fR \fBmcps\fR [options]
+\fBskarn\fR \fBcmds\fR [options]
+\fBskarn\fR \fBexport\fR [options]
+\fBskarn\fR \fBguard\fR [report|accept <fingerprint>] [options]
+\fBskarn\fR \fBsetup\fR [options]
+\fBskarn\fR \fBdoctor\fR [options]
+\fBskarn\fR \fBcompletion\fR \fIshell\fR
+\fBskarn\fR \fBserve\fR [options]
+\fBskarn\fR \fBtaxonomies\fR
+\fBskarn\fR \fBlicense\fR [<file>|\-|renew] [options]
+\fBskarn\fR \fBeula\fR [accept]
+\fBskarn\fR \fBfleet\fR \fIaggregate|readout\fR \fIpath\fR [options]
+skarn \fB\-\-version\fR
+skarn \fB\-\-help\fR
+.fi
+.SH DESCRIPTION
+Skarn is an AI coding session security scanner with built\-in session search.
+It detects leaked credentials and the attack patterns that cause or exploit
+them in the local session transcripts of AI coding assistants (Claude Code,
+Gemini CLI, Antigravity, Codex CLI, Cursor, VS Code Copilot Chat, Kimi Code
+CLI, Grok Build, Grok Bot, OpenCode, and Cline, plus Claude Code and Cowork
+transcripts exported from a Claude Enterprise organization through the
+Compliance API), and it lets you search, browse, and analyze those sessions.
+.PP
+Skarn is a single static binary. It scans locally and makes no network
+connection by default; the only features that transmit data off the machine
+are opt\-in and named explicitly in the SECURITY section below.
+.PP
+Skarn has two faces over one parsing engine. The recall commands (search,
+recent, stats, and friends) are the daily use surface. They match and filter
+on the raw session text, then mask every detected secret in what they print,
+which runs the detector over the sessions a command emits: a value the
+detector matches in any session of that output is masked in every session of
+it, while a value it matches nowhere in that set prints as recorded.
+\-\-no\-redact prints raw content and skips that scan. A session that is still
+being written when a command reads it is stamped, scanned and read again, up
+to three times, so what prints always comes from bytes the scan covered; one
+that keeps changing is left out of that run with a count on stderr, and a
+single\-session view of it asks you to re\-run once it is quiet. The check
+command is the security scanner: it runs the detection rules, correlates
+attack chains, and computes a session risk score for CI/CD gating. Every
+finding is mapped to MITRE ATLAS, the OWASP Top 10 for LLM Applications 2025,
+and CWE; run skarn taxonomies to print the crosswalk and the pinned framework
+versions.
+.SH COMMANDS
+.TP
+\fBcheck\fR [options]
+Scan AI sessions for leaked credentials and attack patterns.
+.TP
+\fBassess\fR [options]
+Scan every AI session, print a redacted summary. Free, no license.
+.TP
+\fBvet\fR [options]
+Vet the local AI config, read\-only and offline. Free, no license.
+.TP
+\fBmcp\fR
+Local stdio MCP server: read\-only, redacted scan and config tools.
+.TP
+\fBbaseline\fR \fIaudit|accept\fR \fIfile\fR [<fingerprint>] [options]
+Triage into a baseline (audit); accept a false positive (accept).
+.TP
+\fBsearch\fR \fIquery\fR [options]
+Search past AI sessions (literal text, or \-\-regex).
+.TP
+\fBrecent\fR [options]
+List recent sessions.
+.TP
+\fBrestore\fR \fIsession\fR
+Restore a session.
+.TP
+\fBmessages\fR \fIsession\fR [options]
+Show the messages of a session.
+.TP
+\fBstats\fR [options]
+Session analytics: tokens, models, tools, and timing.
+.TP
+\fBtools\fR [options]
+Show the tools used across sessions.
+.TP
+\fBmcps\fR [options]
+Show the MCP calls made across sessions.
+.TP
+\fBcmds\fR [options]
+Show the shell commands run across sessions.
+.TP
+\fBexport\fR [options]
+Export sessions as text, json, ndjson, html; redacted by default.
+.TP
+\fBguard\fR [report|accept <fingerprint>] [options]
+Pre\-execution hook: read an event on stdin, emit a verdict.
+.TP
+\fBsetup\fR [options]
+Wire the guard hook into detected assistants, then self\-test it.
+.TP
+\fBdoctor\fR [options]
+Check whether skarn is actually protecting this machine.
+.TP
+\fBcompletion\fR \fIshell\fR
+Print a completion script for bash, zsh, fish, or powershell.
+PowerShell is the fourth shell: `skarn completion powershell` prints a script
+that registers a native argument completer for skarn and skarn.exe, to
+dot\-source from a PowerShell profile (Windows PowerShell 5.1 and PowerShell
+7). Every script is generated from the same command model as this manual, so
+each one completes every verb and flag it documents. A shell name outside
+bash, zsh, fish, and powershell prints the supported list on stderr and exits
+1.
+.TP
+\fBserve\fR [options]
+Local web UI on 127.0.0.1, with every detected secret masked.
+.TP
+\fBtaxonomies\fR
+Print the crosswalk plus Cyber Resilience Act process evidence.
+Print the standards crosswalk (MITRE ATLAS, OWASP LLM Top 10, CWE) and the EU
+Cyber Resilience Act obligation axis (process evidence relevant to an
+obligation, not proof of product conformity).
+.TP
+\fBlicense\fR [<file>|\-|renew] [options]
+Show the active license, install one, or renew it.
+.TP
+\fBeula\fR [accept]
+Print the End User License Agreement, or record acceptance.
+.TP
+\fBfleet\fR \fIaggregate|readout\fR \fIpath\fR [options]
+Fold drops into the org aggregate; render the executive readout.
+.SH OPTIONS
+.SS "Check options"
+See \fBskarn\-check\fR(1).
+.TP
+\fB\-\-rules\fR \fIpath\fR
+Load a custom TOML rules file in addition to the bundled rules.
+.TP
+\fB\-\-ai\-rules\fR \fIpath\fR
+Load an AI\-specific rules file.
+.TP
+\fB\-\-no\-ai\-rules\fR
+Disable the AI\-specific rules.
+.TP
+\fB\-\-no\-default\-rules\fR
+Disable the bundled detection rules.
+.TP
+\fB\-\-feed\fR \fIpath\fR
+Apply a signed maintained\-feed bundle over the baseline rules. Requires a Pro
+license.
+.TP
+\fB\-\-update\-rules\fR
+Fetch and verify the latest feed from the subscriber channel, then scan.
+Requires a Pro license.
+.TP
+\fB\-\-feed\-url\fR \fIurl\fR
+Feed channel URL for \-\-update\-rules; falls back to $SKARN_FEED_URL. It must
+be https, with plain http accepted only against loopback, and must carry no
+userinfo. Requires a Pro license.
+.TP
+\fB\-\-offline\fR
+Disable all network access (the maintained\-feed fetch).
+.TP
+\fB\-\-severity\fR \fIlevel\fR
+Report only findings at or above this severity. One of: low, medium, high,
+critical. The default is medium.
+.TP
+\fB\-\-canary\-file\fR \fIpath\fR
+File of planted canary tokens, one per line; a match is a proven breach.
+.TP
+\fB\-\-check\-packages\fR
+Flag typosquatted or URL\-sourced package installs found in sessions
+(offline).
+.TP
+\fB\-\-check\-code\fR
+Flag insecure code written by the assistant during the session.
+.TP
+\fB\-\-hours\fR \fIn\fR
+Scan window in hours; 0 means no time limit. The default is 720.
+.TP
+\fB\-\-cli\fR \fIname\fR
+Restrict the scan to one assistant's sessions. If this machine has no tool by
+that name, skarn exits 6 rather than scanning nothing. A custom tool declared
+in ~/.skarn.json is accepted by its configured name. One of: claude, gemini,
+codex, cursor, copilot, kimi, grok, grokbot, antigravity, opencode, cline.
+.TP
+\fB\-\-project\fR \fIpath\fR
+Restrict the scan to matching projects: a comma\-separated list of names or
+paths, matched case\-insensitively against a session's project display name,
+its canonical root path, or a parent directory of that root. A session read
+from a Compliance API export carries no project, so any \-\-project value
+excludes it.
+.TP
+\fB\-\-session\fR \fIid\fR
+Scan a single session by id.
+.TP
+\fB\-\-format\fR \fIfmt\fR
+Output format. ndjson is an ECS\-shaped event stream, one redacted finding per
+line, for SIEM ingest. A finding read from a Compliance API export carries the
+user id as user.id and the workspace as skarn.workspace_id, both as recorded,
+and the email address as user.email fixed to **** when the session carries one
+and omitted when it does not, so the mask says an address exists and is
+withheld rather than that none was recorded. sarif (partialFingerprints),
+ndjson (skarn.fingerprint), evidence, and the json cross\-session chains
+(fingerprint and exfilFingerprint) carry the finding fingerprint: the sha256
+of the rule id, a NUL byte, and the lowercase hex sha256 of the
+ASCII\-lowercased secret. That hash is deterministic and unkeyed, so a
+guessable secret is recoverable from it by candidate testing wherever the
+output travels. evidence is a redacted Markdown evidence pack for a product
+technical file, and the one value that requires a Pro license. One of: text,
+json, sarif, ndjson, evidence. The default is text.
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+Verbose output.
+.TP
+\fB\-\-no\-redact\fR
+Show secrets in full in the text, json and sarif reports only. The ndjson
+stream, the evidence pack, the artifacts written by \-\-drop, serve and
+assess, the baseline files, the mcp tools, the guard, and every serve API
+route that returns session content ignore this flag and stay redacted.
+.TP
+\fB\-\-no\-color\fR
+Disable colored output.
+.TP
+\fB\-\-policy\fR \fIpath\fR
+Load a declarative TOML policy file: fail thresholds, required/forbidden
+rules, baseline enforcement, and the output profile. The \-\-fail\-on\-* and
+\-\-profile flags override it. A file skarn cannot read or parse exits 4
+rather than falling back to the embedded default, which gates nothing.
+Requires a Pro license.
+.TP
+\fB\-\-profile\fR \fIpreset\fR
+Output profile. enterprise keeps high\-confidence findings and dedups them.
+One of: enterprise. Requires an Enterprise license.
+.TP
+\fB\-\-fail\-on\-severity\fR \fIlevel\fR
+Exit 1 if any finding is at or above this severity. One of: low, medium, high,
+critical.
+.TP
+\fB\-\-fail\-on\-risk\fR \fI0\-100\fR
+Exit 2 if the session risk score exceeds this threshold.
+.TP
+\fB\-\-fail\-on\-scan\-error\fR
+Fail closed with exit 6 when the scan was incomplete: a tool source failed
+discovery, a session store that exists could not be read, a session failed to
+parse, a session had truncated or compacted transcript content so it no longer
+holds the whole conversation (the assistant compacted it before the scan, or a
+compliance transcript export carried a truncated tool block, a truncated text
+block, or a compaction marker), a compliance transcript export withheld a turn
+as unavailable or carried a client\-asserted turn the feed did not verify, or
+the scan read no sessions. Truncated or compacted content counts sessions,
+because a cut block is a partial turn and nobody can count what a compaction
+removed; withheld and unverified content counts turns, because the export
+names each one. Every truncated tool block counts its session, including a
+block returned as a placeholder instead of cut text, so a coverage gap is
+over\-reported rather than missed. By default a partial scan still reports,
+and an empty scan still warns on stderr.
+.TP
+\fB\-\-baseline\fR \fIpath\fR
+Suppress findings recorded in this baseline, so the scan fails only on new
+ones. A single file is free; a directory unions every .json baseline inside
+it, an org\-shared accepted set, and requires a Pro license. That union leaves
+out any fingerprint a member labelled a true positive. Without this flag skarn
+applies ~/.config/skarn/baseline.json when it exists, for suppression only;
+the \-\-baseline\-create and \-\-baseline\-merge targets stay explicit.
+.TP
+\fB\-\-baseline\-create\fR
+Write the current findings to the \-\-baseline file as the accepted set, then
+exit. Under \-\-fail\-on\-scan\-error an incomplete scan is refused instead:
+the run exits 6 and leaves the existing file as it was.
+.TP
+\fB\-\-baseline\-merge\fR \fIfile\fR
+Consolidate the \-\-baseline input (a file or a directory of per\-member
+baselines) into one distributable file and exit. Requires a Pro license.
+.TP
+\fB\-\-audit\-log\fR \fIfile\fR
+Append a hash\-chained record of this scan (timestamp, policy, finding counts,
+verdict; no secrets) to this local log. The chain detects in\-place edits and
+reordering of recorded history. Requires a Pro license.
+.TP
+\fB\-\-audit\-verify\fR \fIfile\fR
+Verify an audit log's hash chain, then exit without scanning. A broken chain
+exits 1. A log that exists but could not be read exits 6: a permission
+failure, a directory, or a log past the read cap. An absent log is a valid
+empty chain and exits 0. Needs no license.
+.TP
+\fB\-\-drop\fR \fIdir\fR
+After the scan, write a self\-describing drop artifact to
+<dir>/<identity>/<runId>.json: identity, org, host, run id, scan window, the
+\-\-project scope it declares, and the redacted summary counts. The counts
+cover the declared scope, not the machine, so the session count is the number
+that passed \-\-project and \-\-session. Scope is recorded twice:
+scope.projects is the \-\-project needles verbatim, often a path, and
+scope.resolved is the project names those needles matched. Content is
+attributed against scope.resolved, so a run that declared no scope resolves
+nothing and therefore names no project at all. The assistant list and the
+last\-activity timestamp describe the sessions the scan read inside that
+scope, not the ones that produced a finding. The guard mode comes from the
+same wired\-hook walk doctor performs, which only this flag pays for; an
+absent guard mode means it could not be resolved, not that no hook is wired.
+The write is atomic, so a second run in the same window adds a file rather
+than overwriting one. The artifact carries a schema version and is never
+reinterpreted across versions, so a release that moves that version needs the
+machines upgraded alongside whatever assembles their artifacts, and the ones
+written at the older version cleared out of the collection directory. Skarn
+does not transmit it; moving the directory is the organization's job. Identity
+comes from SKARN_IDENTITY, falling back to a hostname\-derived tag with a
+warning.
+.TP
+\fB\-\-product\fR \fIname\fR
+Release lineage for \-\-format evidence: the product this scan's sessions
+changed. Without lineage, the evidence pack states that it cannot be attached
+to a specific technical file.
+.TP
+\fB\-\-product\-version\fR \fIver\fR
+Release lineage for \-\-format evidence: the product version the pack
+describes.
+.TP
+\fB\-\-build\-id\fR \fIid\fR
+Release lineage for \-\-format evidence: the commit or build identifier the
+pack describes.
+.TP
+\fB\-\-sbom\-ref\fR \fIref\fR
+Release lineage for \-\-format evidence: a reference to the product's declared
+SBOM, recorded as supplied (control characters masked). Skarn neither parses
+nor fetches it.
+.TP
+\fB\-\-sbom\fR \fIpath\fR
+Reconcile production dependencies the sessions added to a manifest against
+this declared SBOM, in CycloneDX or SPDX 2.x JSON format. Each undeclared
+addition is reported as low\-severity workflow\-drift evidence, so pair it
+with \-\-severity low. Unlike \-\-sbom\-ref, skarn reads and parses the file;
+an unreadable or malformed one fails the scan.
+.TP
+\fB\-\-user\fR \fIname\fR
+Restrict the scan to matching users: a comma\-separated list of user ids or
+email addresses, where an id matches exactly and an email address matches
+case\-insensitively. Only a session read from a Compliance API export carries
+either, so on a machine without an export, or under a registered license below
+Enterprise, every \-\-user value matches nothing and the report is empty at
+exit 0. The drop artifact and the evidence pack do not record a user
+narrowing, so a narrowed run reads like a whole\-corpus one there.
+.SS "Assess options"
+See \fBskarn\-assess\fR(1).
+.TP
+\fB\-o\fR, \fB\-\-out\fR \fIfile\fR
+Write a self\-contained, redacted share report to this file; .md or .markdown
+renders Markdown, any other extension renders HTML. The report names a session
+file by its basename and a project by its display name, and writes a home
+directory inside a code\-context snippet as ~.
+.TP
+\fB\-\-json\fR
+Emit the redacted scan as JSON (the same shape as the serve /api/scan view)
+for scripting, instead of the friendly summary. With \-\-dossier the body is
+the dossier envelope that wraps this scan, not the bare scan shape.
+.TP
+\fB\-\-offline\fR
+Disable all network access. Assess is already egress\-free; this is the
+belt\-and\-suspenders guarantee.
+.TP
+\fB\-\-hours\fR \fIn\fR
+Scan window in hours; 0 (the default) scans every session on the machine. The
+default is 0.
+.TP
+\fB\-\-severity\fR \fIlevel\fR
+Only summarize findings at or above this severity; the default (low) scans
+everything and curates the display. One of: low, medium, high, critical. The
+default is low.
+.TP
+\fB\-\-cli\fR \fIname\fR
+Restrict the scan to one assistant's sessions. If this machine has no tool by
+that name, skarn exits 6 rather than scanning nothing. A custom tool declared
+in ~/.skarn.json is accepted by its configured name. One of: claude, gemini,
+codex, cursor, copilot, kimi, grok, grokbot, antigravity, opencode, cline.
+.TP
+\fB\-\-project\fR \fIpath\fR
+Restrict the scan to matching projects: a comma\-separated list of names or
+paths, matched case\-insensitively against a session's project display name,
+its canonical root path, or a parent directory of that root. A session read
+from a Compliance API export carries no project, so any \-\-project value
+excludes it.
+.TP
+\fB\-\-session\fR \fIid\fR
+Assess a single session by id.
+.TP
+\fB\-\-rules\fR \fIpath\fR
+Load a custom TOML rules file in addition to the bundled rules.
+.TP
+\fB\-\-baseline\fR \fIpath\fR
+Suppress findings recorded in this accepted\-findings baseline. Without this
+flag, ~/.config/skarn/baseline.json is applied automatically when it exists. A
+directory of baselines requires a Pro license; assess never gates, so an
+unlicensed directory degrades to a warning and an unsuppressed scan.
+.TP
+\fB\-\-no\-color\fR
+Disable colored output.
+.TP
+\fB\-\-dossier\fR \fIselector\fR
+Scope \-o and \-\-json to one incident dossier: one finding by its
+64\-character fingerprint, or one session by id, auto\-detected by shape. A
+reused credential matches every session it appears in. The dossier holds the
+redacted facts Skarn has for the selection, plus an explicit list of the CRA
+Article 14 reporting fields Skarn cannot supply. It is a local share artifact;
+Skarn does not file reports or determine severity. Every format names a
+project by its display name. The HTML and JSON dossiers name a session file by
+its basename, write a home directory inside a code\-context snippet as ~, and
+leave out the project root and the user and workspace ids; the Markdown
+dossier prints none of those fields.
+.TP
+\fB\-\-user\fR \fIname\fR
+Restrict the scan to matching users: a comma\-separated list of user ids or
+email addresses, where an id matches exactly and an email address matches
+case\-insensitively. Only a session read from a Compliance API export carries
+either, so on a machine without an export, or without the Enterprise license
+that reading one needs, every \-\-user value matches nothing.
+.SS "Vet options"
+See \fBskarn\-vet\fR(1).
+.TP
+\fB\-\-format\fR \fIfmt\fR
+Output format. json and sarif carry the same rule ids, severities, config
+paths, and locators as the text list. One of: text, json, sarif. The default
+is text.
+.TP
+\fB\-\-fail\-on\-severity\fR \fIlevel\fR
+Exit 1 if any finding is at or above this severity. Without it, vet always
+exits 0: it surfaces, it does not gate. One of: low, medium, high, critical.
+.TP
+\fB\-\-fail\-on\-scan\-error\fR
+Fail closed with exit 6 when a config file that exists was not read: it could
+not be read, or it was skipped because it is not that assistant's live
+configuration. A partial view of the configuration is never reported as clean.
+Implied by \-\-fail\-on\-severity. A home directory that cannot be resolved at
+all exits 6 regardless of this flag, since nothing was examined.
+.TP
+\fB\-\-offline\fR
+Disable all network access. Vet never makes a network call; this is the
+belt\-and\-suspenders guarantee.
+.TP
+\fB\-\-no\-color\fR
+Disable colored output.
+.SS "Mcp options"
+See \fBskarn\-mcp\fR(1).
+.TP
+\fB\-\-enable\-recall\fR
+Add the content tools search_sessions and get_session to the server. Off by
+default. They return transcript content with detected credentials masked and
+other text as recorded, masking a detected value in every session of the
+response rather than only where it was detected, so anything they return
+leaves the machine through the connected MCP client and reaches the model
+provider. The search_sessions response carries no echo of the query or of the
+project filter, and its skipped count names how many sessions were left out
+because their file changed on disk while it was being read; those sessions
+contribute no row rather than being masked from stale bytes.
+.SS "Baseline options"
+See \fBskarn\-baseline\fR(1).
+.TP
+\fB\-\-reason\fR \fItext\fR
+Reason recorded with an accepted finding (audit prompts for one; accept takes
+it as a flag).
+.TP
+\fB\-\-identity\fR \fIid\fR
+Override the accepted\-by identity stamped on the decision; defaults to
+$SKARN_IDENTITY.
+.TP
+\fB\-\-cli\fR \fIname\fR
+Restrict the audit scan to one assistant's sessions. One of: claude, gemini,
+codex, cursor, copilot, kimi, grok, grokbot, antigravity, opencode, cline.
+.TP
+\fB\-\-project\fR \fIpath\fR
+Restrict the audit scan to matching projects: a comma\-separated list of names
+or paths, matched case\-insensitively against a session's project display
+name, its canonical root path, or a parent directory of that root. A session
+read from a Compliance API export carries no project, so any \-\-project value
+excludes it.
+.TP
+\fB\-\-session\fR \fIid\fR
+Audit a single session by id.
+.TP
+\fB\-\-rules\fR \fIpath\fR
+Load a custom TOML rules file for the audit scan in addition to the bundled
+rules.
+.TP
+\fB\-\-hours\fR \fIn\fR
+Audit scan window in hours; 0 means no time limit. The default is 720.
+.TP
+\fB\-\-severity\fR \fIlevel\fR
+Only audit findings at or above this severity. One of: low, medium, high,
+critical. The default is medium.
+.TP
+\fB\-\-user\fR \fIname\fR
+Restrict the audit scan to matching users: a comma\-separated list of user ids
+or email addresses, where an id matches exactly and an email address matches
+case\-insensitively. Only a session read from a Compliance API export carries
+either, so on a machine without an export, or without the Enterprise license
+that reading one needs, every \-\-user value matches nothing.
+.SS "Guard options"
+See \fBskarn\-guard\fR(1).
+.TP
+\fB\-\-guard\-mode\fR \fImode\fR
+audit reports only; enforce emits a deny or ask verdict. Enforce needs a
+paid\-tier license; an unlicensed guard, or one on the free tier, runs
+audit\-only. One of: audit, enforce. The default is audit.
+.TP
+\fB\-\-strict\fR
+Also gate Read operations (credential\-file reconnaissance).
+.TP
+\fB\-\-agent\fR \fIname\fR
+Hook host. By default, auto\-detect from the event shape. Pass codex for Codex
+CLI and copilot for Copilot CLI: both send Claude\-shaped events that skarn
+cannot tell apart from Claude's. Gemini CLI, Grok Build, the Antigravity CLI,
+Kimi Code and Cline each send a payload key no other host sends, so they
+auto\-detect too, and the shipped configs pin them anyway. On Kimi Code that
+pin is load\-bearing rather than uniform policy: a host embedding kimi's older
+hook engine sends no client_type, and its Claude\-shaped prompt event then
+fails open under the Claude adapter. On Cline the shipped executables pin
+\-\-agent cline all the same, because a hook file copied between machines and
+forks carries nothing else that names the host. Grok Build is the one host
+that overrides an explicit pin: an event delivered by grok's own hook runner
+is scanned by the grok adapter even where the invoking config pins another
+host, because grok runs Claude\-config and Cursor\-config hooks with its own
+payload dialect. With \-\-self\-test, all (the default) tests the claude,
+cursor, codex, copilot, gemini, grok, antigravity, kimi, and cline adapters,
+copilot on both its CLI and VS Code dialects. With report, this option
+restricts the summary to one assistant, repeatable or comma\-separated. One
+of: claude, cursor, codex, copilot, gemini, grok, antigravity, kimi, cline,
+all.
+.TP
+\fB\-\-event\fR \fIname\fR
+The hook event this config entry fires on, for a host whose payload does not
+name its own event. The Copilot CLI needs it: its permissionRequest payload
+carries a subset of preToolUse's documented fields and nothing separates the
+two, so a permissionRequest entry must say so or the guard reads it as a
+preToolUse and answers in a schema that event does not understand. Default:
+the event is inferred from the payload shape, which never yields
+permissionRequest. Codex names its own event and the pin never overrides that
+name; skarn reads the pin only where the name is missing, so a strict deny for
+a payload that never parsed, or a call carrying no hook_event_name, takes the
+pinned shape instead of the PreToolUse default. Ignored by every other host,
+and by the VS Code Copilot dialect. One of: preToolUse, permissionRequest.
+.TP
+\fB\-\-self\-test\fR
+Verify the guard's own code path instead of reading an event. Skarn feeds two
+synthetic fixture events through each adapter's real code path, one benign and
+one carrying a fake credential, then reports the verdicts, latency, and a
+guard\-log write probe. The kimi pair carries kimi's own client_type stamp and
+content\-block prompt shape, so the fixture proves the routing the shipped pin
+also asserts. The mode in the header is this invocation's, from
+\-\-guard\-mode and the license; it is never read from a host config, so a
+bare run reports audit whatever skarn setup wired, and skarn doctor is where
+the wired mode is reported. The fake credential is only ever printed redacted,
+and the self\-test deliberately ignores the accepted\-findings baseline, so an
+accepted fingerprint can never make a dead hook look alive. What it proves is
+the binary, the adapter and the log write. It runs entirely in this process
+and reads no host config, so it never proves that a host is calling the hook:
+skarn doctor reads the host configs for that, and on a host doctor does not
+cover (kimi today) the only proof is a flagged action driven through the host
+itself. Exit 0 when every adapter passes, 1 otherwise; works unlicensed, with
+audit semantics.
+.TP
+\fB\-\-log\fR \fIpath\fR
+On the hook invocation, `skarn guard \-\-log <path|none>` names where this
+call appends its redacted JSONL record. A path takes precedence over
+$SKARN_GUARD_LOG; none writes no record even when that variable is set; no
+flag at all falls back to the variable. Skarn refuses a path that expands to a
+parent\-directory segment or carries a control character: no record is written
+and there is no fallback destination, because a fallback would derive from
+$XDG_CACHE_HOME or $HOME, which the same hook command can also set. With
+report: a guard log to summarize, repeatable. Default: $SKARN_GUARD_LOG when
+set, otherwise the log skarn setup wires for each assistant
+($XDG_CACHE_HOME/skarn/guard\-<agent>\-audit.jsonl, plus the home cache beside
+it when a log already exists there). A log that does not exist is named in the
+output with the command that wires it, never silently counted as zero, and a
+configured path the guard refuses is named as refused rather than shown as
+empty.
+.TP
+\fB\-\-window\fR \fIspan\fR
+With report: how far back to summarize, as <N>d or all. The default is 7d.
+.TP
+\fB\-\-format\fR \fIfmt\fR
+With report: text renders the summary, the enforce\-cost forecast, and the
+recommendation. json emits the whole aggregate as one object with stable field
+names for fleet scripts, including a forecast object and the denominator
+string that names what its rates are rates of. One of: text, json. The default
+is text.
+.TP
+\fB\-\-baseline\fR \fIfile\fR
+With accept: the accepted\-findings file to write. Defaults to the personal
+baseline the guard itself reads (~/.config/skarn/baseline.json, honoring
+$XDG_CONFIG_HOME), created on first use. `skarn baseline accept` always names
+its file instead, because an accept the guard does not read would not stop the
+block. Always a file, never a directory: the org\-union form is not reachable
+from the guard. Accepting a fingerprint already recorded as a confirmed true
+positive is refused, so a fingerprint\-only accept can never re\-silence a
+real leak.
+.TP
+\fB\-\-reason\fR \fItext\fR
+With accept: why this finding is a false positive, recorded in the baseline
+entry. Do not paste a secret here; the text is stored verbatim.
+.TP
+\fB\-\-identity\fR \fIid\fR
+With accept: override the accepted\-by identity stamped on the entry; defaults
+to $SKARN_IDENTITY.
+.SS "Setup options"
+See \fBskarn\-setup\fR(1).
+.TP
+\fB\-\-agent\fR \fIname\fR
+Target assistants, repeatable or comma\-separated. Default: all detected (an
+assistant is detected when its config directory exists or its CLI is on PATH);
+naming an assistant explicitly also targets it when undetected. One of:
+claude, cursor, codex, copilot, gemini, grok, all.
+.TP
+\fB\-\-mode\fR \fImode\fR
+Guard mode written into the hook commands. Audit records would\-be verdicts to
+the guard log without blocking; start there, review the log, then flip to
+enforce. Enforce needs a paid\-tier license to actually block; an unlicensed
+guard, or one on the free tier, runs audit\-only regardless. One of: audit,
+enforce. The default is audit.
+.TP
+\fB\-\-strict\fR
+Add \-\-strict to the generated guard commands (also gates Read operations;
+fail\-closed semantics on Codex).
+.TP
+\fB\-\-log\fR \fIpath\fR
+Guard log path wired into the hook commands: a SKARN_GUARD_LOG= prefix on the
+POSIX arms and on Copilot's powershell arm, and a \-\-log flag on the Codex
+commandWindows arm, which Codex may run under either PowerShell or cmd.exe and
+where no shell\-syntax prefix parses under both. Pass none to disable logging.
+At \-\-scope project skarn refuses an explicit path, because a committed
+config runs on every teammate's machine and carries only the portable
+per\-user default. A path with a parent\-directory segment or a control
+character is refused at any scope, since the guard refuses it at runtime and
+the hook would write nothing. An explicit path reaches only the arms whose
+host could have that location: a POSIX\-absolute path reaches the POSIX arms,
+a drive\-qualified or UNC path reaches the Windows arm, and the other arm
+keeps the portable default rather than a destination its host cannot resolve.
+A path that does reach the Codex Windows arm may use only letters, digits and
+~ / \e . \- _ : ; anything else is refused rather than escaped, because a bare
+argument both shells must parse has no single correct escaping. The default is
+~/.cache/skarn/guard\-<agent>\-audit.jsonl.
+.TP
+\fB\-\-command\fR \fIpath\fR
+The guard executable invoked by the hook commands. At user scope the default
+resolves this binary's absolute path, preferring the stable Homebrew
+<prefix>/bin symlink over the versioned Cellar path, because GUI\-launched
+hosts like Cursor do not inherit brew's PATH; pass skarn to opt into
+PATH\-relative. At project scope the default is the bare name skarn, and a
+value containing a path separator is refused: a committed config must resolve
+skarn from PATH on every machine. The default is this binary's absolute path.
+.TP
+\fB\-\-scope\fR \fIscope\fR
+Write user\-level configs (~/.claude/settings.json, ~/.cursor/hooks.json,
+~/.codex/hooks.json, ~/.copilot/hooks/skarn.json, ~/.gemini/settings.json,
+~/.grok/hooks/skarn.json) or project\-level ones (./.claude, ./.cursor,
+\&./.codex, ./.github/hooks/skarn.json, ./.gemini, ./.grok/hooks/skarn.json
+relative to the working directory), meant to be committed and shared. The two
+scopes write different command shapes on purpose: user scope bakes this
+binary's absolute path, immune to a GUI host's missing PATH, and project scope
+emits a portable PATH\-guarded command (if command \-v skarn ...; then ...;
+else exit 0; fi) with a literal $HOME log path, so the committed file runs
+unmodified on every teammate's machine and exits 0 where skarn is not
+installed. Gemini and Grok are the two exceptions to that promise, because
+each reads a single command field on every platform: the committed POSIX form
+does not run under the PowerShell a native\-Windows teammate's host uses, the
+hook exits non\-zero, the host treats that as a warning and continues, and
+that machine is unprotected until it wires its own. The same caveat therefore
+applies to a committed .grok/hooks/skarn.json, whose project hooks
+additionally run only once the folder is trusted with /hooks\-trust. Copilot
+honors $COPILOT_HOME as its user\-scope root, and grok honors $GROK_HOME. One
+of: user, project. The default is user.
+.TP
+\fB\-\-plugin\fR
+With \-\-scope project, claude only: write the committed plugin requirement
+(the skarn entry in extraKnownMarketplaces plus
+enabledPlugins["skarn\-guard@skarn"]) instead of hook entries, so every
+contributor who opens the repo installs the skarn\-guard plugin from the
+public marketplace. Mutually exclusive with the hooks route in both
+directions: \-\-plugin removes any skarn\-owned hook entries it previously
+wrote, and a later hooks\-route run removes the plugin keys, so the guard can
+never fire twice per event. Refused at user scope, for non\-claude assistants,
+and combined with \-\-update, \-\-mode, \-\-strict, \-\-log, or \-\-command,
+because the plugin ships its own hook files. Foreign marketplaces and plugins
+are never touched.
+.TP
+\fB\-\-print\fR
+Print the final per\-assistant config to stdout and write nothing; the
+paste\-it\-yourself and fleet\-template path.
+.TP
+\fB\-\-format\fR \fIfmt\fR
+With \-\-print: json emits one {agent, path, content} envelope per assistant
+for machine consumption. One of: text, json. The default is text.
+.TP
+\fB\-y\fR, \fB\-\-yes\fR
+Non\-interactive: accept every prompt's default. Required when running without
+a terminal.
+.TP
+\fB\-\-update\fR
+Only touch assistants whose config already carries skarn entries; the
+audit\-to\-enforce flip is skarn setup \-\-update \-\-mode enforce. An owned
+entry is replaced whole: any field you added to it is dropped, and a field a
+newer template stopped writing stays gone. The one exception is a hook\-call
+timeout you tuned yourself (timeout, or timeoutSec on copilot), carried across
+only when its entry pairs unambiguously with the replacement and the value is
+a positive integer within the host's range, and otherwise reset to the
+template default. A hook you added inside skarn's own matcher group is kept
+where you put it: skarn replaces its own entry beside yours instead of adding
+a second group to the event.
+.TP
+\fB\-\-remove\fR
+Surgically remove skarn\-owned hook entries, dropping any matcher groups and
+event arrays they leave empty. Foreign hooks are untouched, the file itself is
+never deleted, and backups from earlier runs are kept.
+.TP
+\fB\-\-json\fR
+Print a machine\-readable result summary (per assistant: path, action, backup,
+self\-test result) instead of the text report.
+.SS "Doctor options"
+See \fBskarn\-doctor\fR(1).
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+Add detail to every check: the paths searched, each wired hook command, the
+per\-tool session counts, and the resolved Homebrew path.
+.TP
+\fB\-\-json\fR
+Emit the full structured result: {version, checks[{id, status, detail, fix,
+notes}], summary{pass, warn, fail}}, plus managed_root at the top level when
+SKARN_MANAGED_ROOT is active, managed_registry_root when
+SKARN_MANAGED_REGISTRY_ROOT is active, and an additive layers array ([{layer,
+path, effect, lockdown, wired}]) on each agent_config_<agent> check, where a
+Windows registry layer carries its policy key as the path. A rendered report
+always exits 0; the two refusals that precede it are an unknown option (exit
+1) and a home directory that cannot be resolved (exit 6).
+.SS "Serve options"
+See \fBskarn\-serve\fR(1).
+.TP
+\fB\-\-port\fR \fIn\fR
+Port to listen on; 0 asks the OS to assign one. Always binds 127.0.0.1 only.
+The default is 7777.
+.TP
+\fB\-\-rules\fR \fIpath\fR
+Load a custom TOML rules file in addition to the bundled rules; the web
+Security scan then also surfaces its findings, and every value the pack
+detects is masked in the recall views too.
+.TP
+\fB\-\-baseline\fR \fIpath\fR
+Suppress findings recorded in this accepted\-findings baseline; the Security
+view hides them by default behind a show/hide toggle. Without this flag,
+~/.config/skarn/baseline.json is applied automatically when it exists. A
+directory of baselines (the org form) requires a Pro license.
+.TP
+\fB\-\-fleet\fR \fIpath\fR
+Serve a Fleet roster view (preview) over this fleet.json aggregate of
+per\-machine redacted scan artifacts. An external step produces the aggregate
+from each machine's dropped scan output; skarn neither collects nor transmits
+fleet data. When that step ran against an org\-declared machine roster, the
+aggregate also carries the coverage that roster implies, and the view states
+how many of the expected machines reported and names the ones that did not.
+Assembled without a roster it carries none, because a machine that never
+reported is invisible to anything reading only the artifacts that arrived.
+Rendering an aggregate needs the Enterprise console entitlement: without it,
+serve exits 5 before it binds a port and before it reads the file. With it,
+serve validates the file against the current aggregate contract before it
+binds a port. A file that declares a schemaVersion exits 1 when a machine's
+topExposure names a project absent from the projects that machine resolved,
+when a machine carries projects while declaring no scope, or when a
+topExposure secret is not a redaction\-chokepoint preview. Every refusal names
+the offending machine, and the two scope refusals name the project as well. A
+file that declares no schemaVersion at all is refused the same way, naming the
+aggregator version to regenerate it with: no invariant can be evaluated on a
+file that does not say what it is. The kit that produces the aggregate \- the
+aggregator, the per\-platform scheduling units, the managed guard configs, and
+the rollout runbooks \- is published at integrations/fleet/ in
+https://github.com/skarn\-security/skarn\-dist, where it downloads with no
+credential and no license; only rendering the assembled aggregate here needs
+one. Requires an Enterprise license.
+.SS "Global options"
+Available on a bare invocation.
+.TP
+\fB\-\-version\fR
+Print the version and exit.
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help and exit.
+.SS "Recent options"
+See \fBskarn\-recent\fR(1).
+.TP
+\fB\-\-no\-redact\fR
+Print raw session content and skip the detection scan. By default every
+detected secret is masked in the output; the match and every filter run on the
+raw text either way, so a masked value still finds its session.
+.TP
+\fB\-\-cli\fR \fIname\fR
+Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
+copilot, kimi, grok, grokbot, antigravity, opencode, cline.
+.TP
+\fB\-\-project\fR \fIpath\fR
+Restrict to matching projects: a comma\-separated list of names or paths,
+matched case\-insensitively against a session's project display name, its
+canonical root path, or a parent directory of that root. A session read from a
+Compliance API export carries no project, so any \-\-project value excludes
+it.
+.TP
+\fB\-\-worktree\fR \fIpath\fR
+Restrict to sessions whose working directory is under this path.
+.TP
+\fB\-\-since\fR \fIdate\fR
+Lower bound of the time window, applied to a session file's last\-modified
+time rather than to when the session started, so a session begun before the
+bound but written to inside it is included and a resumed session stays visible
+under the day you worked on it. Takes priority over \-\-hours. Naming one
+session by id changes this: `skarn search \-\-session <id>`, `skarn stats
+<id>` and the other per\-session views ignore the window altogether, and
+`skarn messages <id>` is the single command that applies it there, reading
+BOTH bounds against the session's own start time rather than its file and
+refusing an out\-of\-window session with exit 1 instead of filtering it out. A
+bare YYYY\-MM\-DD means that day's midnight, shifted by \-\-tz\-offset; a full
+ISO timestamp is used as given.
+.TP
+\fB\-\-until\fR \fIdate\fR
+Upper bound of the time window, applied to when a session STARTED rather than
+to when its file was last written, so a session that began after the bound is
+excluded even if it was already running before it. The two bounds therefore
+read different timestamps. Passing it without \-\-since also drops the
+\-\-hours lower bound, so the window becomes all history up to the bound. A
+bare YYYY\-MM\-DD covers that whole day through 23:59:59, shifted by
+\-\-tz\-offset; a full ISO timestamp is used as given. A session whose start
+time cannot be parsed is kept. A view that names one session by id ignores
+this bound, except `skarn messages <id>`, which refuses a session past it with
+exit 1 rather than dropping it from a list.
+.TP
+\fB\-\-tz\-offset\fR \fIminutes\fR
+Timezone offset in minutes for date grouping and display. The default is 0.
+.TP
+\fB\-\-hours\fR \fIn\fR
+Time window in hours; 0 means no limit. The default is 24.
+.TP
+\fB\-\-format\fR \fIfmt\fR
+Output format. One of: text, json, csv. The default is text.
+.TP
+\fB\-\-include\-empty\fR
+Include sessions with no user or assistant messages (off by default). A run
+that hid any prints their count on stderr, and \-\-format json carries it as
+empty_hidden beside session_count; a discovered session whose file could not
+be parsed is counted the same way, on stderr and as unreadable, so a listing
+never drops a discovered session silently; the Antigravity IDE side\-channel
+bundle, which carries scanned values rather than a conversation, is one such
+session.
+.TP
+\fB\-\-user\fR \fIname\fR
+Restrict to matching users: a comma\-separated list of user ids or email
+addresses, where an id matches exactly and an email address matches
+case\-insensitively. Only a session read from a Compliance API export carries
+either, so on a machine without an export, or without the Enterprise license
+that reading one needs, every \-\-user value matches nothing.
+.SS "Messages options"
+See \fBskarn\-messages\fR(1).
+.TP
+\fB\-\-no\-redact\fR
+Print raw session content and skip the detection scan. By default every
+detected secret is masked in the output; the match and every filter run on the
+raw text either way, so a masked value still finds its session.
+.TP
+\fB\-\-cli\fR \fIname\fR
+Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
+copilot, kimi, grok, grokbot, antigravity, opencode, cline.
+.TP
+\fB\-\-project\fR \fIpath\fR
+Restrict to matching projects: a comma\-separated list of names or paths,
+matched case\-insensitively against a session's project display name, its
+canonical root path, or a parent directory of that root. A session read from a
+Compliance API export carries no project, so any \-\-project value excludes
+it.
+.TP
+\fB\-\-worktree\fR \fIpath\fR
+Restrict to sessions whose working directory is under this path.
+.TP
+\fB\-\-since\fR \fIdate\fR
+Lower bound of the time window, applied to a session file's last\-modified
+time rather than to when the session started, so a session begun before the
+bound but written to inside it is included and a resumed session stays visible
+under the day you worked on it. Takes priority over \-\-hours. Naming one
+session by id changes this: `skarn search \-\-session <id>`, `skarn stats
+<id>` and the other per\-session views ignore the window altogether, and
+`skarn messages <id>` is the single command that applies it there, reading
+BOTH bounds against the session's own start time rather than its file and
+refusing an out\-of\-window session with exit 1 instead of filtering it out. A
+bare YYYY\-MM\-DD means that day's midnight, shifted by \-\-tz\-offset; a full
+ISO timestamp is used as given.
+.TP
+\fB\-\-until\fR \fIdate\fR
+Upper bound of the time window, applied to when a session STARTED rather than
+to when its file was last written, so a session that began after the bound is
+excluded even if it was already running before it. The two bounds therefore
+read different timestamps. Passing it without \-\-since also drops the
+\-\-hours lower bound, so the window becomes all history up to the bound. A
+bare YYYY\-MM\-DD covers that whole day through 23:59:59, shifted by
+\-\-tz\-offset; a full ISO timestamp is used as given. A session whose start
+time cannot be parsed is kept. A view that names one session by id ignores
+this bound, except `skarn messages <id>`, which refuses a session past it with
+exit 1 rather than dropping it from a list.
+.TP
+\fB\-\-tz\-offset\fR \fIminutes\fR
+Timezone offset in minutes for date grouping and display. The default is 0.
+.TP
+\fB\-\-format\fR \fIfmt\fR
+Output format. One of: text, json. The default is text.
+.TP
+\fB\-\-session\fR \fIid\fR
+Session id to operate on (prefix\-matched); equivalent to the positional
+argument.
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+Verbose output.
+.TP
+\fB\-\-hours\fR \fIn\fR
+Time window in hours used only to resolve a session prefix; 0 applies no
+filter. The default is 0.
+.TP
+\fB\-\-user\fR \fIname\fR
+Restrict to matching users: a comma\-separated list of user ids or email
+addresses, where an id matches exactly and an email address matches
+case\-insensitively. Only a session read from a Compliance API export carries
+either, so on a machine without an export, or without the Enterprise license
+that reading one needs, every \-\-user value matches nothing.
+.SS "Search options"
+See \fBskarn\-search\fR(1).
+.TP
+\fB\-\-no\-redact\fR
+Print raw session content and skip the detection scan. By default every
+detected secret is masked in the output; the match and every filter run on the
+raw text either way, so a masked value still finds its session.
+.TP
+\fB\-\-cli\fR \fIname\fR
+Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
+copilot, kimi, grok, grokbot, antigravity, opencode, cline.
+.TP
+\fB\-\-project\fR \fIpath\fR
+Restrict to matching projects: a comma\-separated list of names or paths,
+matched case\-insensitively against a session's project display name, its
+canonical root path, or a parent directory of that root. A session read from a
+Compliance API export carries no project, so any \-\-project value excludes
+it.
+.TP
+\fB\-\-worktree\fR \fIpath\fR
+Restrict to sessions whose working directory is under this path.
+.TP
+\fB\-\-since\fR \fIdate\fR
+Lower bound of the time window, applied to a session file's last\-modified
+time rather than to when the session started, so a session begun before the
+bound but written to inside it is included and a resumed session stays visible
+under the day you worked on it. Takes priority over \-\-hours. Naming one
+session by id changes this: `skarn search \-\-session <id>`, `skarn stats
+<id>` and the other per\-session views ignore the window altogether, and
+`skarn messages <id>` is the single command that applies it there, reading
+BOTH bounds against the session's own start time rather than its file and
+refusing an out\-of\-window session with exit 1 instead of filtering it out. A
+bare YYYY\-MM\-DD means that day's midnight, shifted by \-\-tz\-offset; a full
+ISO timestamp is used as given.
+.TP
+\fB\-\-until\fR \fIdate\fR
+Upper bound of the time window, applied to when a session STARTED rather than
+to when its file was last written, so a session that began after the bound is
+excluded even if it was already running before it. The two bounds therefore
+read different timestamps. Passing it without \-\-since also drops the
+\-\-hours lower bound, so the window becomes all history up to the bound. A
+bare YYYY\-MM\-DD covers that whole day through 23:59:59, shifted by
+\-\-tz\-offset; a full ISO timestamp is used as given. A session whose start
+time cannot be parsed is kept. A view that names one session by id ignores
+this bound, except `skarn messages <id>`, which refuses a session past it with
+exit 1 rather than dropping it from a list.
+.TP
+\fB\-\-tz\-offset\fR \fIminutes\fR
+Timezone offset in minutes for date grouping and display. The default is 0.
+.TP
+\fB\-\-session\fR \fIid\fR
+Restrict to a single session by id (prefix\-matched).
+.TP
+\fB\-\-hours\fR \fIn\fR
+Time window in hours; 0 searches all history (the default). The default is 0.
+.TP
+\fB\-\-all\fR
+Search all history (explicit alias for the default).
+.TP
+\fB\-\-context\fR \fIn\fR
+Lines of context to show around each match. The default is 2.
+.TP
+\fB\-\-role\fR \fIrole\fR
+Restrict matches to one message role. One of: user, assistant, all. The
+default is all.
+.TP
+\fB\-\-source\fR \fIsrc\fR
+Restrict matches by content source kind. One of: content, tool\-input,
+tool\-result, all. The default is content.
+.TP
+\fB\-\-max\-results\fR \fIn\fR
+Cap how many match rows are rendered; 0 means no cap. The default is 50.
+.TP
+\fB\-\-max\-line\-length\fR \fIn\fR
+Cap rendered snippet length per row; 0 means no cap. The default is 200.
+.TP
+\fB\-\-list\fR
+Print one matching session per line instead of per\-match rows.
+.TP
+\fB\-\-count\fR
+Print one matching session per line with its hit count.
+.TP
+\fB\-\-output\fR \fIfmt\fR
+Output format for the active mode. One of: text, json. The default is text.
+.TP
+\fB\-\-json\fR
+Shorthand for \-\-output json.
+.TP
+\fB\-\-regex\fR
+Treat the query as a PCRE2 regular expression.
+.TP
+\fB\-\-case\-sensitive\fR
+Case\-sensitive matching (default: case\-insensitive).
+.TP
+\fB\-\-user\fR \fIname\fR
+Restrict to matching users: a comma\-separated list of user ids or email
+addresses, where an id matches exactly and an email address matches
+case\-insensitively. Only a session read from a Compliance API export carries
+either, so on a machine without an export, or without the Enterprise license
+that reading one needs, every \-\-user value matches nothing.
+.SS "Restore options"
+See \fBskarn\-restore\fR(1).
+.TP
+\fB\-\-no\-redact\fR
+Print raw session content and skip the detection scan. By default every
+detected secret is masked in the output; the match and every filter run on the
+raw text either way, so a masked value still finds its session.
+.TP
+\fB\-\-session\fR \fIid\fR
+Session id to operate on (prefix\-matched); equivalent to the positional
+argument.
+.SS "Stats options"
+See \fBskarn\-stats\fR(1).
+.TP
+\fB\-\-no\-redact\fR
+Print raw session content and skip the detection scan. By default every
+detected secret is masked in the output; the match and every filter run on the
+raw text either way, so a masked value still finds its session.
+.TP
+\fB\-\-cli\fR \fIname\fR
+Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
+copilot, kimi, grok, grokbot, antigravity, opencode, cline.
+.TP
+\fB\-\-project\fR \fIpath\fR
+Restrict to matching projects: a comma\-separated list of names or paths,
+matched case\-insensitively against a session's project display name, its
+canonical root path, or a parent directory of that root. A session read from a
+Compliance API export carries no project, so any \-\-project value excludes
+it.
+.TP
+\fB\-\-worktree\fR \fIpath\fR
+Restrict to sessions whose working directory is under this path.
+.TP
+\fB\-\-since\fR \fIdate\fR
+Lower bound of the time window, applied to a session file's last\-modified
+time rather than to when the session started, so a session begun before the
+bound but written to inside it is included and a resumed session stays visible
+under the day you worked on it. Takes priority over \-\-hours. Naming one
+session by id changes this: `skarn search \-\-session <id>`, `skarn stats
+<id>` and the other per\-session views ignore the window altogether, and
+`skarn messages <id>` is the single command that applies it there, reading
+BOTH bounds against the session's own start time rather than its file and
+refusing an out\-of\-window session with exit 1 instead of filtering it out. A
+bare YYYY\-MM\-DD means that day's midnight, shifted by \-\-tz\-offset; a full
+ISO timestamp is used as given.
+.TP
+\fB\-\-until\fR \fIdate\fR
+Upper bound of the time window, applied to when a session STARTED rather than
+to when its file was last written, so a session that began after the bound is
+excluded even if it was already running before it. The two bounds therefore
+read different timestamps. Passing it without \-\-since also drops the
+\-\-hours lower bound, so the window becomes all history up to the bound. A
+bare YYYY\-MM\-DD covers that whole day through 23:59:59, shifted by
+\-\-tz\-offset; a full ISO timestamp is used as given. A session whose start
+time cannot be parsed is kept. A view that names one session by id ignores
+this bound, except `skarn messages <id>`, which refuses a session past it with
+exit 1 rather than dropping it from a list.
+.TP
+\fB\-\-tz\-offset\fR \fIminutes\fR
+Timezone offset in minutes for date grouping and display. The default is 0.
+.TP
+\fB\-\-hours\fR \fIn\fR
+Time window in hours; 0 means no limit. The default is 168.
+.TP
+\fB\-\-session\fR \fIid\fR
+Restrict to a single session by id (prefix\-matched).
+.TP
+\fB\-\-format\fR \fIfmt\fR
+Output format. csv requires \-\-by; html writes a file (\-o). One of: text,
+json, csv, html. The default is text.
+.TP
+\fB\-\-by\fR \fIaxis\fR
+Group the aggregate by date or project; required for \-\-format csv. One of:
+date, project.
+.TP
+\fB\-\-show\fR \fIlist\fR
+Comma list of content blocks to render (default: overview,tokens). text and
+html only. One of: overview, tokens, models, tools, timing, all.
+.TP
+\fB\-\-open\fR
+Open the HTML report in a browser after writing it (\-\-format html only).
+.TP
+\fB\-o\fR, \fB\-\-out\fR \fIfile\fR
+Destination file for \-\-format html. The default is skarn\-report.html.
+.TP
+\fB\-\-user\fR \fIname\fR
+Restrict to matching users: a comma\-separated list of user ids or email
+addresses, where an id matches exactly and an email address matches
+case\-insensitively. Only a session read from a Compliance API export carries
+either, so on a machine without an export, or without the Enterprise license
+that reading one needs, every \-\-user value matches nothing.
+.SS "Export options"
+See \fBskarn\-export\fR(1).
+.TP
+\fB\-\-no\-redact\fR
+Print raw session content and skip the detection scan. By default every
+detected secret is masked in the output; the match and every filter run on the
+raw text either way, so a masked value still finds its session.
+.TP
+\fB\-\-cli\fR \fIname\fR
+Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
+copilot, kimi, grok, grokbot, antigravity, opencode, cline.
+.TP
+\fB\-\-project\fR \fIpath\fR
+Restrict to matching projects: a comma\-separated list of names or paths,
+matched case\-insensitively against a session's project display name, its
+canonical root path, or a parent directory of that root. A session read from a
+Compliance API export carries no project, so any \-\-project value excludes
+it.
+.TP
+\fB\-\-worktree\fR \fIpath\fR
+Restrict to sessions whose working directory is under this path.
+.TP
+\fB\-\-since\fR \fIdate\fR
+Lower bound of the time window, applied to a session file's last\-modified
+time rather than to when the session started, so a session begun before the
+bound but written to inside it is included and a resumed session stays visible
+under the day you worked on it. Takes priority over \-\-hours. Naming one
+session by id changes this: `skarn search \-\-session <id>`, `skarn stats
+<id>` and the other per\-session views ignore the window altogether, and
+`skarn messages <id>` is the single command that applies it there, reading
+BOTH bounds against the session's own start time rather than its file and
+refusing an out\-of\-window session with exit 1 instead of filtering it out. A
+bare YYYY\-MM\-DD means that day's midnight, shifted by \-\-tz\-offset; a full
+ISO timestamp is used as given.
+.TP
+\fB\-\-until\fR \fIdate\fR
+Upper bound of the time window, applied to when a session STARTED rather than
+to when its file was last written, so a session that began after the bound is
+excluded even if it was already running before it. The two bounds therefore
+read different timestamps. Passing it without \-\-since also drops the
+\-\-hours lower bound, so the window becomes all history up to the bound. A
+bare YYYY\-MM\-DD covers that whole day through 23:59:59, shifted by
+\-\-tz\-offset; a full ISO timestamp is used as given. A session whose start
+time cannot be parsed is kept. A view that names one session by id ignores
+this bound, except `skarn messages <id>`, which refuses a session past it with
+exit 1 rather than dropping it from a list.
+.TP
+\fB\-\-tz\-offset\fR \fIminutes\fR
+Timezone offset in minutes for date grouping and display. The default is 0.
+.TP
+\fB\-\-hours\fR \fIn\fR
+Time window in hours; 0 means no limit. The default is 168.
+.TP
+\fB\-\-session\fR \fIid\fR
+Restrict to a single session by id (prefix\-matched).
+.TP
+\fB\-\-format\fR \fIfmt\fR
+Output format. One of: text, json, ndjson, html. The default is text.
+.TP
+\fB\-\-out\fR \fIfile\fR
+Write to this file instead of stdout.
+.TP
+\fB\-\-open\fR
+Open the written file in the default viewer (needs \-\-out).
+.TP
+\fB\-\-gzip\fR
+Gzip\-compress the output (needs \-\-out, or \-\-format html).
+.TP
+\fB\-\-user\fR \fIname\fR
+Restrict to matching users: a comma\-separated list of user ids or email
+addresses, where an id matches exactly and an email address matches
+case\-insensitively. Only a session read from a Compliance API export carries
+either, so on a machine without an export, or without the Enterprise license
+that reading one needs, every \-\-user value matches nothing.
+.SS "Cmds options"
+See \fBskarn\-cmds\fR(1).
+.TP
+\fB\-\-no\-redact\fR
+Print raw session content and skip the detection scan. By default every
+detected secret is masked in the output; the match and every filter run on the
+raw text either way, so a masked value still finds its session.
+.TP
+\fB\-\-cli\fR \fIname\fR
+Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
+copilot, kimi, grok, grokbot, antigravity, opencode, cline.
+.TP
+\fB\-\-project\fR \fIpath\fR
+Restrict to matching projects: a comma\-separated list of names or paths,
+matched case\-insensitively against a session's project display name, its
+canonical root path, or a parent directory of that root. A session read from a
+Compliance API export carries no project, so any \-\-project value excludes
+it.
+.TP
+\fB\-\-worktree\fR \fIpath\fR
+Restrict to sessions whose working directory is under this path.
+.TP
+\fB\-\-since\fR \fIdate\fR
+Lower bound of the time window, applied to a session file's last\-modified
+time rather than to when the session started, so a session begun before the
+bound but written to inside it is included and a resumed session stays visible
+under the day you worked on it. Takes priority over \-\-hours. Naming one
+session by id changes this: `skarn search \-\-session <id>`, `skarn stats
+<id>` and the other per\-session views ignore the window altogether, and
+`skarn messages <id>` is the single command that applies it there, reading
+BOTH bounds against the session's own start time rather than its file and
+refusing an out\-of\-window session with exit 1 instead of filtering it out. A
+bare YYYY\-MM\-DD means that day's midnight, shifted by \-\-tz\-offset; a full
+ISO timestamp is used as given.
+.TP
+\fB\-\-until\fR \fIdate\fR
+Upper bound of the time window, applied to when a session STARTED rather than
+to when its file was last written, so a session that began after the bound is
+excluded even if it was already running before it. The two bounds therefore
+read different timestamps. Passing it without \-\-since also drops the
+\-\-hours lower bound, so the window becomes all history up to the bound. A
+bare YYYY\-MM\-DD covers that whole day through 23:59:59, shifted by
+\-\-tz\-offset; a full ISO timestamp is used as given. A session whose start
+time cannot be parsed is kept. A view that names one session by id ignores
+this bound, except `skarn messages <id>`, which refuses a session past it with
+exit 1 rather than dropping it from a list.
+.TP
+\fB\-\-tz\-offset\fR \fIminutes\fR
+Timezone offset in minutes for date grouping and display. The default is 0.
+.TP
+\fB\-\-hours\fR \fIn\fR
+Time window in hours; 0 means no limit. The default is 168.
+.TP
+\fB\-\-format\fR \fIfmt\fR
+Output format. One of: text, json. The default is text.
+.TP
+\fB\-\-session\fR \fIid\fR
+Restrict to a single session by id (prefix\-matched).
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+Verbose output.
+.TP
+\fB\-\-failed\fR
+Only show entries that failed (errored or exited non\-zero).
+.TP
+\fB\-\-unique\fR
+Collapse duplicates, keeping the latest occurrence.
+.TP
+\fB\-\-cmd\fR \fItext\fR
+Case\-insensitive substring filter on the command text.
+.TP
+\fB\-\-user\fR \fIname\fR
+Restrict to matching users: a comma\-separated list of user ids or email
+addresses, where an id matches exactly and an email address matches
+case\-insensitively. Only a session read from a Compliance API export carries
+either, so on a machine without an export, or without the Enterprise license
+that reading one needs, every \-\-user value matches nothing.
+.SS "Mcps options"
+See \fBskarn\-mcps\fR(1).
+.TP
+\fB\-\-no\-redact\fR
+Print raw session content and skip the detection scan. By default every
+detected secret is masked in the output; the match and every filter run on the
+raw text either way, so a masked value still finds its session.
+.TP
+\fB\-\-cli\fR \fIname\fR
+Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
+copilot, kimi, grok, grokbot, antigravity, opencode, cline.
+.TP
+\fB\-\-project\fR \fIpath\fR
+Restrict to matching projects: a comma\-separated list of names or paths,
+matched case\-insensitively against a session's project display name, its
+canonical root path, or a parent directory of that root. A session read from a
+Compliance API export carries no project, so any \-\-project value excludes
+it.
+.TP
+\fB\-\-worktree\fR \fIpath\fR
+Restrict to sessions whose working directory is under this path.
+.TP
+\fB\-\-since\fR \fIdate\fR
+Lower bound of the time window, applied to a session file's last\-modified
+time rather than to when the session started, so a session begun before the
+bound but written to inside it is included and a resumed session stays visible
+under the day you worked on it. Takes priority over \-\-hours. Naming one
+session by id changes this: `skarn search \-\-session <id>`, `skarn stats
+<id>` and the other per\-session views ignore the window altogether, and
+`skarn messages <id>` is the single command that applies it there, reading
+BOTH bounds against the session's own start time rather than its file and
+refusing an out\-of\-window session with exit 1 instead of filtering it out. A
+bare YYYY\-MM\-DD means that day's midnight, shifted by \-\-tz\-offset; a full
+ISO timestamp is used as given.
+.TP
+\fB\-\-until\fR \fIdate\fR
+Upper bound of the time window, applied to when a session STARTED rather than
+to when its file was last written, so a session that began after the bound is
+excluded even if it was already running before it. The two bounds therefore
+read different timestamps. Passing it without \-\-since also drops the
+\-\-hours lower bound, so the window becomes all history up to the bound. A
+bare YYYY\-MM\-DD covers that whole day through 23:59:59, shifted by
+\-\-tz\-offset; a full ISO timestamp is used as given. A session whose start
+time cannot be parsed is kept. A view that names one session by id ignores
+this bound, except `skarn messages <id>`, which refuses a session past it with
+exit 1 rather than dropping it from a list.
+.TP
+\fB\-\-tz\-offset\fR \fIminutes\fR
+Timezone offset in minutes for date grouping and display. The default is 0.
+.TP
+\fB\-\-hours\fR \fIn\fR
+Time window in hours; 0 means no limit. The default is 168.
+.TP
+\fB\-\-format\fR \fIfmt\fR
+Output format. One of: text, json. The default is text.
+.TP
+\fB\-\-session\fR \fIid\fR
+Restrict to a single session by id (prefix\-matched).
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+Verbose output.
+.TP
+\fB\-\-failed\fR
+Only show entries that failed (errored or exited non\-zero).
+.TP
+\fB\-\-unique\fR
+Collapse duplicates, keeping the latest occurrence.
+.TP
+\fB\-\-mcp\fR \fIname\fR
+Substring filter on the MCP tool name.
+.TP
+\fB\-\-user\fR \fIname\fR
+Restrict to matching users: a comma\-separated list of user ids or email
+addresses, where an id matches exactly and an email address matches
+case\-insensitively. Only a session read from a Compliance API export carries
+either, so on a machine without an export, or without the Enterprise license
+that reading one needs, every \-\-user value matches nothing.
+.SS "Tools options"
+See \fBskarn\-tools\fR(1).
+.TP
+\fB\-\-no\-redact\fR
+Print raw session content and skip the detection scan. By default every
+detected secret is masked in the output; the match and every filter run on the
+raw text either way, so a masked value still finds its session.
+.TP
+\fB\-\-cli\fR \fIname\fR
+Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
+copilot, kimi, grok, grokbot, antigravity, opencode, cline.
+.TP
+\fB\-\-project\fR \fIpath\fR
+Restrict to matching projects: a comma\-separated list of names or paths,
+matched case\-insensitively against a session's project display name, its
+canonical root path, or a parent directory of that root. A session read from a
+Compliance API export carries no project, so any \-\-project value excludes
+it.
+.TP
+\fB\-\-worktree\fR \fIpath\fR
+Restrict to sessions whose working directory is under this path.
+.TP
+\fB\-\-since\fR \fIdate\fR
+Lower bound of the time window, applied to a session file's last\-modified
+time rather than to when the session started, so a session begun before the
+bound but written to inside it is included and a resumed session stays visible
+under the day you worked on it. Takes priority over \-\-hours. Naming one
+session by id changes this: `skarn search \-\-session <id>`, `skarn stats
+<id>` and the other per\-session views ignore the window altogether, and
+`skarn messages <id>` is the single command that applies it there, reading
+BOTH bounds against the session's own start time rather than its file and
+refusing an out\-of\-window session with exit 1 instead of filtering it out. A
+bare YYYY\-MM\-DD means that day's midnight, shifted by \-\-tz\-offset; a full
+ISO timestamp is used as given.
+.TP
+\fB\-\-until\fR \fIdate\fR
+Upper bound of the time window, applied to when a session STARTED rather than
+to when its file was last written, so a session that began after the bound is
+excluded even if it was already running before it. The two bounds therefore
+read different timestamps. Passing it without \-\-since also drops the
+\-\-hours lower bound, so the window becomes all history up to the bound. A
+bare YYYY\-MM\-DD covers that whole day through 23:59:59, shifted by
+\-\-tz\-offset; a full ISO timestamp is used as given. A session whose start
+time cannot be parsed is kept. A view that names one session by id ignores
+this bound, except `skarn messages <id>`, which refuses a session past it with
+exit 1 rather than dropping it from a list.
+.TP
+\fB\-\-tz\-offset\fR \fIminutes\fR
+Timezone offset in minutes for date grouping and display. The default is 0.
+.TP
+\fB\-\-hours\fR \fIn\fR
+Time window in hours; 0 means no limit. The default is 168.
+.TP
+\fB\-\-format\fR \fIfmt\fR
+Output format. One of: text, json. The default is text.
+.TP
+\fB\-\-session\fR \fIid\fR
+Restrict to a single session by id (prefix\-matched).
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+Verbose output.
+.TP
+\fB\-\-failed\fR
+Only show entries that failed (errored or exited non\-zero).
+.TP
+\fB\-\-unique\fR
+Collapse duplicates, keeping the latest occurrence.
+.TP
+\fB\-\-tool\fR \fIname\fR
+Substring filter on the tool name.
+.TP
+\fB\-\-user\fR \fIname\fR
+Restrict to matching users: a comma\-separated list of user ids or email
+addresses, where an id matches exactly and an email address matches
+case\-insensitively. Only a session read from a Compliance API export carries
+either, so on a machine without an export, or without the Enterprise license
+that reading one needs, every \-\-user value matches nothing.
+.SS "License options"
+See \fBskarn\-license\fR(1).
+.TP
+\fB\-o\fR, \fB\-\-output\fR \fIpath\fR
+Write the renewed license to this path instead of the config directory. Only
+applies to `skarn license renew`; the file is written with owner\-only
+permissions, and an existing file that is not a readable Skarn license is
+never overwritten.
+.TP
+\fB\-y\fR, \fB\-\-yes\fR
+Replace an already\-installed license without asking. Required when installing
+over an existing license from a script or from stdin, where there is no
+terminal to confirm on.
+.TP
+\fB\-\-json\fR
+Print the license status as a single JSON object (state, tier, licensee, org,
+seats, license id, issue and expiry dates, days remaining, and the source it
+was resolved from). The license token is never included.
+.SS "Fleet options"
+See \fBskarn\-fleet\fR(1).
+.TP
+\fB\-o\fR, \fB\-\-output\fR \fIfile\fR
+With aggregate: the aggregate file to write, required; it is written
+atomically through a temporary file in the same directory, so a refused run
+leaves no partial aggregate behind. With readout: write the rendered readout
+there instead of standard output.
+.TP
+\fB\-\-roster\fR \fIfile\fR
+With aggregate: the org\-controlled roster of the machines expected to report
+and the projects each may report on. A drop from a machine the roster does not
+name is refused; a drop that resolved a project the roster does not permit
+that machine is refused naming both; an unscoped drop is accepted only from a
+machine the roster marks allowUnscoped; and the aggregate gains a coverage
+block naming every rostered machine that sent nothing. Without it the machine
+set is discovered from the drops and a machine that never reported is
+invisible.
+.TP
+\fB\-\-prior\fR \fIaggregate\fR
+With readout: the previous period's aggregate. The readout then reports
+movements against it; omitted, it states that this is the baseline
+measurement. The prior must be for the same organization and older than the
+current aggregate.
+.TP
+\fB\-\-json\fR
+With readout: emit the underlying comparison object (coverage, fleet totals,
+per\-machine movement, the ranked risk list) instead of Markdown; without
+\-\-prior the movement fields are null.
+.SH "EXIT STATUS"
+.TP
+\fB0\fR
+Clean, or informational output only. For mcp: the client closed stdin, which
+is the normal shutdown.
+.TP
+\fB1\fR
+A finding at or above the \-\-fail\-on\-severity threshold was reported. For
+setup and guard \-\-self\-test: a target was refused or a verification failed.
+For doctor: at least one check FAILED (a warning never exits nonzero), or an
+unknown option was passed, which is refused before any check runs. For
+restore: the recorded working directory or session id could not be rendered
+safely, or the working directory carries a detected secret and \-\-no\-redact
+was not passed, so nothing was printed to stdout and the refusal is named on
+stderr. Also: the first\-run EULA prompt was declined, so the invoked
+operation was not performed. For mcp: an unknown argument was passed, which is
+refused before the protocol loop starts. For license: an install or a renewal
+was refused or did not complete, for example because an argument was invalid,
+a license did not verify, a replacement was declined, there was no license to
+renew, the renewal endpoint was refused or could not be reached, or a file
+could not be read or written. A failure before the new license is written
+leaves the installed license as it was.
+.TP
+\fB2\fR
+The session risk score exceeded the \-\-fail\-on\-risk threshold. For setup:
+no terminal to prompt on and no \-\-yes; the exact non\-interactive command is
+printed. For license: the license service declined the renewal that license
+renew asked for, and nothing was written.
+.TP
+\fB3\fR
+A canary token was triggered (a proven breach). This overrides every other
+gate. For license: license renew refused the license the service returned,
+because it did not verify, could not be used (revoked or expired, for
+example), or did not supersede the license being renewed or the one already at
+the destination, so nothing was written.
+.TP
+\fB4\fR
+A policy precondition was not met: a required rule is missing, the policy
+requires a baseline and none was supplied or the one supplied did not load, or
+the \-\-policy file itself could not be read or parsed. A policy that never
+loaded is never quietly replaced by the embedded default, which gates nothing.
+.TP
+\fB5\fR
+A requested paid feature is not covered by the active license (a Pro or
+Enterprise flag without a license that covers it). Refused before any scan.
+With no usable license at all, check exits 7 before this gate is consulted.
+.TP
+\fB6\fR
+The scan could not complete: session discovery or the scan itself failed,
+including a home directory that could not be resolved so no session store was
+ever located, or the detection rules could not be loaded so no scan was ever
+defined. Under \-\-fail\-on\-scan\-error an otherwise\-complete run exits 6 as
+well whenever coverage was partial: a tool source dropped out of discovery, a
+session store that exists could not be read, a session's parse failed, the
+assistant compacted a session before the scan so its transcript no longer
+holds the whole conversation, or the run read no sessions at all. That verdict
+is computed BEFORE the report is rendered, so the SARIF invocation exit code,
+the evidence pack and the audit record all carry 6 rather than describing the
+run as clean and then exiting nonzero. A \-\-baseline\-create run is refused
+on the same condition before it writes anything, so an incomplete scan is
+never recorded as the accepted set and the previous baseline survives. For
+check \-\-audit\-verify: the audit log exists but could not be read, so the
+hash chain was never examined (an absent log is a valid empty chain and exits
+0). For vet: the home directory could not be resolved (so the configuration
+was never located at all), or a config file that exists was not read \- it
+could not be read, or it was skipped because it is not that assistant's live
+configuration \- so the configuration was only partly seen. For doctor: the
+home directory could not be resolved, so every per\-assistant check would have
+read an empty machine \- a diagnostic that could not be produced is never
+reported as a healthy one. Fail\-closed \- the result is not trustworthy, so
+it is never reported as clean.
+.TP
+\fB7\fR
+No usable license is present \- none was found via SKARN_LICENSE,
+SKARN_LICENSE_FILE, or the installed file \- so check, baseline audit, fleet
+aggregate or fleet readout refused before scanning or reading a file. The free
+license is issued at https://getskarn.com/free after a quick email
+confirmation and is verified offline. Also used when a license IS present but
+cannot be used at all (revoked, tampered, or signed by an untrusted key).
+assess, baseline accept, guard accept, the recall commands, guard, setup,
+doctor, vet, mcp, license, taxonomies and check \-\-audit\-verify never exit
+7.
+.SH ENVIRONMENT
+.TP
+\fBSKARN_SCAN_THREADS\fR
+Cap the worker\-pool size for every parallel sweep (scan and recall). 1 forces
+a fully serial run. Default is one worker per core, capped at 32. Output is
+identical for any value; only latency changes.
+.TP
+\fBSKARN_CLAUDE_DIRS\fR
+Colon\-separated list of additional Claude Code config directories to scan
+beyond the default ~/.claude. Each entry is the dir that contains projects/.
+Roots are de\-duplicated.
+.TP
+\fBSKARN_TZ_OFFSET\fR
+Default timezone offset in hours applied when grouping recall and stats output
+by time.
+.TP
+\fBSKARN_NO_TIMING\fR
+Suppress the dim "Scanned N sessions" timing line that recall commands print
+after a text run on a terminal. Already auto\-suppressed for json/sarif/csv
+output and for non\-TTY stdout.
+.TP
+\fBSKARN_LICENSE_RENEW_URL\fR
+License\-service endpoint `skarn license renew` posts to. Defaults to
+https://api.getskarn.com/v1/license/renew; set it to route renewals through an
+enterprise proxy. It must be https, with plain http accepted only against
+loopback, and must carry no userinfo, so a poisoned environment can neither
+redirect the license token to a cleartext endpoint nor hand credentials to the
+one it names. No other command reads it.
+.TP
+\fBSKARN_GUARD_LOG\fR
+Path to append a redacted JSONL verdict log for guard (opt\-in; off when
+unset). One record per flagged call, carrying the fingerprint that `skarn
+guard accept` takes; clean calls, and calls whose every finding was already
+accepted, are not logged.
+.TP
+\fBGEMINI_CLI_SYSTEM_SETTINGS_PATH\fR
+Gemini CLI's own override for the path of its managed system settings file.
+When set it REPLACES the default path, and Gemini also takes its
+system\-defaults file from that path's directory. Doctor resolves both gemini
+managed layers through it, so the report names the files Gemini actually reads
+rather than default files it is not.
+.TP
+\fBGEMINI_CLI_SYSTEM_DEFAULTS_PATH\fR
+Gemini CLI's own override for the path of its system\-defaults file, the
+lowest of its four settings layers. When set it REPLACES the path Gemini would
+otherwise derive from the system settings file's directory, and doctor reads
+the override.
+.TP
+\fBSKARN_IDENTITY\fR
+Local\-first identity tag (an SSO subject, email, or CI principal) stamped as
+provenance on baseline entries created with \-\-baseline\-create. Optional;
+Skarn never authenticates it.
+.TP
+\fBSKARN_ORG\fR
+Local\-first org or team tag stamped alongside SKARN_IDENTITY on baseline
+provenance. Optional.
+.TP
+\fBSKARN_FEED_URL\fR
+Default feed channel URL used by check \-\-update\-rules when \-\-feed\-url is
+not given (Pro). It must be https, with plain http accepted only against
+loopback, and must carry no userinfo, so a poisoned environment cannot
+redirect the subscriber credential to a cleartext endpoint.
+.TP
+\fBSKARN_FEED_TOKEN\fR
+Credential presented to the subscriber feed channel when fetching a maintained
+feed (Pro).
+.TP
+\fBSKARN_EULA_ACCEPTED\fR
+Set to 1 to suppress the first\-run EULA prompt and notice for this run
+without recording anything (ephemeral environments: containers, CI). Running
+Skarn constitutes acceptance either way; `skarn eula accept` records it
+durably instead.
+.TP
+\fBSKARN_LICENSE\fR
+License token, resolved before SKARN_LICENSE_FILE and the config path.
+.TP
+\fBSKARN_LICENSE_FILE\fR
+Path to a file containing a license token.
+.TP
+\fBCLAUDE_CONFIG_DIR\fR
+A Claude Code config directory visible in Skarn's environment; folded into the
+claude source like an SKARN_CLAUDE_DIRS entry.
+.TP
+\fBCOPILOT_HOME\fR
+GitHub Copilot CLI config directory visible in Skarn's environment. The CLI
+itself treats it as REPLACING ~/.copilot, and vet follows that: it reads
+mcp\-config.json, config.json and settings.json from the directory this names
+and not from the default. Scanning deliberately diverges: the copilot source
+scans this root AND the default ~/.copilot, because a scanner's subject is
+every local store, and sessions stranded in an abandoned default root still
+hold the secrets they held the day they were written. A store present under
+both roots is two real files, and both are read: either may hold a secret the
+other lost. Microsoft Scout sets this variable to ~/.scout/copilot in the
+environment of the Copilot CLI child process it spawns, not in the user's
+shell, so Skarn's own process never sees it; that root is declared in the
+scanner rather than read from here, exactly as $CODEX_HOME and $KIMI_CODE_HOME
+are declared rather than guessed.
+.TP
+\fBGROK_HOME\fR
+Grok Build config directory visible in Skarn's environment; replaces the
+default ~/.grok as grok's home. Setup writes its hook file under the directory
+this names, doctor resolves grok's config, requirements, hooks, and
+folder\-trust files from it, and the guard's own behavior does not depend on
+it.
+.TP
+\fBGROK_FOLDER_TRUST\fR
+Grok Build's folder\-trust switch. Set to 0 it ungates every project\-scope
+hook, MCP server, and LSP server, the same as [folder_trust] enabled = false
+in grok's config; doctor honors it, so a machine that turned the gate off is
+not reported as having a silenced project hook layer.
+.TP
+\fBKIMI_CODE_HOME\fR
+A Kimi Code CLI data directory visible in Skarn's environment; replaces the
+default ~/.kimi\-code as the kimi root, folded into the kimi source,
+de\-duplicated, resolved via expandPath. Each root contributes its sessions/
+and user\-history/ children.
+.TP
+\fBGROK_HOME\fR
+A Grok Build data directory visible in Skarn's environment; grok itself
+REPLACES ~/.grok with $GROK_HOME rather than layering. Skarn folds both roots,
+de\-duplicated, resolved via expandPath, and accepts each only when it has a
+sessions/ child.
+.TP
+\fBCODEX_HOME\fR
+A Codex CLI data directory visible in Skarn's environment; folded into the
+codex source alongside the default ~/.codex, de\-duplicated, resolved via
+expandPath. Each root contributes its sessions/ and archived_sessions/
+children.
+.TP
+\fBSKARN_MANAGED_ROOT\fR
+Prefix prepended to every managed (MDM/fleet) config path skarn reads, so a
+fleet admin can validate a staged payload directory before pushing it to a
+single machine (SKARN_MANAGED_ROOT=/tmp/stage skarn doctor). Empty or unset
+means the live system paths. Doctor applies it to every managed hook config it
+inspects, and vet applies it to the system Grok Build layers it reads at
+/etc/grok. Whenever it is active, doctor echoes the root in the report header
+and emits it as managed_root in \-\-json, so a staged report can never pass as
+a report about the live machine. It is a filesystem prefix and cannot re\-root
+a registry key; SKARN_MANAGED_REGISTRY_ROOT does that.
+.TP
+\fBSKARN_MANAGED_REGISTRY_ROOT\fR
+Registry key doctor reads the Windows managed policy keys under, so an
+administrator can validate a staged payload without touching live Group
+Policy. For example, SKARN_MANAGED_REGISTRY_ROOT='HKCU\eSoftware\eSkarnStage'
+makes doctor read
+HKCU\eSoftware\eSkarnStage\eHKLM\eSOFTWARE\ePolicies\eClaudeCode. The hive
+stays a key component under the staging root, so the HKLM and HKCU policies
+stage to distinct keys instead of collapsing into one. Empty or unset means
+the live policy keys. Whenever it is active, doctor echoes it in the report
+header and emits it as managed_registry_root in \-\-json, so a staged report
+can never pass as a report about the live machine. Only doctor reads it.
+.TP
+\fBGROK_HOME\fR
+Grok Build's data and configuration directory, default ~/.grok. It relocates
+the whole Grok home surface that vet reads \- config.toml,
+managed_config.toml, requirements.toml, the hooks/ directory, and the
+hooks\-paths registry \- so a relocated Grok home is examined rather than
+reported clean over an unexamined one.
+.TP
+\fBXDG_CACHE_HOME\fR
+Base directory for the rule and feed cache. Defaults to ~/.cache, so the cache
+lives in ~/.cache/skarn/.
+.TP
+\fBSKARN_COMPLIANCE_EXPORT_DIR\fR
+Export root scanned by the Compliance API session source. Reading the export
+needs an Enterprise license: a run that reaches discovery under a lesser
+entitlement (check and baseline audit under a registered Free, Pro or Team
+license, assess and the recall verbs under any) counts the export sessions it
+found, reads none of them, and every session\-reading surface prints the
+notice `N compliance export session(s) found; reading them needs an Enterprise
+license`, once per run on stderr and as a complianceWithheld or
+compliance_withheld field where the surface is machine\-readable; the count is
+never a partial\-scan verdict and never changes an exit code, and every other
+session store on the machine scans as before. Set an absolute, non\-empty
+path; a relative or empty value is refused and the source is dropped with a
+warning, never resolved against the working directory. This root REPLACES the
+default: exactly one root is scanned. Unlike COPILOT_HOME and GROK_HOME, it is
+not folded in beside the default because this directory is Skarn's own
+artifact, written by the exporter in integrations/anthropic\-compliance/.
+There is no abandoned foreign default to keep visible, and selecting one
+organization's export must not also scan a stale one. When unset, the root is
+$XDG_DATA_HOME/skarn/compliance\-export if XDG_DATA_HOME is absolute, else
+~/.local/share/skarn/compliance\-export/. A ~/.skarn.json tools.claude entry
+with sessions_path repoints every builtin named claude, this store included;
+sessions_path set to null disables them, and a based_on: claude clone yields
+one clone per builtin named claude. The layout is
+<root>/<organization_uuid>/<session_id>.json. The walk enters only directories
+at the root and descends exactly one level; .watermark.json and
+export\-log.jsonl at the root are never read. Inside an organization
+directory, only regular *.json files with a non\-empty stem drawn from
+[A\-Za\-z0\-9_] are read, and session.id must match that stem. The stem
+charset is the exporter's contract and has not been validated against live
+ids. A rejected filename, a symlinked session file or a session file with more
+than one hard link raises the unreadable\-store count once per store as a
+partial\-scan signal. Sessions carry no project and no cost: any \-\-project
+value excludes them, stats records zero cost, and recent prints a dash. The
+surface ids cowork and claude_enterprise are counted in stats but are not
+\-\-cli values; use \-\-cli claude to select the store, while \-\-cli cowork
+exits 6. An admin who exports their own organization and also runs Claude Code
+locally sees their own sessions twice, once under a clls_ id and once under an
+on\-disk UUID. Run the exporter on a machine without a local Claude store, or
+scope with \-\-project. On Windows, the unset default is
+%LOCALAPPDATA%\eskarn\ecompliance\-export, and XDG_DATA_HOME is not consulted.
+LOCALAPPDATA must be an absolute path with a drive letter or a UNC prefix;
+otherwise, the source is dropped and counted as one dropped source, exactly as
+a relative SKARN_COMPLIANCE_EXPORT_DIR is: check and assess report the drop as
+a partial scan, doctor reports a failed source, and the recall commands list
+nothing for it. On Windows, SKARN_COMPLIANCE_EXPORT_DIR keeps its meaning, and
+absolute means a drive letter or a UNC prefix; a bare rooted path such as /x
+is refused because it carries no disk designator. Write the value natively as
+`C:\eUsers\edev\eexports` or `C:/Users/dev/exports`, which works in every
+Windows shell. An MSYS\-style `/c/Users/dev/exports` carries no disk
+designator and is refused whenever it reaches the process unconverted. Git
+Bash and MSYS2 usually convert such a value to native form before a native
+binary sees it, but it arrives unconverted when MSYS2_ENV_CONV_EXCL excludes
+it, when a process outside that shell exports it, or when a scheduler or
+service passes it through.
+.SH FILES
+.TP
+\fB/Library/Application Support/ClaudeCode/managed\-settings.json, /etc/claude\-code/managed\-settings.json, C:\eProgram Files\eClaudeCode\emanaged\-settings.json\fR
+See \fBskarn\-doctor\fR(1).
+.TP
+\fB/Library/Application Support/ClaudeCode/managed\-settings.d/*.json, /etc/claude\-code/managed\-settings.d/*.json, C:\eProgram Files\eClaudeCode\emanaged\-settings.d\e*.json\fR
+See \fBskarn\-doctor\fR(1).
+.TP
+\fBC:\eProgramData\eClaudeCode\emanaged\-settings.json\fR
+See \fBskarn\-doctor\fR(1).
+.TP
+\fBHKLM\eSOFTWARE\ePolicies\eClaudeCode, HKCU\eSOFTWARE\ePolicies\eClaudeCode\fR
+See \fBskarn\-doctor\fR(1).
+.TP
+\fBserver\-managed settings (claude.ai admin console or a self\-hosted Claude apps gateway)\fR
+See \fBskarn\-doctor\fR(1).
+.TP
+\fB/Library/Managed Preferences/com.anthropic.claudecode.plist\fR
+See \fBskarn\-doctor\fR(1).
+.TP
+\fB/etc/codex/requirements.toml, %ProgramData%\eOpenAI\eCodex\erequirements.toml\fR
+See \fBskarn\-doctor\fR(1).
+.TP
+\fB/Library/Managed Preferences/com.openai.codex.plist\fR
+See \fBskarn\-doctor\fR(1).
+.TP
+\fB/Library/Application Support/Cursor/hooks.json, /etc/cursor/hooks.json, C:\eProgramData\eCursor\ehooks.json\fR
+See \fBskarn\-doctor\fR(1).
+.TP
+\fB/etc/github\-copilot/policy.d/*.json, C:\eProgramData\eGitHub\eCopilot\epolicy.d\e*.json\fR
+See \fBskarn\-doctor\fR(1).
+.TP
+\fB/Library/Application Support/GeminiCli/system\-defaults.json, /etc/gemini\-cli/system\-defaults.json, C:\eProgramData\egemini\-cli\esystem\-defaults.json\fR
+See \fBskarn\-doctor\fR(1).
+.TP
+\fB/Library/Application Support/GeminiCli/settings.json, /etc/gemini\-cli/settings.json, C:\eProgramData\egemini\-cli\esettings.json\fR
+See \fBskarn\-doctor\fR(1).
+.TP
+\fB./.claude/settings.local.json\fR
+See \fBskarn\-doctor\fR(1).
+.TP
+\fB./.claude/settings.json, ./.cursor/hooks.json, ./.codex/hooks.json, ./.github/hooks/skarn.json, ./.gemini/settings.json\fR
+See \fBskarn\-setup\fR(1), \fBskarn\-doctor\fR(1).
+.TP
+\fB./.github/copilot/settings.json, ./.github/copilot/settings.local.json, ~/.copilot/settings.json\fR
+See \fBskarn\-doctor\fR(1).
+.TP
+\fB~/.grokbot/\fR
+See \fBskarn\-doctor\fR(1).
+.TP
+\fB~/Library/Application Support/Grok Bot/ (macOS)\fR
+See \fBskarn\-doctor\fR(1).
+.TP
+\fB~/.skarn.json\fR
+Optional tool configuration: the set of assistant tools and their session
+paths, plus an optional projects alias map. Both the recall surface and scan
+discovery (check, assess, baseline audit, the guard's stop advisory, and
+serve's Security scan) read it, so the security scan and the recall views
+cover the same corpus. Falls back to a builtin tool set when absent. The
+projects object renames a resolved project for display: a key beginning ~, $,
+or / is a path prefix (with ~ and a leading $VAR expanded like sessions_path)
+matched against the canonical project root on whole path components, longest
+match winning (so /repo never matches /repository); any other key matches the
+derived display name case\-insensitively; the value is the shown name. Aliases
+change display only, never the grouping key.
+.TP
+\fB~/.cache/skarn/\fR
+Cache for downloaded rule and maintained\-feed bundles. Honors
+$XDG_CACHE_HOME.
+.TP
+\fB~/.config/skarn/baseline.json\fR
+The personal accepted\-findings baseline, applied automatically when it
+exists: check, assess, and serve suppress its findings, and guard stops
+flagging them. Written by `skarn baseline audit/accept` and `skarn guard
+accept`. Honors $XDG_CONFIG_HOME. Holds fingerprints and hashes, never a raw
+secret; treat it as sensitive.
+.TP
+\fB~/.config/skarn/eula\-accepted.json\fR
+The EULA acceptance record: the agreement version accepted, an RFC\-3339
+timestamp, and the method (prompt, command, env, license\-install). Written
+when acceptance is given at the first\-run prompt, by `skarn eula accept`, or
+by installing a License Token; never transmitted. Honors $XDG_CONFIG_HOME.
+.TP
+\fB~/.claude/\fR
+Default Claude Code session root. Scanned automatically; extend with
+$SKARN_CLAUDE_DIRS or $CLAUDE_CONFIG_DIR.
+.TP
+\fB~/.kimi\-code/sessions/\fR
+Default Kimi Code CLI session root. One wire.jsonl per agent under
+sessions/<workdir\-key>/<session\-id>/agents/<agent>/; the main conversation
+and every sub\-agent stream are scanned as separate sessions. Relocate with
+$KIMI_CODE_HOME. The legacy python kimi\-cli root ~/.kimi/ stores a different
+session layout and is not scanned; `kimi migrate` converts it.
+.TP
+\fB~/.kimi\-code/user\-history/\fR
+Kimi Code CLI's per\-working\-directory prompt log, one file per workdir.
+Scanned in addition to the session tree because it retains prompts from
+sessions that were aborted before any session record was written. Relocate
+with $KIMI_CODE_HOME.
+.TP
+\fB~/.local/share/opencode/opencode*.db\fR
+OpenCode's SQLite session store, since v1.2.0. The filename carries the
+release channel, so a non\-stable channel writes opencode\-<channel>.db beside
+it and every matching file in the directory is read. Relocate the whole data
+root with $XDG_DATA_HOME, which OpenCode honours on macOS and Windows too \-
+it uses the XDG path on every platform, not Application Support or %APPDATA%.
+The store is WAL\-mode and OpenCode holds it open while running, so skarn
+reads it read\-only inside one transaction and never writes to it; a store it
+cannot read is reported as an incomplete scan rather than counted clean.
+.TP
+\fB~/.local/share/opencode/storage/\fR
+OpenCode's pre\-v1.2 session tree, one JSON record per session, message and
+part. Upgrading to the SQLite store neither imports nor deletes it, so
+sessions written before v1.2 live only here and both layouts are scanned. A
+session id present in both is reported once, preferring the database copy.
+.TP
+\fB~/.cline/data/sessions/<sid>/<sid>.messages.json\fR
+Cline's session store since 4.0.0, shared by the VS Code extension, the CLI
+and the JetBrains plugin. The transcript is Anthropic Messages format with
+tool_use and tool_result blocks, appended to across compaction rather than
+rewritten, and the <sid>.json manifest beside it carries the working
+directory, model and timestamps. The <sid>.compaction.json sibling holds the
+compaction summaries the model is handed instead of the pruned turns. A
+summary repeats the commands that ran, credentials included, so it is scanned
+as part of the same session, and a summary line the transcript already carries
+is not counted twice. Relocate the data root with $CLINE_DATA_DIR, or the
+whole ~/.cline with $CLINE_DIR, which Cline honours on every platform.
+.TP
+\fB~/.cline/data/tasks/<taskId>/api_conversation_history.json\fR
+Cline's pre\-4.0 task tree under the shared data root: the request history in
+Anthropic Messages format, tool outputs included, with the UI transcript in
+ui_messages.json beside it. Cline 4.x still reads these tasks from here and
+never rewrites them. Each task is scanned as the union of both files, because
+the pre\-4.0 compaction replaced the request history in place while the UI
+transcript kept the earlier turns. The same task present byte\-for\-byte under
+two roots is reported once; two copies that differ in either file are both
+scanned.
+.TP
+\fB~/Library/Application Support/{Code,Cursor,Windsurf}/User/globalStorage/saoudrizwan.claude\-dev/tasks/<taskId>/\fR
+The same pre\-4.0 task tree under each VS Code\-family fork's extension
+storage (Linux: ~/.config/<fork>/User/..., Windows:
+%APPDATA%/<fork>/User/...). The publisher directory is the same in every fork;
+only the User directory varies, so all three are walked and the Code copy wins
+a byte\-identical tie.
+.TP
+\fB~/.grok/sessions/\fR
+Default Grok Build session root. One transcript per session at
+sessions/<url\-encoded\-cwd>/<session\-id>/chat_history.jsonl, with a
+summary.json sidecar beside it read for the session id, branch, timestamps,
+model, and title, and for the working directory when the path yields none. The
+session title is scanned like any other session text. The recorded working
+directory is re\-derived from the group directory name, or from its .cwd file
+when the encoded path exceeds 255 bytes, and a recorded directory always wins
+over the sidecar's copy. Relocate with $GROK_HOME. updates.jsonl,
+rewind_points.jsonl, events.jsonl, and session_search.sqlite are deliberately
+not scanned. One more sidecar, signals.json, is read for two counters only,
+compactionCount and totalTokensBeforeCompaction, and so is a non\-empty
+compaction_checkpoints or compaction directory beside the transcript. Grok
+rewrites the transcript when it compacts a session, dropping turns from the
+only file Skarn reads, so a session either signal reports as compacted is
+counted as incomplete coverage and named in the scan\-incomplete warning. The
+two signals are independent rather than a fallback chain, and either alone is
+enough: a saved checkpoint means the compaction happened whatever a sidecar
+written at some other moment says. An empty checkpoint directory counts for
+nothing, and neither does a sidecar that is missing, unreadable, or malformed;
+the counter is raised only by a positive signal, never by the absence of one.
+No session content is taken from either.
+.TP
+\fB~/.grok/sessions/<url\-encoded\-cwd>/prompt_history.jsonl\fR
+Grok Build's per\-working\-directory prompt log, one file beside the session
+directories of that working directory. Each record carries a session id, so
+one file holds prompts from many sessions and each id is scanned as its own
+session. It is read in addition to the transcripts because it outlives them: a
+removed, pruned, or partially copied session directory takes its transcript
+and leaves its prompts, text cleared before it was sent is saved here and
+reaches no transcript at all, a shell prompt entered with a leading ! is
+recorded here as the bare command it ran, without the !, while the transcript
+keeps only a rendered narration of it, and a torn transcript still leaves the
+prompt. It is not a record of prompts written ahead of the transcript: the
+transcript is written first. A prompt the session transcript already carries
+is dropped at scan time, matched on the exact text within the same working
+directory and session id, so it is reported once; a session whose every prompt
+the transcript carries does not appear at all. Shell prompts additionally
+surface in `skarn cmds`. Relocate with $GROK_HOME.
+.TP
+\fB~/Library/Application Support/Grok Bot/sand\-client\-persistence/ (macOS), ~/.config/Grok Bot/sand\-client\-persistence/ (Linux), the same directory under %APPDATA% (Windows)\fR
+Grok Bot's local chat\-transcript store. Grok Bot is xAI's always\-on desktop
+agents app, a different product from the Grok Build CLI above, and it keeps a
+cleartext replica of every agent's conversation here, so a credential pasted
+into a Grok Bot chat lands on disk in this directory. One .blob per
+persistence slice, each filename the base32 (RFC 4648, unpadded lowercase)
+encoding of a dotted slice name. Skarn decodes the name and scans only a
+sand.client.slice.account.<account>.transcript.replicas.<agent\-id> slice, so
+the drafts, roster, send\-journal, selection, sidebar and client\-meta slices
+beside it are excluded by construction. One replica is one session, identified
+by the decoded agent id, and two blobs decoding to the same agent id are
+reported once. A .blob whose filename does not decode is counted once per
+store as incomplete coverage, so it raises the unreadable\-store count in the
+scan\-incomplete warning rather than being passed over; the warning carries
+that count, not the offending filename. A document whose value object is
+missing, is not an object, or holds an entries member that is not an array is
+reported unreadable rather than as an empty session. An absent entries member
+reads as an empty replica only at the schema version Skarn was verified
+against, so a truncated envelope or a later schema that renamed the collection
+is reported unreadable too, as is a non\-empty entries array in which no entry
+declares a kind Skarn knows. An entries array is otherwise read whatever
+version the document declares, and recognized entries that carry no text of
+their own still make a valid session. On Linux the store list also folds
+$XDG_CONFIG_HOME, where Electron places userData when that variable is set,
+and an agent replicated into both roots is still reported once. Inside the
+document, whatever carries a content string is read, an agent turn at
+message.content and a chat message at content, both stamped in epoch
+milliseconds, whatever type the entry declares, so a body type a later Grok
+Bot release introduces is scanned rather than skipped; the widget, attachment
+and approval bodies observed keep their payload under other keys and so
+contribute no text. No entry records a working directory, so a Grok Bot
+session has no project and is left out of project grouping rather than named
+after the directory it sits in. The app names no data\-directory variable, so
+there is nothing to relocate the store with. Grok Bot's other local files are
+deliberately not read: its OAuth token store, its local\-exec daemon state
+under ~/.grokbot/, the Electron cookie stores, and its crash and memory
+telemetry.
+.TP
+\fB~/.copilot/session\-state/, ~/.scout/copilot/session\-state/\fR
+GitHub Copilot CLI session roots, one events.jsonl per session under
+<root>/session\-state/<id>/. Both are scanned automatically, each only when it
+has a session\-state child, and $COPILOT_HOME adds another when it names a
+distinct root. The second root is Microsoft Scout's. Scout spawns the Copilot
+CLI it bundles with COPILOT_HOME=~/.scout/copilot, so that CLI writes its
+transcript there in the clear, in the same format as the standalone CLI, and
+that transcript is what Skarn reads. Discovery under ~/.scout goes to that one
+location and nowhere else: the root directory is never enumerated, so Scout's
+own encrypted session index (~/.scout/m\-sessions/sessions\-index.json) and
+every other m\- file are outside what discovery reaches, and nothing is
+decrypted. Naming a project for the session afterward uses the same resolver
+every source uses, on two inputs: a workspace.json probed three directories
+above the transcript, which neither the Copilot CLI nor Scout writes, and the
+cwd the transcript itself names, with a .git pointer stat'd beside it. No
+session content is read from either. Verified against Scout 0.23.331,
+2026\-07\-30.
+.TP
+\fB~/.claude/settings.json, ~/.claude/settings.local.json, ./.claude/settings.json, ./.claude/settings.local.json\fR
+See \fBskarn\-vet\fR(1).
+.TP
+\fB~/.claude.json, ~/.mcp.json, ./.mcp.json\fR
+See \fBskarn\-vet\fR(1).
+.TP
+\fB~/.claude/plugins/, ~/.claude/skills/\fR
+See \fBskarn\-vet\fR(1).
+.TP
+\fB~/.codex/sessions/, ~/.codex/archived_sessions/\fR
+Default Codex CLI session roots, scanned automatically and extendable with
+$CODEX_HOME. zstd\-compressed rollouts (rollout\-*.jsonl.zst, written for
+rollouts older than 7 days) are read transparently through the same reader as
+plain ones; when both a plain rollout and its .zst twin exist the plain one is
+preferred. Only rollout\-* files are parsed as sessions, so
+session_index.jsonl is never scanned.
+.TP
+\fB~/.codex/config.toml, ~/.codex/hooks.json\fR
+See \fBskarn\-vet\fR(1).
+.TP
+\fB~/.cursor/mcp.json, ~/.cursor/hooks.json\fR
+See \fBskarn\-vet\fR(1).
+.TP
+\fB~/.copilot/mcp\-config.json, ~/.copilot/config.json, ~/.copilot/settings.json\fR
+See \fBskarn\-vet\fR(1).
+.TP
+\fB~/.scout/m\-settings.json\fR
+See \fBskarn\-vet\fR(1).
+.TP
+\fB~/.scout/m\-mcp\-servers.json\fR
+See \fBskarn\-vet\fR(1).
+.TP
+\fB~/.copilot/data.db\fR
+See \fBskarn\-vet\fR(1).
+.TP
+\fB~/Library/Application Support/Grok Bot/sand\-secrets.json\fR
+See \fBskarn\-vet\fR(1).
+.TP
+\fB~/.grokbot/settings.json\fR
+See \fBskarn\-vet\fR(1).
+.TP
+\fB~/.grokbot/local\-exec\-daemon\-connection.json\fR
+See \fBskarn\-vet\fR(1).
+.TP
+\fB~/.gemini/settings.json\fR
+See \fBskarn\-setup\fR(1), \fBskarn\-doctor\fR(1), \fBskarn\-vet\fR(1).
+.TP
+\fB~/.grok/hooks/skarn.json\fR
+See \fBskarn\-setup\fR(1), \fBskarn\-doctor\fR(1).
+.TP
+\fB.grok/hooks/skarn.json\fR
+See \fBskarn\-setup\fR(1), \fBskarn\-doctor\fR(1).
+.TP
+\fB~/.grok/trusted_folders.toml\fR
+See \fBskarn\-doctor\fR(1).
+.TP
+\fB/etc/grok/managed_config.toml, ~/.grok/managed_config.toml\fR
+See \fBskarn\-doctor\fR(1).
+.TP
+\fB/etc/grok/requirements.toml, ~/.grok/requirements.toml\fR
+See \fBskarn\-doctor\fR(1).
+.TP
+\fB~/.grok/config.toml\fR
+See \fBskarn\-doctor\fR(1).
+.TP
+\fB~/.grok/config.toml, ~/.grok/managed_config.toml, ~/.grok/requirements.toml\fR
+See \fBskarn\-vet\fR(1).
+.TP
+\fB/etc/grok/managed_config.toml, /etc/grok/requirements.toml\fR
+See \fBskarn\-vet\fR(1).
+.TP
+\fB~/.grok/hooks/, ~/.grok/hooks\-paths\fR
+See \fBskarn\-vet\fR(1).
+.TP
+\fB./.grok/config.toml, ./.grok/hooks/\fR
+See \fBskarn\-vet\fR(1).
+.TP
+\fB~/.local/share/skarn/compliance\-export/\fR
+Compliance API transcript export written by
+integrations/anthropic\-compliance/, with one JSON document per session at
+<root>/<organization_uuid>/<session_id>.json. $SKARN_COMPLIANCE_EXPORT_DIR
+replaces the default root; it must be absolute and non\-empty. When unset, use
+$XDG_DATA_HOME/skarn/compliance\-export if XDG_DATA_HOME is absolute, else
+this path. The walk enters only directories at the root and descends exactly
+one level, so .watermark.json and export\-log.jsonl at the root are never
+read. Inside each organization directory, only regular *.json files whose
+non\-empty stem uses [A\-Za\-z0\-9_] are read; session.id must match the stem.
+A rejected filename, a symlinked session file or a session file with more than
+one hard link raises the unreadable\-store count once per store. On Windows,
+the default is %LOCALAPPDATA%\eskarn\ecompliance\-export, and it never passes
+through ~. XDG_DATA_HOME is not consulted there. LOCALAPPDATA must be an
+absolute path with a drive letter or a UNC prefix; otherwise, the source is
+dropped and counted: check and assess report a partial scan, doctor reports a
+failed source, and the recall commands list nothing for it. A sessions_path
+written as `~/...` under tools.claude in ~/.skarn.json resolves through HOME
+before USERPROFILE, so a Git Bash or MSYS2 shell that sets HOME moves it.
+Setting SKARN_COMPLIANCE_EXPORT_DIR does nothing while that entry stays in
+place because the configured path is used before the variable is read. Write
+the entry as an absolute path, or remove it so the default and the variable
+apply again.
+.SH EXAMPLES
+Show which license this machine is using, where it came from, and when it
+expires.
+.RS 4
+.EX
+skarn license
+.EE
+.RE
+.PP
+Validate a license file and install it; the previous license, if any, is
+backed up alongside it.
+.RS 4
+.EX
+skarn license ~/Downloads/team.skarnlicense
+.EE
+.RE
+.PP
+Fetch a fresh license for this subscription, verify it against the keys built
+into this binary, and install it; nothing is written unless it verifies.
+.RS 4
+.EX
+skarn license renew
+.EE
+.RE
+.PP
+Scan every AI coding session on this machine and print a friendly risk summary
+in one command; no flags, no license.
+.RS 4
+.EX
+skarn assess
+.EE
+.RE
+.PP
+Drive the MCP handshake by hand: the server answers one JSON\-RPC line on
+stdout and exits 0 when stdin closes.
+.RS 4
+.EX
+printf '%s\en' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025\-11\-25","capabilities":{},"clientInfo":{"name":"probe","version":"0"}}}' | skarn mcp
+.EE
+.RE
+.PP
+Run the MCP server with the two content tools enabled; put the argument in the
+client's own mcpServers args, never in a shipped plugin.
+.RS 4
+.EX
+skarn mcp \-\-enable\-recall
+.EE
+.RE
+.PP
+Print what the MCP server exposes and how to register it in a client; it
+returns before the protocol loop starts.
+.RS 4
+.EX
+skarn mcp \-\-help
+.EE
+.RE
+.PP
+Write a self\-contained, redacted security report to share with a colleague;
+\-o report.md writes a plain\-text version.
+.RS 4
+.EX
+skarn assess \-o report.html
+.EE
+.RE
+.PP
+Statically vet this machine's AI assistant configuration \- hooks, MCP
+servers, permission grants, plugins and skills \- and list the risky patterns
+found. Read\-only, offline, no license.
+.RS 4
+.EX
+skarn vet
+.EE
+.RE
+.PP
+Emit the config findings as SARIF for a code\-scanning pipeline and exit 1 on
+anything high or above; an unreadable config file exits 6 rather than
+reporting a partial view as clean.
+.RS 4
+.EX
+skarn vet \-\-format sarif \-\-fail\-on\-severity high
+.EE
+.RE
+.PP
+Detect installed AI coding assistants and wire the guard hook into each one in
+audit mode, with a wizard on a terminal; ends with the guard self\-test and a
+list of every file touched.
+.RS 4
+.EX
+skarn setup
+.EE
+.RE
+.PP
+Print the exact Cursor hooks.json content that setup would write, without
+writing anything.
+.RS 4
+.EX
+skarn setup \-\-print \-\-agent cursor
+.EE
+.RE
+.PP
+Check that skarn is really protecting this machine: license, every wired
+assistant hook, the guard log, and the guard self\-test. Each warning or
+failure names the command that fixes it.
+.RS 4
+.EX
+skarn doctor
+.EE
+.RE
+.PP
+The same checks as one JSON object for fleet scripts; the check ids are stable
+and a rendered report always exits 0 (an unknown option is refused with exit 1
+and an unresolvable home directory with exit 6, both before any check runs).
+.RS 4
+.EX
+skarn doctor \-\-json
+.EE
+.RE
+.PP
+Flip every assistant that already carries skarn entries from audit to enforce,
+leaving everything else alone.
+.RS 4
+.EX
+skarn setup \-\-update \-\-mode enforce
+.EE
+.RE
+.PP
+Summarize the last 30 days of flagged calls per assistant: verdicts, top
+rules, latency, and the most recent denies. When the window is clean, meaning
+the flagged calls span five or more days with no deny among them, report also
+prints the exact command that flips the hooks to enforce.
+.RS 4
+.EX
+skarn guard report \-\-window 30d
+.EE
+.RE
+.PP
+The same aggregate as one JSON object for fleet scripts: counts are over
+flagged actions, since the guard does not log clean calls.
+.RS 4
+.EX
+skarn guard report \-\-format json
+.EE
+.RE
+.PP
+Accept a finding the guard flagged (the fingerprint printed under the deny in
+guard report) as a false positive, so the identical call stops being blocked.
+Writes the personal baseline the guard reads; a real leak is never accepted
+this way.
+.RS 4
+.EX
+skarn guard accept 7d343e3a105ae026589b3371d565a4ad2943dd5ba5f81a19c7500b2ab4dbb1f0 \-\-reason 'internal test credential'
+.EE
+.RE
+.PP
+Prove the guard wiring: run synthetic benign and fake\-credential events
+through each adapter's real code path and report the verdicts (credential
+shown redacted).
+.RS 4
+.EX
+skarn guard \-\-self\-test
+.EE
+.RE
+.PP
+Scan the default window (the last 30 days) of all sessions for leaked secrets
+and attack patterns.
+.RS 4
+.EX
+skarn check
+.EE
+.RE
+.PP
+Scan all history, report only high\-severity\-and\-above findings, and emit
+JSON for a pipeline.
+.RS 4
+.EX
+skarn check \-\-hours 0 \-\-severity high \-\-format json
+.EE
+.RE
+.PP
+Exit non\-zero in CI when a session's risk score exceeds 60.
+.RS 4
+.EX
+skarn check \-\-fail\-on\-risk 60
+.EE
+.RE
+.PP
+Write a redacted Markdown evidence pack for one product build (Pro); redirect
+it to a dated file such as skarn\-evidence\-2026\-07\-24.md to file into a
+technical file. Omitting the lineage flags renders a pack that states it
+cannot be attached to a specific technical file.
+.RS 4
+.EX
+skarn check \-\-format evidence \-\-product acme\-gateway \-\-product\-version 3.2.1 \-\-build\-id 9f2c1ab
+.EE
+.RE
+.PP
+Search past sessions for a regular\-expression pattern.
+.RS 4
+.EX
+skarn search 'AWS_SECRET' \-\-regex
+.EE
+.RE
+.PP
+List recent Claude Code sessions.
+.RS 4
+.EX
+skarn recent \-\-cli claude
+.EE
+.RE
+.PP
+Render per\-project analytics to a self\-contained HTML file.
+.RS 4
+.EX
+skarn stats \-\-by project \-\-format html \-o stats.html
+.EE
+.RE
+.PP
+Browse and scan sessions in a local web UI on 127.0.0.1:7777 (localhost only,
+no egress); open the token\-carrying URL printed at startup.
+.RS 4
+.EX
+skarn serve \-\-port 7777
+.EE
+.RE
+.PP
+Serve the web UI with a custom rule pack layered on the bundled rules; the
+Security view surfaces its findings too.
+.RS 4
+.EX
+skarn serve \-\-rules ./team\-rules.toml
+.EE
+.RE
+.PP
+Walk each new finding and label it a true or false positive with a reason; the
+decisions are written into the committed baseline and survive re\-scans.
+.RS 4
+.EX
+skarn baseline audit .skarn\-baseline.json
+.EE
+.RE
+.PP
+Record a single false\-positive fingerprint (from SARIF partialFingerprints or
+the ndjson skarn.fingerprint field) into the baseline without the interactive
+loop.
+.RS 4
+.EX
+skarn baseline accept .skarn\-baseline.json 7d343e3a105ae026589b3371d565a4ad2943dd5ba5f81a19c7500b2ab4dbb1f0 \-\-reason 'internal test credential'
+.EE
+.RE
+.SH SECURITY
+Skarn scans locally and makes no network connection by default. Secrets are
+redacted in check's reports and in everything the recall commands print
+(search, recent, messages, stats, cmds, tools, mcps, restore, export).
+\-\-no\-redact lifts the mask only where it is honored: check's text, json and
+sarif reports, and the session content the recall commands print. The ndjson
+stream, the evidence pack, the artifacts written by \-\-drop, serve and
+assess, the baseline files, the mcp tools, the guard, and every serve API
+route that returns session content ignore it and stay redacted.
+.PP
+Two commands transmit anything off the machine, and only when you type them.
+skarn check \-\-update\-rules fetches a signed feed bundle from the subscriber
+channel, presenting $SKARN_FEED_TOKEN as a bearer credential; \-\-feed\-url
+names that channel when $SKARN_FEED_URL does not. The feed is off by default
+and is disabled by \-\-offline. skarn license renew posts the installed
+license token to the license service to receive a re\-signed one. Both refuse
+any endpoint that is not https, or http against loopback, and any endpoint
+carrying userinfo. No session content, no finding, and no scanned secret ever
+leaves the machine through a connection skarn makes. skarn mcp makes no
+network connection; the results it hands to the connected MCP client (redacted
+findings by default, redacted session content only with \-\-enable\-recall)
+are forwarded by that client to its model provider \- that egress is the
+client's, and it happens only when you configure the server.
+.PP
+skarn vet reads the AI assistant configuration files listed under FILES
+read\-only: it opens each one for reading, never writes, rewrites, or removes
+one, and makes no network call. It reports what it finds and leaves every
+decision about the configuration to you. \-\-offline is accepted for parity
+and changes nothing.
+.PP
+skarn mcp reads the same session stores as assess and the same configuration
+files as vet, read\-only and with no network call, and answers only the AI
+coding assistant that spawned it over stdin and stdout. Its results are the
+redacted scan report, the masked vet report, and session metadata carrying
+neither message text nor any label authored inside a transcript; with
+\-\-enable\-recall the two content tools add session text and labels with
+every detected secret masked, and the search response carries no echo of the
+query or of the project filter. Because the assistant receives those results,
+they travel wherever that assistant sends its context, so treat them as
+leaving the machine even though skarn itself opens no socket.
+.SH "SEE ALSO"
+skarn\-check(1), skarn\-assess(1), skarn\-vet(1), skarn\-mcp(1),
+skarn\-baseline(1), skarn\-search(1), skarn\-recent(1), skarn\-restore(1),
+skarn\-messages(1), skarn\-stats(1), skarn\-tools(1), skarn\-mcps(1),
+skarn\-cmds(1), skarn\-export(1), skarn\-guard(1), skarn\-setup(1),
+skarn\-doctor(1), skarn\-serve(1), skarn\-license(1), skarn\-eula(1),
+skarn\-fleet(1), https://getskarn.com, gitleaks(1)
+.SH AUTHOR
+Skarn is developed by the Skarn project. See https://getskarn.com.
+.SH "REPORTING BUGS"
+Report issues at https://getskarn.com.
+.SH COPYRIGHT
+Copyright (c) 2026 Skarn Software OÜ. All rights reserved. Skarn is
+proprietary software; see the LICENSE distributed with the binary and
+https://getskarn.com.

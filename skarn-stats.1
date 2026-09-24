@@ -1,0 +1,109 @@
+.TH "SKARN-STATS" "1" "2026-06-23" "skarn 0.32.0" "Skarn Manual"
+.SH NAME
+skarn\-stats \- Session analytics: tokens, models, tools, and timing
+.SH SYNOPSIS
+\fBskarn\fR \fBstats\fR [options]
+.SH DESCRIPTION
+Session analytics: tokens, models, tools, and timing (text, json, csv, or
+html).
+.PP
+Session analytics. A positional session id switches to a per\-session view.
+Under \-\-show timing the active\-time number answers to three different key
+names depending on the output shape, and a reader that asks for the wrong one
+gets null rather than an error: a by\-date or by\-project row calls it
+active_secs, the ungrouped totals and a per\-session view call it
+active_time_secs, and a by\-date row carries a second number the other shapes
+do not, active_wall_secs. The two by\-date numbers count differently.
+active_secs adds each session's own active time to the first day that session
+touched inside the window, so two sessions you ran side by side both count in
+full and a day can total more than the clock allows. active_wall_secs merges
+the same active intervals per calendar day, so overlapping sessions count
+once, and that is the number to bill from. A per\-session view lists its
+pauses under idle_gaps, keyed gap_secs and after_message. Every shape, the
+html report included, prints its model names, tool names and project labels
+with detected secrets masked; \-\-no\-redact prints them as recorded.
+.SH OPTIONS
+.TP
+\fB\-\-no\-redact\fR
+Print raw session content and skip the detection scan. By default every
+detected secret is masked in the output; the match and every filter run on the
+raw text either way, so a masked value still finds its session.
+.TP
+\fB\-\-cli\fR \fIname\fR
+Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
+copilot, kimi, grok, grokbot, antigravity, opencode, cline.
+.TP
+\fB\-\-project\fR \fIpath\fR
+Restrict to matching projects: a comma\-separated list of names or paths,
+matched case\-insensitively against a session's project display name, its
+canonical root path, or a parent directory of that root. A session read from a
+Compliance API export carries no project, so any \-\-project value excludes
+it.
+.TP
+\fB\-\-worktree\fR \fIpath\fR
+Restrict to sessions whose working directory is under this path.
+.TP
+\fB\-\-since\fR \fIdate\fR
+Lower bound of the time window, applied to a session file's last\-modified
+time rather than to when the session started, so a session begun before the
+bound but written to inside it is included and a resumed session stays visible
+under the day you worked on it. Takes priority over \-\-hours. Naming one
+session by id changes this: `skarn search \-\-session <id>`, `skarn stats
+<id>` and the other per\-session views ignore the window altogether, and
+`skarn messages <id>` is the single command that applies it there, reading
+BOTH bounds against the session's own start time rather than its file and
+refusing an out\-of\-window session with exit 1 instead of filtering it out. A
+bare YYYY\-MM\-DD means that day's midnight, shifted by \-\-tz\-offset; a full
+ISO timestamp is used as given.
+.TP
+\fB\-\-until\fR \fIdate\fR
+Upper bound of the time window, applied to when a session STARTED rather than
+to when its file was last written, so a session that began after the bound is
+excluded even if it was already running before it. The two bounds therefore
+read different timestamps. Passing it without \-\-since also drops the
+\-\-hours lower bound, so the window becomes all history up to the bound. A
+bare YYYY\-MM\-DD covers that whole day through 23:59:59, shifted by
+\-\-tz\-offset; a full ISO timestamp is used as given. A session whose start
+time cannot be parsed is kept. A view that names one session by id ignores
+this bound, except `skarn messages <id>`, which refuses a session past it with
+exit 1 rather than dropping it from a list.
+.TP
+\fB\-\-tz\-offset\fR \fIminutes\fR
+Timezone offset in minutes for date grouping and display. The default is 0.
+.TP
+\fB\-\-hours\fR \fIn\fR
+Time window in hours; 0 means no limit. The default is 168.
+.TP
+\fB\-\-session\fR \fIid\fR
+Restrict to a single session by id (prefix\-matched).
+.TP
+\fB\-\-format\fR \fIfmt\fR
+Output format. csv requires \-\-by; html writes a file (\-o). One of: text,
+json, csv, html. The default is text.
+.TP
+\fB\-\-by\fR \fIaxis\fR
+Group the aggregate by date or project; required for \-\-format csv. One of:
+date, project.
+.TP
+\fB\-\-show\fR \fIlist\fR
+Comma list of content blocks to render (default: overview,tokens). text and
+html only. One of: overview, tokens, models, tools, timing, all.
+.TP
+\fB\-\-open\fR
+Open the HTML report in a browser after writing it (\-\-format html only).
+.TP
+\fB\-o\fR, \fB\-\-out\fR \fIfile\fR
+Destination file for \-\-format html. The default is skarn\-report.html.
+.TP
+\fB\-\-user\fR \fIname\fR
+Restrict to matching users: a comma\-separated list of user ids or email
+addresses, where an id matches exactly and an email address matches
+case\-insensitively. Only a session read from a Compliance API export carries
+either, so on a machine without an export, or without the Enterprise license
+that reading one needs, every \-\-user value matches nothing.
+.SH "SEE ALSO"
+skarn(1)
+.SH COPYRIGHT
+Copyright (c) 2026 Skarn Software OÜ. All rights reserved. Skarn is
+proprietary software; see the LICENSE distributed with the binary and
+https://getskarn.com.

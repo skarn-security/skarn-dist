@@ -1,0 +1,97 @@
+.TH "SKARN-ASSESS" "1" "2026-06-23" "skarn 0.32.0" "Skarn Manual"
+.SH NAME
+skarn\-assess \- Scan every AI session, print a redacted summary. Free, no
+license
+.SH SYNOPSIS
+\fBskarn\fR \fBassess\fR [options]
+.SH DESCRIPTION
+Scan every AI session on this machine and print a friendly risk summary, with
+an optional shareable redacted report and a scoped incident dossier. Free, no
+config, no license. Run at a terminal it also names, once per release, a hook
+in your own per\-user assistant config that has fallen behind this build, so
+an event a newer template gates does not go unscanned unnoticed; it looks at
+that config only, never at a repo's committed hooks and never at a
+fleet\-managed one.
+.PP
+The zero\-config machine\-scan wedge: scan every AI coding session on the
+machine and print a friendly risk summary, no flags and no license. \-o writes
+a shareable redacted report (HTML or Markdown); \-\-json emits the redacted
+scan for scripting. The scan is scoped by the same filters as check.
+.SH OPTIONS
+.TP
+\fB\-o\fR, \fB\-\-out\fR \fIfile\fR
+Write a self\-contained, redacted share report to this file; .md or .markdown
+renders Markdown, any other extension renders HTML. The report names a session
+file by its basename and a project by its display name, and writes a home
+directory inside a code\-context snippet as ~.
+.TP
+\fB\-\-json\fR
+Emit the redacted scan as JSON (the same shape as the serve /api/scan view)
+for scripting, instead of the friendly summary. With \-\-dossier the body is
+the dossier envelope that wraps this scan, not the bare scan shape.
+.TP
+\fB\-\-offline\fR
+Disable all network access. Assess is already egress\-free; this is the
+belt\-and\-suspenders guarantee.
+.TP
+\fB\-\-hours\fR \fIn\fR
+Scan window in hours; 0 (the default) scans every session on the machine. The
+default is 0.
+.TP
+\fB\-\-severity\fR \fIlevel\fR
+Only summarize findings at or above this severity; the default (low) scans
+everything and curates the display. One of: low, medium, high, critical. The
+default is low.
+.TP
+\fB\-\-cli\fR \fIname\fR
+Restrict the scan to one assistant's sessions. If this machine has no tool by
+that name, skarn exits 6 rather than scanning nothing. A custom tool declared
+in ~/.skarn.json is accepted by its configured name. One of: claude, gemini,
+codex, cursor, copilot, kimi, grok, grokbot, antigravity, opencode, cline.
+.TP
+\fB\-\-project\fR \fIpath\fR
+Restrict the scan to matching projects: a comma\-separated list of names or
+paths, matched case\-insensitively against a session's project display name,
+its canonical root path, or a parent directory of that root. A session read
+from a Compliance API export carries no project, so any \-\-project value
+excludes it.
+.TP
+\fB\-\-session\fR \fIid\fR
+Assess a single session by id.
+.TP
+\fB\-\-rules\fR \fIpath\fR
+Load a custom TOML rules file in addition to the bundled rules.
+.TP
+\fB\-\-baseline\fR \fIpath\fR
+Suppress findings recorded in this accepted\-findings baseline. Without this
+flag, ~/.config/skarn/baseline.json is applied automatically when it exists. A
+directory of baselines requires a Pro license; assess never gates, so an
+unlicensed directory degrades to a warning and an unsuppressed scan.
+.TP
+\fB\-\-no\-color\fR
+Disable colored output.
+.TP
+\fB\-\-dossier\fR \fIselector\fR
+Scope \-o and \-\-json to one incident dossier: one finding by its
+64\-character fingerprint, or one session by id, auto\-detected by shape. A
+reused credential matches every session it appears in. The dossier holds the
+redacted facts Skarn has for the selection, plus an explicit list of the CRA
+Article 14 reporting fields Skarn cannot supply. It is a local share artifact;
+Skarn does not file reports or determine severity. Every format names a
+project by its display name. The HTML and JSON dossiers name a session file by
+its basename, write a home directory inside a code\-context snippet as ~, and
+leave out the project root and the user and workspace ids; the Markdown
+dossier prints none of those fields.
+.TP
+\fB\-\-user\fR \fIname\fR
+Restrict the scan to matching users: a comma\-separated list of user ids or
+email addresses, where an id matches exactly and an email address matches
+case\-insensitively. Only a session read from a Compliance API export carries
+either, so on a machine without an export, or without the Enterprise license
+that reading one needs, every \-\-user value matches nothing.
+.SH "SEE ALSO"
+skarn(1)
+.SH COPYRIGHT
+Copyright (c) 2026 Skarn Software OÜ. All rights reserved. Skarn is
+proprietary software; see the LICENSE distributed with the binary and
+https://getskarn.com.

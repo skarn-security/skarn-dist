@@ -1,0 +1,335 @@
+'\" t
+.TH "SKARN-GUARD" "1" "2026-06-23" "skarn 0.32.0" "Skarn Manual"
+.SH NAME
+skarn\-guard \- Pre\-execution hook: read an event on stdin, emit a verdict
+.SH SYNOPSIS
+\fBskarn\fR \fBguard\fR [report|accept <fingerprint>] [options]
+.SH DESCRIPTION
+Real\-time pre\-execution hook for AI coding assistants; reads an event on
+stdin and emits a verdict. guard report summarizes the audit log and forecasts
+what enforcing would cost. It recommends switching the hooks to enforce only
+once the flagged calls in the window span five or more days with no deny or
+would\-be deny recorded among them. A recorded ask does not stop the
+recommendation, even on a host that answers an ask with a block in enforce
+mode, and neither does a detect\-only record; the recommendation carries the
+skarn setup command for each host setup wires and the manual step for any
+other host. The guard logs nothing but flagged calls, so a window with none is
+no evidence that the hook ran and gets no recommendation. At a terminal it
+also names, once per release, a hook in your own per\-user assistant config
+that has fallen behind this build. guard accept records a flagged finding as a
+false positive so the guard stops flagging it.
+.PP
+Control the real\-time pre\-execution hook used for editor/agent integration
+with Claude Code, Cursor, Codex CLI, Copilot CLI, Gemini CLI, Grok Build, and
+the Antigravity CLI. report reads the guard's own audit log rather than an
+event. It summarizes the flagged calls per assistant (verdicts, top rules,
+latency, the most recent denies), states what enforcing that window would have
+cost in blocks per day and prompts per day, and prints the enforce flip once
+the window spans at least five days with zero denies; for a host wired by
+skarn setup, that flip is a skarn setup \-\-update \-\-mode enforce command,
+which leaves plugin\-installed hooks in audit. Run at a terminal it reads one
+thing more, your own per\-user hook configs, so it can name a hook that has
+fallen behind this build once per release; piped or as json it reads nothing
+but the log. The guard logs only flagged calls, so every count and every rate
+report prints is over flagged actions, never over all traffic. accept closes
+that loop. An audit record whose top finding carries a secret gets a
+fingerprint, the same secret\-scoped key check writes to SARIF
+partialFingerprints; report prints it under each such deny, and `skarn guard
+accept <fingerprint>` records it as a false positive so that finding stops
+being flagged on the identical call. A secret\-less deny \- a structural
+egress detector, a typosquat, a chain \- carries no fingerprint and no accept
+line. Only the highest\-severity finding of a call carries the fingerprint, so
+a call hiding several distinct secrets peels one accept at a time. The
+structural egress detectors are built into the engine rather than the rule
+pack, and they tier themselves. An egress whose whole payload is visible in
+the command itself is held at the ask tier: a bare request, a literal body, or
+query parameters, with no file sent, no credential store named, no earlier
+secret read in the same call, and no payload bytes the command text does not
+show. A command substitution, an environment expansion, a shell redirect, a
+form read, or a pipe feeding the target all keep the deny, and so does a
+payload carrying a recognized credential file or upload form, a co\-detected
+secret, or recon earlier in the same call. Ask means a real approval prompt on
+the primary shell surfaces (Claude Code PreToolUse, Copilot preToolUse on both
+the CLI and VS Code, Cursor shell and MCP hooks) and a block on the channels
+with no ask (Codex, Claude Code PermissionRequest, Copilot permissionRequest,
+Cursor file\-read events, Gemini, Grok Build). Both subverbs are ungated:
+report reads the log, plus your own hook configs at a terminal, and accept
+writes only a file. On a flagged call the guard consults the personal
+accepted\-findings baseline it shares with check
+(~/.config/skarn/baseline.json, the file form only, never the org\-union
+directory, so the guard can never hit a paid gate). A finding accepted as a
+false positive is dropped from the verdict. A finding a human confirmed as a
+REAL leak (`skarn baseline audit`, label true\-positive) is never suppressed
+and keeps being blocked until the credential is rotated. A correlated attack
+chain still denies even when every secret in the call has been accepted, and a
+baseline that is missing, unreadable, or malformed suppresses nothing at all:
+a broken baseline means more blocking, never less.
+.SH OPTIONS
+.TP
+\fB\-\-guard\-mode\fR \fImode\fR
+audit reports only; enforce emits a deny or ask verdict. Enforce needs a
+paid\-tier license; an unlicensed guard, or one on the free tier, runs
+audit\-only. One of: audit, enforce. The default is audit.
+.TP
+\fB\-\-strict\fR
+Also gate Read operations (credential\-file reconnaissance).
+.TP
+\fB\-\-agent\fR \fIname\fR
+Hook host. By default, auto\-detect from the event shape. Pass codex for Codex
+CLI and copilot for Copilot CLI: both send Claude\-shaped events that skarn
+cannot tell apart from Claude's. Gemini CLI, Grok Build, the Antigravity CLI,
+Kimi Code and Cline each send a payload key no other host sends, so they
+auto\-detect too, and the shipped configs pin them anyway. On Kimi Code that
+pin is load\-bearing rather than uniform policy: a host embedding kimi's older
+hook engine sends no client_type, and its Claude\-shaped prompt event then
+fails open under the Claude adapter. On Cline the shipped executables pin
+\-\-agent cline all the same, because a hook file copied between machines and
+forks carries nothing else that names the host. Grok Build is the one host
+that overrides an explicit pin: an event delivered by grok's own hook runner
+is scanned by the grok adapter even where the invoking config pins another
+host, because grok runs Claude\-config and Cursor\-config hooks with its own
+payload dialect. With \-\-self\-test, all (the default) tests the claude,
+cursor, codex, copilot, gemini, grok, antigravity, kimi, and cline adapters,
+copilot on both its CLI and VS Code dialects. With report, this option
+restricts the summary to one assistant, repeatable or comma\-separated. One
+of: claude, cursor, codex, copilot, gemini, grok, antigravity, kimi, cline,
+all.
+.TP
+\fB\-\-event\fR \fIname\fR
+The hook event this config entry fires on, for a host whose payload does not
+name its own event. The Copilot CLI needs it: its permissionRequest payload
+carries a subset of preToolUse's documented fields and nothing separates the
+two, so a permissionRequest entry must say so or the guard reads it as a
+preToolUse and answers in a schema that event does not understand. Default:
+the event is inferred from the payload shape, which never yields
+permissionRequest. Codex names its own event and the pin never overrides that
+name; skarn reads the pin only where the name is missing, so a strict deny for
+a payload that never parsed, or a call carrying no hook_event_name, takes the
+pinned shape instead of the PreToolUse default. Ignored by every other host,
+and by the VS Code Copilot dialect. One of: preToolUse, permissionRequest.
+.TP
+\fB\-\-self\-test\fR
+Verify the guard's own code path instead of reading an event. Skarn feeds two
+synthetic fixture events through each adapter's real code path, one benign and
+one carrying a fake credential, then reports the verdicts, latency, and a
+guard\-log write probe. The kimi pair carries kimi's own client_type stamp and
+content\-block prompt shape, so the fixture proves the routing the shipped pin
+also asserts. The mode in the header is this invocation's, from
+\-\-guard\-mode and the license; it is never read from a host config, so a
+bare run reports audit whatever skarn setup wired, and skarn doctor is where
+the wired mode is reported. The fake credential is only ever printed redacted,
+and the self\-test deliberately ignores the accepted\-findings baseline, so an
+accepted fingerprint can never make a dead hook look alive. What it proves is
+the binary, the adapter and the log write. It runs entirely in this process
+and reads no host config, so it never proves that a host is calling the hook:
+skarn doctor reads the host configs for that, and on a host doctor does not
+cover (kimi today) the only proof is a flagged action driven through the host
+itself. Exit 0 when every adapter passes, 1 otherwise; works unlicensed, with
+audit semantics.
+.TP
+\fB\-\-log\fR \fIpath\fR
+On the hook invocation, `skarn guard \-\-log <path|none>` names where this
+call appends its redacted JSONL record. A path takes precedence over
+$SKARN_GUARD_LOG; none writes no record even when that variable is set; no
+flag at all falls back to the variable. Skarn refuses a path that expands to a
+parent\-directory segment or carries a control character: no record is written
+and there is no fallback destination, because a fallback would derive from
+$XDG_CACHE_HOME or $HOME, which the same hook command can also set. With
+report: a guard log to summarize, repeatable. Default: $SKARN_GUARD_LOG when
+set, otherwise the log skarn setup wires for each assistant
+($XDG_CACHE_HOME/skarn/guard\-<agent>\-audit.jsonl, plus the home cache beside
+it when a log already exists there). A log that does not exist is named in the
+output with the command that wires it, never silently counted as zero, and a
+configured path the guard refuses is named as refused rather than shown as
+empty.
+.TP
+\fB\-\-window\fR \fIspan\fR
+With report: how far back to summarize, as <N>d or all. The default is 7d.
+.TP
+\fB\-\-format\fR \fIfmt\fR
+With report: text renders the summary, the enforce\-cost forecast, and the
+recommendation. json emits the whole aggregate as one object with stable field
+names for fleet scripts, including a forecast object and the denominator
+string that names what its rates are rates of. One of: text, json. The default
+is text.
+.TP
+\fB\-\-baseline\fR \fIfile\fR
+With accept: the accepted\-findings file to write. Defaults to the personal
+baseline the guard itself reads (~/.config/skarn/baseline.json, honoring
+$XDG_CONFIG_HOME), created on first use. `skarn baseline accept` always names
+its file instead, because an accept the guard does not read would not stop the
+block. Always a file, never a directory: the org\-union form is not reachable
+from the guard. Accepting a fingerprint already recorded as a confirmed true
+positive is refused, so a fingerprint\-only accept can never re\-silence a
+real leak.
+.TP
+\fB\-\-reason\fR \fItext\fR
+With accept: why this finding is a false positive, recorded in the baseline
+entry. Do not paste a secret here; the text is stored verbatim.
+.TP
+\fB\-\-identity\fR \fIid\fR
+With accept: override the accepted\-by identity stamped on the entry; defaults
+to $SKARN_IDENTITY.
+.SH "HOOK EVENTS"
+Every hook event skarn guard handles, one table per host. Fires on is what
+triggers the event. Enforce is what enforce mode does with a finding: deny or
+ask, deny (a would\-be ask becomes a deny), cancel task (the whole task ends),
+advises only, or log only (the host gives the hook no way to block, so only
+the guard log records the verdict). Shipped says whether the integration
+configs wire the event or leave it opt\-in. Audit mode never blocks on a
+finding; the line above each table says how it speaks and how a guard failure
+lands.
+.SS "Claude Code"
+Audit mode advises without deciding. A non\-zero guard exit fails closed on
+the events that can block, and an unparseable event asks in enforce mode.
+.PP
+.TS
+lB lB lB lB
+lB l l l.
+Event	Fires on	Enforce	Shipped
+\&PreToolUse	\&tool call	\&deny or ask	\&yes
+\&PermissionRequest	\&permission check	\&deny	\&yes
+\&UserPromptSubmit	\&submitted prompt	\&deny	\&yes
+\&UserPromptExpansion	\&expanded command	\&deny	\&yes
+\&TaskCreated	\&new task	\&deny	\&yes
+\&PostToolUse	\&tool result	\&deny	\&opt\-in
+\&PostToolBatch	\&tool result batch	\&deny	\&opt\-in
+\&Stop	\&response end	\&advises only	\&yes
+.TE
+.SS "Cursor"
+Audit mode is silent. beforeReadFile is gated only under \-\-strict, which the
+shipped config passes on that event alone. Fails open by default; \-\-strict
+plus enforce exits 2 on an unparseable event.
+.PP
+.TS
+lB lB lB lB
+lB l l l.
+Event	Fires on	Enforce	Shipped
+\&beforeShellExecution	\&shell command	\&deny or ask	\&yes
+\&beforeReadFile	\&file read	\&deny	\&yes
+\&beforeMCPExecution	\&MCP tool call	\&deny or ask	\&yes
+\&beforeSubmitPrompt	\&submitted prompt	\&deny	\&yes
+.TE
+.SS "Codex CLI"
+Codex shares Claude's event names, so pass \-\-agent codex. Audit mode advises
+without deciding. Fails open by default; \-\-strict plus enforce denies an
+unparseable event.
+.PP
+.TS
+lB lB lB lB
+lB l l l.
+Event	Fires on	Enforce	Shipped
+\&PreToolUse	\&tool call	\&deny	\&yes
+\&PermissionRequest	\&permission check	\&deny	\&yes
+\&UserPromptSubmit	\&submitted prompt	\&deny	\&yes
+\&PostToolUse	\&tool result	\&deny	\&opt\-in
+\&Stop	\&turn end	\&advises only	\&yes
+.TE
+.SS "GitHub Copilot CLI"
+Audit mode advises on preToolUse and postToolUse and is silent on the rest. A
+hook loading after Skarn can replace a permissionRequest deny with allow, so
+preToolUse is the durable gate. preToolUse fails closed on a non\-zero exit
+and open on a timeout.
+.PP
+.TS
+lB lB lB lB
+lB l l l.
+Event	Fires on	Enforce	Shipped
+\&preToolUse	\&tool call	\&deny or ask	\&yes
+\&permissionRequest	\&permission check	\&deny	\&yes
+\&userPromptSubmitted	\&submitted prompt	\&log only	\&yes
+\&userPromptTransformed	\&transformed prompt	\&log only	\&opt\-in
+\&preMcpToolCall	\&MCP tool call	\&log only	\&opt\-in
+\&postToolUse	\&tool result	\&advises only	\&opt\-in
+.TE
+.SS "GitHub Copilot (VS Code agent mode)"
+VS Code reads hooks from ~/.claude/settings.json, so a machine running the
+Claude guard receives VS Code events too. Audit mode advises without deciding.
+A non\-zero exit other than 2 fails open.
+.PP
+.TS
+lB lB lB lB
+lB l l l.
+Event	Fires on	Enforce	Shipped
+\&PreToolUse	\&tool call	\&deny or ask	\&yes
+\&UserPromptSubmit	\&submitted prompt	\&deny	\&yes
+\&PostToolUse	\&tool result	\&deny	\&opt\-in
+.TE
+.SS "Gemini CLI"
+Audit mode advises without deciding. Entry timeouts are in milliseconds. Exit
+2 blocks; any other non\-zero exit, and a hook that runs past its timeout,
+fails open.
+.PP
+.TS
+lB lB lB lB
+lB l l l.
+Event	Fires on	Enforce	Shipped
+\&BeforeTool	\&tool call	\&deny	\&yes
+\&BeforeAgent	\&submitted prompt	\&deny	\&yes
+\&AfterTool	\&tool result	\&deny	\&opt\-in
+.TE
+.SS "Grok Build"
+Audit mode is silent. The snake_case rows are how grok's stdin spells the
+three PascalCase events, and they fire wherever those are wired. Grok also
+runs the hooks in the Claude and Cursor configs, and the guard routes those
+events to grok whatever \-\-agent says. Fails open by default; \-\-strict plus
+enforce exits 2 on an unparseable event.
+.PP
+.TS
+lB lB lB lB
+lB l l l.
+Event	Fires on	Enforce	Shipped
+\&PreToolUse	\&tool call	\&deny	\&yes
+\&UserPromptSubmit	\&submitted prompt	\&log only	\&yes
+\&PostToolUse	\&tool result	\&log only	\&opt\-in
+\&pre_tool_use	\&tool call	\&deny	\&yes
+\&user_prompt_submit	\&submitted prompt	\&log only	\&yes
+\&post_tool_use	\&tool result	\&log only	\&opt\-in
+.TE
+.SS "Antigravity CLI (agy)"
+Audit mode answers allow with the would\-be verdict in the reason. A crashed,
+slow or missing skarn blocks every matched call in either mode.
+.PP
+.TS
+lB lB lB lB
+lB l l l.
+Event	Fires on	Enforce	Shipped
+\&PreToolUse	\&tool call	\&deny	\&yes
+.TE
+.SS "Kimi Code"
+Audit mode is silent. Pass \-\-agent kimi, as the shipped entries do: a host
+on kimi's older hook engine sends a payload shaped like Claude's. Only exit 2,
+or exit 0 with a deny object, blocks; every other failure allows the action.
+.PP
+.TS
+lB lB lB lB
+lB l l l.
+Event	Fires on	Enforce	Shipped
+\&PreToolUse	\&tool call	\&deny	\&yes
+\&UserPromptSubmit	\&submitted prompt	\&deny	\&yes
+.TE
+.SS "Cline"
+Audit mode advises without deciding. The SDK runner behind the cline CLI and
+4.x extension sessions sends the snake_case names for the same files and never
+reads a prompt_submit answer, so a prompt blocks only under the extension's
+own runner. Fails open by default; \-\-strict plus enforce cancels an
+unparseable event. The shipped files are POSIX shell, so Windows is not
+covered.
+.PP
+.TS
+lB lB lB lB
+lB l l l.
+Event	Fires on	Enforce	Shipped
+\&PreToolUse	\&tool call	\&cancel task	\&yes
+\&tool_call	\&tool call	\&cancel task	\&yes
+\&UserPromptSubmit	\&submitted prompt	\&cancel task	\&yes
+\&prompt_submit	\&submitted prompt	\&log only	\&yes
+\&PostToolUse	\&tool result	\&cancel task	\&opt\-in
+\&tool_result	\&tool result	\&cancel task	\&opt\-in
+.TE
+.SH "SEE ALSO"
+skarn(1)
+.SH COPYRIGHT
+Copyright (c) 2026 Skarn Software OÜ. All rights reserved. Skarn is
+proprietary software; see the LICENSE distributed with the binary and
+https://getskarn.com.
