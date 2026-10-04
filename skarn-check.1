@@ -1,4 +1,4 @@
-.TH "SKARN-CHECK" "1" "2026-06-23" "skarn 0.32.0" "Skarn Manual"
+.TH "SKARN-CHECK" "1" "2026-06-23" "skarn 0.33.0" "Skarn Manual"
 .SH NAME
 skarn\-check \- Scan AI sessions for leaked credentials and attack patterns
 .SH SYNOPSIS
@@ -97,12 +97,6 @@ json, sarif, ndjson, evidence. The default is text.
 .TP
 \fB\-v\fR, \fB\-\-verbose\fR
 Verbose output.
-.TP
-\fB\-\-no\-redact\fR
-Show secrets in full in the text, json and sarif reports only. The ndjson
-stream, the evidence pack, the artifacts written by \-\-drop, serve and
-assess, the baseline files, the mcp tools, the guard, and every serve API
-route that returns session content ignore this flag and stay redacted.
 .TP
 \fB\-\-no\-color\fR
 Disable colored output.
@@ -237,9 +231,9 @@ setup and guard \-\-self\-test: a target was refused or a verification failed.
 For doctor: at least one check FAILED (a warning never exits nonzero), or an
 unknown option was passed, which is refused before any check runs. For
 restore: the recorded working directory or session id could not be rendered
-safely, or the working directory carries a detected secret and \-\-no\-redact
-was not passed, so nothing was printed to stdout and the refusal is named on
-stderr. Also: the first\-run EULA prompt was declined, so the invoked
+safely, or the working directory carries a detected secret, so the resume
+command cannot be printed, nothing was printed to stdout and the refusal is
+named on stderr. Also: the first\-run EULA prompt was declined, so the invoked
 operation was not performed. For mcp: an unknown argument was passed, which is
 refused before the protocol loop starts. For license: an install or a renewal
 was refused or did not complete, for example because an argument was invalid,
@@ -309,13 +303,11 @@ doctor, vet, mcp, license, taxonomies and check \-\-audit\-verify never exit
 7.
 .SH SECURITY
 Skarn scans locally and makes no network connection by default. Secrets are
-redacted in check's reports and in everything the recall commands print
-(search, recent, messages, stats, cmds, tools, mcps, restore, export).
-\-\-no\-redact lifts the mask only where it is honored: check's text, json and
-sarif reports, and the session content the recall commands print. The ndjson
+redacted in check's reports, in everything the recall commands print (search,
+recent, messages, stats, cmds, tools, mcps, restore, export), in the ndjson
 stream, the evidence pack, the artifacts written by \-\-drop, serve and
 assess, the baseline files, the mcp tools, the guard, and every serve API
-route that returns session content ignore it and stay redacted.
+route that returns session content. No flag lifts the mask.
 .PP
 Two commands transmit anything off the machine, and only when you type them.
 skarn check \-\-update\-rules fetches a signed feed bundle from the subscriber

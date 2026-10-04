@@ -1,6 +1,6 @@
 # Skarn editions - the free/paid boundary
 
-Generated from docs/cli-model.toml by docs/build_manpage.py (regenerate with `zig build man`); do not edit by hand. skarn 0.32.0.
+Generated from docs/cli-model.toml by docs/build_manpage.py (regenerate with `zig build man`); do not edit by hand. skarn 0.33.0.
 
 One binary for every tier. The free tier is the full local product, not a trial: the entire detection engine, every output format except the Pro evidence pack, and redaction, under a free license available to anyone who registers - an individual or an organization alike. Paid tiers unlock org capabilities: distributing policy and accepted-findings baselines across a team, compliance evidence, the maintained feed, and real-time enforcement. Pro unlocks them for one developer. Team unlocks the same for 2 to 24 developers and adds seat assignment, invitations and organization management, which the licensing service provides and the binary does not gate, so the Team table below has no rows of its own.
 

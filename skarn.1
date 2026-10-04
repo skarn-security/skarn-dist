@@ -1,4 +1,4 @@
-.TH "SKARN" "1" "2026-06-23" "skarn 0.32.0" "Skarn Manual"
+.TH "SKARN" "1" "2026-06-23" "skarn 0.33.0" "Skarn Manual"
 .SH NAME
 skarn \- AI coding session security scanner with built\-in session search
 .SH SYNOPSIS
@@ -47,17 +47,16 @@ recent, stats, and friends) are the daily use surface. They match and filter
 on the raw session text, then mask every detected secret in what they print,
 which runs the detector over the sessions a command emits: a value the
 detector matches in any session of that output is masked in every session of
-it, while a value it matches nowhere in that set prints as recorded.
-\-\-no\-redact prints raw content and skips that scan. A session that is still
-being written when a command reads it is stamped, scanned and read again, up
-to three times, so what prints always comes from bytes the scan covered; one
-that keeps changing is left out of that run with a count on stderr, and a
-single\-session view of it asks you to re\-run once it is quiet. The check
-command is the security scanner: it runs the detection rules, correlates
-attack chains, and computes a session risk score for CI/CD gating. Every
-finding is mapped to MITRE ATLAS, the OWASP Top 10 for LLM Applications 2025,
-and CWE; run skarn taxonomies to print the crosswalk and the pinned framework
-versions.
+it, while a value it matches nowhere in that set prints as recorded. A session
+that is still being written when a command reads it is stamped, scanned and
+read again, up to three times, so what prints always comes from bytes the scan
+covered; one that keeps changing is left out of that run with a count on
+stderr, and a single\-session view of it asks you to re\-run once it is quiet.
+The check command is the security scanner: it runs the detection rules,
+correlates attack chains, and computes a session risk score for CI/CD gating.
+Every finding is mapped to MITRE ATLAS, the OWASP Top 10 for LLM Applications
+2025, and CWE; run skarn taxonomies to print the crosswalk and the pinned
+framework versions.
 .SH COMMANDS
 .TP
 \fBcheck\fR [options]
@@ -100,7 +99,7 @@ Show the MCP calls made across sessions.
 Show the shell commands run across sessions.
 .TP
 \fBexport\fR [options]
-Export sessions as text, json, ndjson, html; redacted by default.
+Export sessions as text, json, ndjson, html; secrets masked.
 .TP
 \fBguard\fR [report|accept <fingerprint>] [options]
 Pre\-execution hook: read an event on stdin, emit a verdict.
@@ -221,12 +220,6 @@ json, sarif, ndjson, evidence. The default is text.
 .TP
 \fB\-v\fR, \fB\-\-verbose\fR
 Verbose output.
-.TP
-\fB\-\-no\-redact\fR
-Show secrets in full in the text, json and sarif reports only. The ndjson
-stream, the evidence pack, the artifacts written by \-\-drop, serve and
-assess, the baseline files, the mcp tools, the guard, and every serve API
-route that returns session content ignore this flag and stay redacted.
 .TP
 \fB\-\-no\-color\fR
 Disable colored output.
@@ -792,11 +785,6 @@ Print help and exit.
 .SS "Recent options"
 See \fBskarn\-recent\fR(1).
 .TP
-\fB\-\-no\-redact\fR
-Print raw session content and skip the detection scan. By default every
-detected secret is masked in the output; the match and every filter run on the
-raw text either way, so a masked value still finds its session.
-.TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
 copilot, kimi, grok, grokbot, antigravity, opencode, cline.
@@ -863,11 +851,6 @@ that reading one needs, every \-\-user value matches nothing.
 .SS "Messages options"
 See \fBskarn\-messages\fR(1).
 .TP
-\fB\-\-no\-redact\fR
-Print raw session content and skip the detection scan. By default every
-detected secret is masked in the output; the match and every filter run on the
-raw text either way, so a masked value still finds its session.
-.TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
 copilot, kimi, grok, grokbot, antigravity, opencode, cline.
@@ -932,11 +915,6 @@ either, so on a machine without an export, or without the Enterprise license
 that reading one needs, every \-\-user value matches nothing.
 .SS "Search options"
 See \fBskarn\-search\fR(1).
-.TP
-\fB\-\-no\-redact\fR
-Print raw session content and skip the detection scan. By default every
-detected secret is masked in the output; the match and every filter run on the
-raw text either way, so a masked value still finds its session.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
@@ -1033,21 +1011,11 @@ that reading one needs, every \-\-user value matches nothing.
 .SS "Restore options"
 See \fBskarn\-restore\fR(1).
 .TP
-\fB\-\-no\-redact\fR
-Print raw session content and skip the detection scan. By default every
-detected secret is masked in the output; the match and every filter run on the
-raw text either way, so a masked value still finds its session.
-.TP
 \fB\-\-session\fR \fIid\fR
 Session id to operate on (prefix\-matched); equivalent to the positional
 argument.
 .SS "Stats options"
 See \fBskarn\-stats\fR(1).
-.TP
-\fB\-\-no\-redact\fR
-Print raw session content and skip the detection scan. By default every
-detected secret is masked in the output; the match and every filter run on the
-raw text either way, so a masked value still finds its session.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
@@ -1124,11 +1092,6 @@ that reading one needs, every \-\-user value matches nothing.
 .SS "Export options"
 See \fBskarn\-export\fR(1).
 .TP
-\fB\-\-no\-redact\fR
-Print raw session content and skip the detection scan. By default every
-detected secret is masked in the output; the match and every filter run on the
-raw text either way, so a masked value still finds its session.
-.TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
 copilot, kimi, grok, grokbot, antigravity, opencode, cline.
@@ -1197,11 +1160,6 @@ either, so on a machine without an export, or without the Enterprise license
 that reading one needs, every \-\-user value matches nothing.
 .SS "Cmds options"
 See \fBskarn\-cmds\fR(1).
-.TP
-\fB\-\-no\-redact\fR
-Print raw session content and skip the detection scan. By default every
-detected secret is masked in the output; the match and every filter run on the
-raw text either way, so a masked value still finds its session.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
@@ -1275,11 +1233,6 @@ that reading one needs, every \-\-user value matches nothing.
 .SS "Mcps options"
 See \fBskarn\-mcps\fR(1).
 .TP
-\fB\-\-no\-redact\fR
-Print raw session content and skip the detection scan. By default every
-detected secret is masked in the output; the match and every filter run on the
-raw text either way, so a masked value still finds its session.
-.TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
 copilot, kimi, grok, grokbot, antigravity, opencode, cline.
@@ -1351,11 +1304,6 @@ either, so on a machine without an export, or without the Enterprise license
 that reading one needs, every \-\-user value matches nothing.
 .SS "Tools options"
 See \fBskarn\-tools\fR(1).
-.TP
-\fB\-\-no\-redact\fR
-Print raw session content and skip the detection scan. By default every
-detected secret is masked in the output; the match and every filter run on the
-raw text either way, so a masked value still finds its session.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
@@ -1485,9 +1433,9 @@ setup and guard \-\-self\-test: a target was refused or a verification failed.
 For doctor: at least one check FAILED (a warning never exits nonzero), or an
 unknown option was passed, which is refused before any check runs. For
 restore: the recorded working directory or session id could not be rendered
-safely, or the working directory carries a detected secret and \-\-no\-redact
-was not passed, so nothing was printed to stdout and the refusal is named on
-stderr. Also: the first\-run EULA prompt was declined, so the invoked
+safely, or the working directory carries a detected secret, so the resume
+command cannot be printed, nothing was printed to stdout and the refusal is
+named on stderr. Also: the first\-run EULA prompt was declined, so the invoked
 operation was not performed. For mcp: an unknown argument was passed, which is
 refused before the protocol loop starts. For license: an install or a renewal
 was refused or did not complete, for example because an argument was invalid,
@@ -2364,13 +2312,11 @@ skarn baseline accept .skarn\-baseline.json 7d343e3a105ae026589b3371d565a4ad2943
 .RE
 .SH SECURITY
 Skarn scans locally and makes no network connection by default. Secrets are
-redacted in check's reports and in everything the recall commands print
-(search, recent, messages, stats, cmds, tools, mcps, restore, export).
-\-\-no\-redact lifts the mask only where it is honored: check's text, json and
-sarif reports, and the session content the recall commands print. The ndjson
+redacted in check's reports, in everything the recall commands print (search,
+recent, messages, stats, cmds, tools, mcps, restore, export), in the ndjson
 stream, the evidence pack, the artifacts written by \-\-drop, serve and
 assess, the baseline files, the mcp tools, the guard, and every serve API
-route that returns session content ignore it and stay redacted.
+route that returns session content. No flag lifts the mask.
 .PP
 Two commands transmit anything off the machine, and only when you type them.
 skarn check \-\-update\-rules fetches a signed feed bundle from the subscriber
