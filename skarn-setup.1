@@ -1,4 +1,4 @@
-.TH "SKARN-SETUP" "1" "2026-06-23" "skarn 0.33.0" "Skarn Manual"
+.TH "SKARN-SETUP" "1" "2026-06-23" "skarn 0.34.0" "Skarn Manual"
 .SH NAME
 skarn\-setup \- Wire the guard hook into detected assistants, then self\-test
 it
@@ -8,48 +8,72 @@ it
 Wire the skarn guard hook into detected AI coding assistants, then verify it
 with the guard self\-test. Setup merges its entries into each assistant's
 existing config, backs up every file before changing it, and \-\-remove drops
-those entries again. A config file that is itself a symlink is the exception:
-at user scope the rewrite leaves a regular file where the link was, so a
-dotfiles manager such as stow has to relink it. At \-\-scope project setup
-refuses that file, and a file behind a symlinked directory, instead.
+those entries again. A config file that is itself a symlink is written through
+at user scope, to the file it names, and the link stays in place; a link whose
+file is missing, or whose directory setup cannot write, is refused on install,
+and \-\-remove reports a link whose file is missing as unchanged. At \-\-scope
+project setup refuses that file, and a file behind a symlinked directory,
+instead. A config file setup creates is readable by its owner only on macOS
+and Linux, and an existing file keeps its mode.
 .PP
 Guided onboarding: detect installed AI coding assistants (Claude Code, Cursor,
-Codex CLI, Copilot CLI, Gemini CLI, Grok Build), merge the skarn guard hook
-into each one's native config in audit mode, and prove the wiring with the
-guard self\-test. \-\-scope project writes committed, shareable configs whose
-commands are portable by construction: a PATH\-guarded invocation and a
-literal $HOME log path, never this machine's absolute paths. Gemini CLI and
-Grok Build are the one honest exception, because each reads a single
-cross\-platform command field: a file committed from a POSIX machine carries
-the POSIX form, and a native\-Windows teammate's hook then fails open with a
-warning instead of running. Grok's project hooks additionally wait on a
-/hooks\-trust grant. \-\-plugin commits the claude plugin requirement instead
-of hook entries; the two project routes are mutually exclusive, and each
-removes the other's skarn\-owned entries so the guard can never fire twice.
-Existing foreign hooks are never touched. Every modified file is backed up
-first (*.skarn\-bak.<timestamp>, carrying the target's own permissions) and
+Codex CLI, Copilot CLI, Gemini CLI, Grok Build, Copilot in Code), merge the
+skarn guard hook into each one's native config in audit mode, and prove the
+wiring with the guard self\-test. Copilot in Code gets one hook file per
+profile, <profile>\ehooks\eskarn.json, for every profile under the
+CopilotCodingHome directories of %LOCALAPPDATA%; its folder projects read the
+\&.github/hooks/skarn.json that \-\-agent copilot \-\-scope project writes, so
+\-\-agent copilot\-code refuses \-\-scope project. \-\-scope project writes
+committed, shareable configs whose commands are portable by construction: a
+PATH\-guarded invocation and a literal $HOME log path, never this machine's
+absolute paths. Gemini CLI and Grok Build are the one honest exception,
+because each reads a single cross\-platform command field: a file committed
+from a POSIX machine carries the POSIX form, and a native\-Windows teammate's
+hook then fails open with a warning instead of running. Grok's project hooks
+additionally wait on a /hooks\-trust grant. On native Windows, or with a
+\-\-command that names a drive or UNC path, setup still writes the Claude Code
+and Cursor hooks, which have no Windows arm, and prints one warning line when
+doctor's Windows reading finds no hook wired. Cursor runs that hook through
+PowerShell, which does not parse its POSIX form, so the hook fails open and
+actions run unscanned. Claude Code runs it through Git Bash when that is
+installed, which skarn has not validated, and otherwise through PowerShell,
+where the guard never starts and a tool call can be blocked instead.
+\-\-plugin commits the claude plugin requirement instead of hook entries; the
+two project routes are mutually exclusive, and each removes the other's
+skarn\-owned entries so the guard can never fire twice. Existing foreign hooks
+are never touched. Every modified file is backed up first
+(*.skarn\-bak.<timestamp>, carrying the target's own permissions) and
 rewritten atomically, and a target file that does not parse as JSON is refused
 rather than overwritten. At \-\-scope project skarn also refuses a target that
 is a symlink, that sits behind a symlinked directory, or whose path it cannot
 examine at all, before anything is read or created: a committed symlink can
 name any file on the machine, and following it would copy that file's bytes
-into a backup beside it and rewrite it in place. User scope still follows the
-link, because a dotfiles manager legitimately puts one there, and the atomic
-rewrite then leaves a regular file where the link was, so a stow\-managed
-config has to be relinked afterward. On a terminal setup runs an interactive
-wizard: the mode prompt accepts audit, enforce, or an empty line for audit,
-each install prompt accepts y, yes, n, no, or an empty line for yes, and any
-other answer is asked again. \-\-yes accepts everything and \-\-print writes
-nothing. The result names the mode it wired, and whether an enforce request
-runs audit because the machine is unlicensed or its license is on the free
-tier.
+into a backup beside it and rewrite it in place. At user scope setup writes
+through a symlinked config to the file it names and leaves the link in place,
+because a dotfiles manager legitimately puts one there; it refuses a link
+whose file is missing or whose directory it cannot write, \-\-remove reports a
+link whose file is missing as unchanged, and a rewrite that fails or is rolled
+back after its verify read leaves no backup behind. A Copilot in Code hook
+file reached through a link whose target is a network path is refused before
+anything is read or created. A config file setup creates is readable by its
+owner only on macOS and Linux, while an existing file keeps its mode; on
+Windows a new file takes the permissions of the directory it is created in. On
+a terminal setup runs an interactive wizard: the mode prompt accepts audit,
+enforce, or an empty line for audit, each install prompt accepts y, yes, n,
+no, or an empty line for yes, and any other answer is asked again. \-\-yes
+accepts everything and \-\-print writes nothing. The result names the mode it
+wired, and whether an enforce request runs audit because the machine is
+unlicensed or its license is on the free tier.
 .SH OPTIONS
 .TP
 \fB\-\-agent\fR \fIname\fR
 Target assistants, repeatable or comma\-separated. Default: all detected (an
-assistant is detected when its config directory exists or its CLI is on PATH);
-naming an assistant explicitly also targets it when undetected. One of:
-claude, cursor, codex, copilot, gemini, grok, all.
+assistant is detected when its config directory exists or its CLI is on PATH,
+and Copilot in Code when one of its profiles exists); naming an assistant
+explicitly also targets it when undetected, except copilot\-code, which setup
+refuses when it finds no profile and names where it looked. all targets every
+assistant, and copilot\-code only when a profile exists at user scope. One of:
+claude, cursor, codex, copilot, gemini, grok, all, copilot\-code.
 .TP
 \fB\-\-mode\fR \fImode\fR
 Guard mode written into the hook commands. Audit records would\-be verdicts to
@@ -59,8 +83,9 @@ guard, or one on the free tier, runs audit\-only regardless. One of: audit,
 enforce. The default is audit.
 .TP
 \fB\-\-strict\fR
-Add \-\-strict to the generated guard commands (also gates Read operations;
-fail\-closed semantics on Codex).
+Add \-\-strict to the generated guard commands (also gates Read operations,
+and turns the ask the guard gives an event it cannot fully classify into a
+deny).
 .TP
 \fB\-\-log\fR \fIpath\fR
 Guard log path wired into the hook commands: a SKARN_GUARD_LOG= prefix on the
@@ -85,9 +110,15 @@ The guard executable invoked by the hook commands. At user scope the default
 resolves this binary's absolute path, preferring the stable Homebrew
 <prefix>/bin symlink over the versioned Cellar path, because GUI\-launched
 hosts like Cursor do not inherit brew's PATH; pass skarn to opt into
-PATH\-relative. At project scope the default is the bare name skarn, and a
-value containing a path separator is refused: a committed config must resolve
-skarn from PATH on every machine. The default is this binary's absolute path.
+PATH\-relative. On Windows a POSIX hook arm carries that path with forward
+slashes (D:/tools/skarn.exe), the spelling Git Bash runs and setup recognizes
+on the next run, so a re\-run reports unchanged and \-\-update keeps one entry
+per hook; the PowerShell form of a Gemini or Grok hook keeps backslashes. An
+entry an earlier setup wrote with backslashes on that arm is replaced whole on
+the next run when its Windows arm runs skarn. At project scope the default is
+the bare name skarn, and a value containing a path separator is refused: a
+committed config must resolve skarn from PATH on every machine. The default is
+this binary's absolute path.
 .TP
 \fB\-\-scope\fR \fIscope\fR
 Write user\-level configs (~/.claude/settings.json, ~/.cursor/hooks.json,
@@ -161,11 +192,13 @@ self\-test result) instead of the text report.
 A repo's committed project\-scope hook configs (claude, cursor, codex,
 copilot, gemini), written by skarn setup \-\-scope project and read by doctor
 as each host's project precedence layer whenever it runs in that directory.
-Portable by construction: the committed command resolves skarn from PATH at
-run time and exits 0 where skarn is not installed. Gemini reads one command
-field on every platform, so its committed POSIX command fails open on a
-native\-Windows teammate; Gemini also runs hooks from a project file only once
-that folder is trusted.
+Copilot in Code reads the copilot file in a folder project; in a working
+directory holding a .git entry doctor reports it unverified for copilot\-code,
+because a repository project was not measured. Portable by construction: the
+committed command resolves skarn from PATH at run time and exits 0 where skarn
+is not installed. Gemini reads one command field on every platform, so its
+committed POSIX command fails open on a native\-Windows teammate; Gemini also
+runs hooks from a project file only once that folder is trusted.
 .TP
 \fB~/.gemini/settings.json\fR
 Gemini CLI's user settings: MCP server definitions read by vet, and the hooks
@@ -186,6 +219,29 @@ grok \-\-scope project and meant to be committed. Grok runs a project hook
 only after the folder is trusted (/hooks\-trust, or launching with \-\-trust);
 until then it skips the file silently, so doctor reports that layer as inert
 rather than as protection.
+.TP
+\fB%LOCALAPPDATA%\eMicrosoft\eCopilot\eUser Data\eCopilotCodingHome\e<profile>\ehooks\eskarn.json, the same file under the MSIX twin of that directory (Windows)\fR
+The skarn\-owned hook file of one Copilot in Code profile. skarn setup
+\-\-agent copilot\-code writes it for every profile it finds, a directory
+inside a CopilotCodingHome directory that holds session\-state, hooks or
+data.db, plus a $COPILOT_HOME that names one, with the usual backup, atomic
+write and verify. Discovery does not count or open a marker or a profile
+folder that is a link, a junction included, and data.db counts only as a file;
+a $COPILOT_HOME that names a Code profile can still name a linked folder
+unless the link points at a network path. A profile's hooks folder may be a
+link to a local folder, and setup writes through it and doctor reads through
+it; when the hooks folder, or a folder on the way to the hook file, is a link
+whose target is a network path, setup refuses that profile before anything is
+read or created (refused network\-target in the JSON result) and doctor reads
+nothing through it and warns that the hook file is reached through a link to a
+network path. The profile's settings.json is read through a link of either
+kind. Its content is the shipped copilot hook file with the guard log moved to
+guard\-copilot\-code\-audit.jsonl; the command still pins \-\-agent copilot.
+Code reads every *.json in the profile's hooks folder, so doctor warns when a
+second skarn hook file sits beside it, and reads each profile's settings.json
+for disableAllHooks. On macOS and Linux setup and doctor reach a profile only
+through a $COPILOT_HOME that names it. Verified against Copilot app
+`156.0.4314.58`.
 .SH "SEE ALSO"
 skarn(1)
 .SH COPYRIGHT

@@ -1,4 +1,4 @@
-.TH "SKARN-VET" "1" "2026-06-23" "skarn 0.33.0" "Skarn Manual"
+.TH "SKARN-VET" "1" "2026-06-23" "skarn 0.34.0" "Skarn Manual"
 .SH NAME
 skarn\-vet \- Vet the local AI config, read\-only and offline. Free, no
 license
@@ -7,44 +7,76 @@ license
 .SH DESCRIPTION
 Statically vet the local AI assistant configuration (hooks, MCP servers,
 permission grants, plugins and skills) for risky patterns across Claude Code,
-Codex CLI, Cursor, Copilot, Gemini CLI, Grok Build, Grok Bot, and Microsoft
-Scout. Read\-only and offline; free, no license.
+Codex CLI, Cursor, Copilot, Copilot in Code, Gemini CLI, Grok Build, Grok Bot,
+and Microsoft Scout. Read\-only and offline; free, no license.
 .PP
 Statically vet this machine's AI assistant configuration \- hook commands, MCP
 server definitions, permission grants, and installed plugins and skills across
-Claude Code, Codex CLI, Cursor, Copilot, Gemini CLI, Grok Build, Grok Bot, and
-Microsoft Scout \- and report the risky patterns it finds: hooks that
-exfiltrate local content or fetch\-and\-execute remote code, hooks that post
-the session event envelope to a remote http endpoint, hooks that rewrite an
-assistant's own config, MCP endpoints on remote hosts, MCP launchers with no
-pinned version or digest, permission grants that approve a whole class of
-actions, grants that let the assistant ask to widen its own authority, and
-extensions installed from a remote source or carrying no integrity marker. Two
-more patterns come from permission metadata and declared posture flags alone:
-a plaintext credential store whose file mode grants group or other read, and
-an assistant configured with an always\-on local\-exec and egress channel. Vet
-reports declared configuration, not the effective merge across layers, so a
-grant a higher layer denies, or a permission mode an administrator lock
-disables, is still surfaced: the declaration exists and is one edit away from
-active. Project configuration is read at the cwd\-level file only, so a host
-that also loads configuration from parent directories is covered there and no
-further. Vet is read\-only and offline: it opens each config file it reads for
-reading, never writes one, and makes no network call. A config file that does
-not exist is skipped; a config file that exists but cannot be read is a
-coverage gap that fails closed under a \-\-fail\-on flag. Each per\-assistant
-configuration file listed below whose contents vet reads is opened once, and
-its permission metadata is read off that same handle. Two credential stores
-are the exception, because their file mode alone decides a finding and their
-contents are never wanted: Grok Bot's sand\-secrets.json and the Copilot CLI's
-data.db are measured by a stat that does not follow a symlink and are never
-opened, so a symlinked store is reported as a coverage gap named
-SymlinkNotFollowed rather than measured through its target. Every other config
-file is still read through a symlink, so a dotfiles\-managed configuration
-keeps its coverage. A path that is not a regular file is named as a coverage
-gap rather than read. The config\-file count the report prints, and the
-configFilesRead field in the json and sarif output, count every such file vet
-examined, including those two. The hook directories and extension manifests
-vet also walks keep their own older read path. Vet surfaces risky
+Claude Code, Codex CLI, Cursor, Copilot, Copilot in Code, Gemini CLI, Grok
+Build, Grok Bot, and Microsoft Scout \- and report the risky patterns it
+finds: hooks that exfiltrate local content or fetch\-and\-execute remote code,
+hooks that post the session event envelope to a remote http endpoint, hooks
+that rewrite an assistant's own config, MCP endpoints on remote hosts, MCP
+launchers with no pinned version or digest, permission grants that approve a
+whole class of actions, grants that let the assistant ask to widen its own
+authority, and extensions installed from a remote source or carrying no
+integrity marker. Two more patterns come from permission metadata and declared
+posture flags alone: a plaintext credential store whose file mode grants group
+or other read, and an assistant configured with an always\-on local\-exec and
+egress channel. Vet reports declared configuration, not the effective merge
+across layers, so a grant a higher layer denies, or a permission mode an
+administrator lock disables, is still surfaced: the declaration exists and is
+one edit away from active. Project configuration is read at the cwd\-level
+file only, so a host that also loads configuration from parent directories is
+covered there and no further. A hook entry's command, bash and powershell
+fields are each vetted, and the hook rules also match the PowerShell forms of
+a download, an upload, an execution and a write, in any letter case; a command
+passed through \-EncodedCommand or an abbreviation of it is flagged as
+dangerous and is not decoded. Vet is read\-only and offline: it opens each
+config file it reads for reading, never writes one, and makes no network call.
+A config file that does not exist is skipped; a config file that exists but
+cannot be read is a coverage gap that fails closed under a \-\-fail\-on flag.
+Each per\-assistant configuration file listed below whose contents vet reads
+is opened once, and its permission metadata is read off that same handle. The
+stat\-only stores are the exception, because their contents are never wanted:
+Grok Bot's sand\-secrets.json, the Copilot CLI's data.db and each Copilot in
+Code profile's data.db, whose file mode alone decides a finding, and Grok
+Bot's local\-exec\-daemon\-connection.json, whose presence alone does, are
+measured by a stat that does not follow a symlink and are never opened, so a
+symlinked store is reported as a coverage gap named SymlinkNotFollowed rather
+than measured through its target. Every other config file is still read
+through a symlink, so a dotfiles\-managed configuration keeps its coverage. A
+path that is not a regular file is named as a coverage gap rather than read.
+The config\-file count the report prints, and the configFilesRead field in the
+json and sarif output, count every such file vet examined, including those
+stores. The hook directories and extension manifests vet also walks keep their
+own older read path. A JSON config that repeats a key is read both ways, as
+the reader that keeps the first value sees it and as the one that keeps the
+last does, every finding either reading carries is reported, and the
+repetition itself is reported as vet\-config\-duplicate\-key at medium, never
+as a coverage gap, so \-\-fail\-on\-severity medium now exits 1 on such a file
+where it used to exit 6. Vet also reads the env block and the headers block
+(Codex's http_headers table) of every MCP server definition in the files
+above, whatever the server's transport, and reports
+vet\-mcp\-plaintext\-credential when a value carries a credential as a
+literal: high when a detection rule from the embedded pack matches inside the
+value, naming that rule, and medium when no rule matches but the key is
+secret\-named and the whole value is a secret\-shaped literal. A value that is
+entirely a reference to an environment variable, a secret manager or a file
+path, spaces included, is not reported unless it embeds a credential the
+detection rules recognize, a dotted TOML env key, a TOML value that continues
+on a later line, any other mcp_servers line the TOML reader cannot read whole
+(an unbalanced bracket, a root\-level or bare\-section mcp_servers assignment,
+a table nested under env) and a Grok Build env sub\-table stay coverage gaps,
+and the stat\-only stores are still never opened. Only a redacted preview of
+the matched value is printed, and every matched value is scrubbed from every
+field of every finding in the report and from every coverage\-gap path and
+reason, in every spelling it can take there (case, percent\-encoding, control
+masking), overlapping matches masked as one span, and every path, a finding's
+config path and a coverage path alike, is scrubbed before it is masked or
+shortened for display. If the embedded rule pack cannot be loaded, that is a
+coverage gap that the stderr notice names and the other rules still run; if
+the gap itself cannot be recorded, vet exits 6. Vet surfaces risky
 configuration and does not change it.
 .SH OPTIONS
 .TP
@@ -204,6 +236,69 @@ working directory only, while Grok itself discovers a .grok/config.toml at
 every level from the repository root down. Project hooks are collected
 whatever the folder\-trust state, because a declared hook becomes live the
 moment the folder is trusted, with no configuration change.
+.TP
+\fB%LOCALAPPDATA%\eMicrosoft\eCopilot\eUser Data\eCopilotCodingHome\e<profile>\emcp\-config.json, %LOCALAPPDATA%\eMicrosoft\eCopilot\eUser Data\eCopilotCodingHome\e<profile>\econfig.json, %LOCALAPPDATA%\eMicrosoft\eCopilot\eUser Data\eCopilotCodingHome\e<profile>\esettings.json (Windows)\fR
+The configuration files of one Copilot in Code profile, read by vet. A profile
+is a directory inside either CopilotCodingHome directory of %LOCALAPPDATA%,
+the MSIX twin included, that holds session\-state, hooks or data.db, plus a
+$COPILOT_HOME that names a directory inside a CopilotCodingHome directory. On
+macOS and Linux only that $COPILOT_HOME reaches a profile. Such a
+$COPILOT_HOME is never the Copilot CLI root, so the Copilot CLI rows read
+~/.copilot instead. mcp\-config.json is the file the Copilot CLI documents
+under $COPILOT_HOME, and a profile is Code's $COPILOT_HOME; the file was
+absent on the verified install and the survey did not establish whether Code
+reads it, so vet reports it as declared configuration only when it exists.
+config.json is read with the comment header the app writes. From settings.json
+vet reports only an export the file declares, remoteSessions: true. The sync
+default GitHub documents is the Copilot CLI's, so a profile with no
+settings.json, or one that sets neither remoteSessions nor remoteExport,
+raises no finding. Vet does not read a profile's installed\-plugins or
+extensions folder, a repository's .github\eextensions folder, the Copilot
+app's own MCP configuration or the project folders under the Copilot projects
+root, because neither their layout nor their file names were measured. A
+profile folder that exists but cannot be opened is a coverage gap. A
+CopilotCodingHome directory, or a $COPILOT_HOME profile, reached through a
+link whose target is a network path is not opened and is a coverage gap named
+NetworkPathRefused. Read\-only; never written. Verified against Copilot app
+`156.0.4314.58` with GitHub Copilot CLI `1.0.93`.
+.TP
+\fB%LOCALAPPDATA%\eMicrosoft\eCopilot\eUser Data\eCopilotCodingHome\e<profile>\edata.db (Windows)\fR
+The SQLite app database of one Copilot in Code profile; its accounts table has
+an access_token column. Vet reads this file's POSIX mode by a non\-following
+stat and never opens it: no byte of its contents is read, and the only thing
+reported is whether the mode grants group or other read. A symlinked store is
+reported as a coverage gap rather than measured through its target. Windows
+has no POSIX mode, so on Windows vet counts the file as examined and reports
+no mode finding. On macOS and Linux the finding applies to a copy of a profile
+that a $COPILOT_HOME names. Vet reads none of its rows. Verified against
+Copilot app `156.0.4314.58`.
+.TP
+\fB%LOCALAPPDATA%\eMicrosoft\eCopilot\eUser Data\eCopilotCodingHome\e<profile>\ehooks\e (Windows)\fR
+The hook folder of one Copilot in Code profile, where skarn setup \-\-agent
+copilot\-code writes skarn.json. Vet reads the .json files one level down,
+regular files only, under the same bounds as the other hook directories, and
+reports each command, bash and powershell field of a hook entry, flat or
+nested, at its own locator, for example hooks.preToolUse[0].powershell.
+Copilot in Code loaded a hook file from this folder under any file name. When
+the folder, or a folder on the way to it, is a link whose target is a network
+path, vet opens nothing through it and reports a coverage gap named
+NetworkPathRefused on the folder. Verified against Copilot app `156.0.4314.58`
+with GitHub Copilot CLI `1.0.93`.
+.TP
+\fB~/.copilot/hooks/\fR
+The Copilot CLI's personal hook folder, under $COPILOT_HOME when it is set and
+does not name a Copilot in Code profile. Vet reads the .json files one level
+down, regular files only, and reports each command, bash and powershell field
+of a hook entry. On a Microsoft Scout machine whose ~/.copilot is only residue
+the row is skipped, as the other ~/.copilot rows are.
+.TP
+\fB./.github/hooks/\fR
+The working directory's Copilot hook folder, which the Copilot CLI and the
+Copilot cloud agent read, and which Copilot in Code read in a folder project.
+Vet reads the .json files one level down, regular files only, at the current
+working directory only, and reports each command, bash and powershell field of
+a hook entry. Vet reads it whatever the project type; Copilot in Code reading
+it in a repository project was not measured.
 .SH "SEE ALSO"
 skarn(1)
 .SH COPYRIGHT

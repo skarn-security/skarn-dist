@@ -1,4 +1,4 @@
-.TH "SKARN-RESTORE" "1" "2026-06-23" "skarn 0.33.0" "Skarn Manual"
+.TH "SKARN-RESTORE" "1" "2026-06-23" "skarn 0.34.0" "Skarn Manual"
 .SH NAME
 skarn\-restore \- Restore a session
 .SH SYNOPSIS
@@ -14,8 +14,9 @@ Restore a session by id. The resume command is printed from the raw session,
 because a masked working directory would not be a usable command: when the
 recorded working directory carries a detected secret, restore refuses with
 exit 1, says on stderr that the resume command cannot be printed, and prints
-nothing to stdout. The match hint on stderr masks the project, branch and
-assistant name.
+nothing to stdout. The match hint on stderr masks the session id, project,
+branch and assistant name, and a comment line that names a session shows its
+id masked the same way.
 .SH OPTIONS
 .TP
 \fB\-\-session\fR \fIid\fR

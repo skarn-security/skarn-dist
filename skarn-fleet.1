@@ -1,4 +1,4 @@
-.TH "SKARN-FLEET" "1" "2026-06-23" "skarn 0.33.0" "Skarn Manual"
+.TH "SKARN-FLEET" "1" "2026-06-23" "skarn 0.34.0" "Skarn Manual"
 .SH NAME
 skarn\-fleet \- Fold drops into the org aggregate; render the executive
 readout
@@ -27,9 +27,11 @@ when \-\-prior names the previous period's aggregate, which is what turns
 positions into movements; \-\-json emits the underlying comparison object.
 Both subcommands are Enterprise: without a covering license they refuse with
 exit 5 before reading any file, and with no usable license at all they exit 7
-like check; \-\-help is ungated. The aggregate carries only what the drops
-carry, and the readout prints machine identities, counts and months, never a
-finding, a rule id, a project name or a secret preview.
+like check; \-\-help is ungated. The aggregate carries what the drops carry
+plus a guard block the aggregator maps from the newest enforced pre\-execution
+deny across the newest drop per machine, and the readout prints machine
+identities, counts and months, never a finding, a rule id, a project name or a
+secret preview.
 .SH OPTIONS
 .TP
 \fB\-o\fR, \fB\-\-output\fR \fIfile\fR

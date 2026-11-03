@@ -1,4 +1,4 @@
-.TH "SKARN-CHECK" "1" "2026-06-23" "skarn 0.33.0" "Skarn Manual"
+.TH "SKARN-CHECK" "1" "2026-06-23" "skarn 0.34.0" "Skarn Manual"
 .SH NAME
 skarn\-check \- Scan AI sessions for leaked credentials and attack patterns
 .SH SYNOPSIS
@@ -15,14 +15,70 @@ directory that \-\-baseline unions and \-\-baseline\-merge consolidates, and
 the hash\-chained audit log (\-\-audit\-log) are Pro capabilities of check:
 check reads the policy file and the org baseline directory, and it reads the
 audit log's chain head before appending this scan's record. When it decides a
-verdict, skarn guard consults only the personal accepted\-findings file.
+verdict, skarn guard consults only the personal accepted\-findings file. The
+four permissive keyword\-assignment rules (generic\-api\-key,
+inline\-credential\-assignment, dotenv\-contents\-leaked and
+export\-secret\-env) report a match on a line that starts with a comment
+marker in a user message or tool result as suppressed with reason comment, so
+it does not gate, until the same rule matches the same value on a live line or
+a true\-positive baseline label confirms it. A finding from those four rules
+is one severity step lower when its key name carries a test word, a file\-read
+tool returned it from a test directory, or a write, or an edit whose path
+field is serialized first, targets an env template (.env.example,
+\&.env.template, .env.sample, .env.dist; on a host that records the tool input
+as flattened key\-value lines, which the JSON\-argument hosts do not); the
+lower step never hides it, and the finding also reports confidence low and
+likely test value. The same four rules report confidence low, with the
+severity untouched, when the field name immediately before the value is a form
+token (csrf, xsrf, authenticity_token, nonce and _token spellings) or the
+match came back from a web\-fetch tool and from nowhere else in the session;
+nothing is removed by either. A provider secret\-key rule reports high on its
+own, without source promotion. The forty\-one rules that shared one delimiter
+group (the Anthropic, OpenAI, Stripe, GCP, npm, Grafana and Hugging Face keys
+among them) match a key whatever delimiter follows it, a delimiter being any
+character outside the shared key alphabet of letters, digits, underscore,
+plus, slash, equals and hyphen (a comma, a closing parenthesis, a period or a
+space as much as a quote); generic\-api\-key, whose value class includes the
+period, ends only at whitespace, a quote, a backtick or one of ; , ) ] } < >
+|, so a value with ! or & in it is matched whole or not at all, and the JWT
+and SendGrid rules refuse a dotted continuation because their alphabets
+include the dot, with the captured value ending at the key; a rule with its
+own delimiter shape, such as the Postman or Vault token, is unchanged. The
+by\-severity line names how many critical findings are attack chains or
+behaviors with no secret value. A dynamic\-payload exfiltration that names at
+least one URL and whose every named destination is a loopback literal
+(localhost, 127.x.x.x in canonical octets, ::1, 0.0.0.0) reports high instead
+of critical, with a description saying so, because a loopback address in the
+command does not prove the data stayed on the machine; a proxy, DNS, interface
+or connection\-override option or a proxy variable on the command line that
+names a host outside the loopback set, a config variable, a unix socket or URL
+file, a command substitution that is not a plain local read, an unknown
+command in the pipeline, or a destination it cannot read as a loopback literal
+keeps it critical. The text findings list and the credential recap print one
+row per distinct secret value per session file (a keyword\-prefixed rule such
+as cloudflare\-api\-key captures its keyword with the value, so it stands
+beside a permissive match on the same value rather than grouping with it), the
+row carrying the strongest finding (an active finding before a suppressed one,
+then the highest severity, then the highest confidence, then the most specific
+rule; an identifier value such as a package or variable name is never grouped
+or counted) and naming the others after also matched; every incident stays in
+the machine formats, where the primary carries alsoMatched, a member carries
+groupedUnder, and the top\-level distinctSecretValues counts the primaries
+(one per distinct value per session file, so a value leaked in five sessions
+counts five) beside the unchanged incident list.
 .SH OPTIONS
 .TP
 \fB\-\-rules\fR \fIpath\fR
-Load a custom TOML rules file in addition to the bundled rules.
+Load a custom TOML rules file in addition to the bundled rules. A rule pattern
+whose compiled form exceeds 16 KiB is refused like any pattern that fails to
+compile, so skarn exits 6 without scanning; an allowlist pattern over that
+bound is skipped, so its suppression does not apply.
 .TP
 \fB\-\-ai\-rules\fR \fIpath\fR
-Load an AI\-specific rules file.
+Load an AI\-specific rules file. A rule pattern whose compiled form exceeds 16
+KiB is refused like any pattern that fails to compile, so skarn exits 6
+without scanning; an allowlist pattern over that bound is skipped, so its
+suppression does not apply.
 .TP
 \fB\-\-no\-ai\-rules\fR
 Disable the AI\-specific rules.
@@ -31,8 +87,10 @@ Disable the AI\-specific rules.
 Disable the bundled detection rules.
 .TP
 \fB\-\-feed\fR \fIpath\fR
-Apply a signed maintained\-feed bundle over the baseline rules. Requires a Pro
-license.
+Apply a signed maintained\-feed bundle over the baseline rules. A feed rule
+whose compiled pattern exceeds 16 KiB is skipped with a warning, as is any
+feed rule that fails to compile; a rule of the same id that is already loaded
+stays in force. Requires a Pro license.
 .TP
 \fB\-\-update\-rules\fR
 Fetch and verify the latest feed from the subscriber channel, then scan.
@@ -67,7 +125,8 @@ Scan window in hours; 0 means no time limit. The default is 720.
 Restrict the scan to one assistant's sessions. If this machine has no tool by
 that name, skarn exits 6 rather than scanning nothing. A custom tool declared
 in ~/.skarn.json is accepted by its configured name. One of: claude, gemini,
-codex, cursor, copilot, kimi, grok, grokbot, antigravity, opencode, cline.
+codex, cursor, copilot, kimi, grok, grokbot, antigravity, opencode, cline,
+copilot\-code.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict the scan to matching projects: a comma\-separated list of names or
@@ -92,8 +151,31 @@ of the rule id, a NUL byte, and the lowercase hex sha256 of the
 ASCII\-lowercased secret. That hash is deterministic and unkeyed, so a
 guessable secret is recoverable from it by candidate testing wherever the
 output travels. evidence is a redacted Markdown evidence pack for a product
-technical file, and the one value that requires a Pro license. One of: text,
-json, sarif, ndjson, evidence. The default is text.
+technical file, and the one value that requires a Pro license. Every finding
+carries two derived fields: a confidence of high, medium or low, and a flag
+that marks a likely test value. text ends each finding line with [confidence
+<level>] and adds [likely test value] when the flag is set. json and the sarif
+result properties carry confidence and likelyTestValue. ndjson carries
+skarn.confidence and skarn.likely_test_value. Confidence is how likely the
+match is a live, usable credential after context penalties: a distinctive or
+checksummed format, a value that passes the rule's randomness threshold, by a
+wide margin for the four keyword\-assignment rules, and use of the value in a
+tool call raise it, while a non\-production context, a sighting only in an
+assistant message, a test context and a commented line lower it. A finding
+with no credential value, such as an attack pattern or a risky command, is
+high when it is detected at critical severity or is part of an attack chain
+within its session, and medium otherwise; a later non\-production downrank of
+its severity does not change its confidence. It is not an exposure ranking,
+and neither field changes severity, the risk score or the exit code; the
+evidence pack carries neither. The text format opens with an Act on this first
+section: at most five findings that carry a matched value, one row per value,
+ranked by a triggered canary first, then confidence, use of the value in a
+tool call, a high\-value issuer (GitHub, AWS, GCP, Azure, a Stripe live key, a
+private key or a database URI), membership of an attack chain and the most
+recent sighting. Each row states the redacted value and those facts, and a
+line below the rows counts the values left out as a likely test value, low
+confidence or suppressed. json, sarif, ndjson and evidence carry no section.
+One of: text, json, sarif, ndjson, evidence. The default is text.
 .TP
 \fB\-v\fR, \fB\-\-verbose\fR
 Verbose output.
@@ -122,18 +204,50 @@ Exit 2 if the session risk score exceeds this threshold.
 \fB\-\-fail\-on\-scan\-error\fR
 Fail closed with exit 6 when the scan was incomplete: a tool source failed
 discovery, a session store that exists could not be read, a session failed to
-parse, a session had truncated or compacted transcript content so it no longer
-holds the whole conversation (the assistant compacted it before the scan, or a
-compliance transcript export carried a truncated tool block, a truncated text
-block, or a compaction marker), a compliance transcript export withheld a turn
-as unavailable or carried a client\-asserted turn the feed did not verify, or
-the scan read no sessions. Truncated or compacted content counts sessions,
-because a cut block is a partial turn and nobody can count what a compaction
-removed; withheld and unverified content counts turns, because the export
-names each one. Every truncated tool block counts its session, including a
-block returned as a placeholder instead of cut text, so a coverage gap is
-over\-reported rather than missed. By default a partial scan still reports,
-and an empty scan still warns on stderr.
+parse, a session held a record that could not be parsed (a malformed line, or
+a line cut at the line limit, 64 MiB of bytes or 8 Mi structural tokens
+outside strings, which then never parses, and in a Gemini CLI chat after such
+a line also a patch record whose message or tool call the lost line held; the
+first 1 MiB of its bytes is scanned as raw text, labelled raw record, so the
+detectors still run over those bytes, and the record stays a coverage gap
+because its role, tool and the rest of its content are unknown; a session
+keeps at most 256 such records or 16 MiB of them, and a refused record past
+that budget is counted and not scanned), a session had truncated or compacted
+transcript content so it no longer holds the whole conversation (the assistant
+compacted it before the scan, or a compliance transcript export carried a
+truncated tool block, a truncated text block, or a compaction marker), a
+compliance transcript export withheld a turn as unavailable or carried a
+client\-asserted turn the feed did not verify, or the scan read no sessions.
+Truncated or compacted content counts sessions, because a cut block is a
+partial turn and nobody can count what a compaction removed; withheld and
+unverified content counts turns, because the export names each one. Every
+truncated tool block counts its session, including a block returned as a
+placeholder instead of cut text, so a coverage gap is over\-reported rather
+than missed. A record that could not be parsed counts itself, and the JSON and
+NDJSON output name each session file that dropped one. An unterminated last
+line that does not parse but begins a JSON object (its first character after
+leading whitespace is an opening brace), in an uncompressed session file
+modified within the last 5 minutes, is a write in progress and is not counted;
+the same line in an older or compressed file is counted, and so is an
+unterminated last line that does not parse and does not begin a JSON object. A
+string value longer than 8 MiB inside a record (a pasted image stored inline,
+a huge tool result) is shortened to a marker before the record is parsed, so
+the record and every other value in it are scanned as usual; the scan counts
+such records as shortened in its JSON, SARIF, NDJSON and assess outputs, names
+each session file that holds one beside the files that dropped a record, and
+counts them as a coverage gap, because the bytes past the cap were never
+scanned. A Grok prompt log prompt is cut at the same 8 MiB without a marker
+and counted the same way on its session. A value nested deeper than 64 levels
+inside a tool input, a tool result or another structured part of a session is
+not read, because the parser stops descending there so hostile nesting cannot
+exhaust its stack; the scan counts each such value in its JSON, SARIF, NDJSON
+and assess outputs, names each session file that holds one, and counts it as a
+coverage gap, so a session whose only credential sits past that depth is never
+reported clean, unless the text the parser builds from the tool input or
+result that holds the value has already reached its size limit. The shortened
+count and then the depth count end the coverage sentence wherever that
+sentence is printed. By default a partial scan still reports, and an empty
+scan still warns on stderr.
 .TP
 \fB\-\-baseline\fR \fIpath\fR
 Suppress findings recorded in this baseline, so the scan fails only on new
@@ -146,16 +260,28 @@ the \-\-baseline\-create and \-\-baseline\-merge targets stay explicit.
 \fB\-\-baseline\-create\fR
 Write the current findings to the \-\-baseline file as the accepted set, then
 exit. Under \-\-fail\-on\-scan\-error an incomplete scan is refused instead:
-the run exits 6 and leaves the existing file as it was.
+the run exits 6 and leaves the existing file as it was. The file is written
+atomically under the baseline lock and is readable by its owner only on macOS
+and Linux; a symlink at the path is replaced by the new file. When the sibling
+\&.lock file cannot be opened or created the write is refused and an existing
+file is left as it was.
 .TP
 \fB\-\-baseline\-merge\fR \fIfile\fR
 Consolidate the \-\-baseline input (a file or a directory of per\-member
-baselines) into one distributable file and exit. Requires a Pro license.
+baselines) into one distributable file and exit. The output is written
+atomically under the baseline lock, readable by its owner only on macOS and
+Linux, and the input is read inside that same lock, so an in\-place merge
+cannot lose a concurrent accept; a symlink at the output path is replaced.
+When the sibling .lock file cannot be opened or created the merge is refused
+and an existing output file is left as it was. Requires a Pro license.
 .TP
 \fB\-\-audit\-log\fR \fIfile\fR
 Append a hash\-chained record of this scan (timestamp, policy, finding counts,
 verdict; no secrets) to this local log. The chain detects in\-place edits and
-reordering of recorded history. Requires a Pro license.
+reordering of recorded history. A new log is created readable by its owner
+only on macOS and Linux and an existing log keeps its mode; on those systems a
+symlink at the log path is refused with a warning naming AuditLogSymlink, and
+the scan result and exit code are unchanged. Requires a Pro license.
 .TP
 \fB\-\-audit\-verify\fR \fIfile\fR
 Verify an audit log's hash chain, then exit without scanning. A broken chain
@@ -177,14 +303,38 @@ last\-activity timestamp describe the sessions the scan read inside that
 scope, not the ones that produced a finding. The guard mode comes from the
 same wired\-hook walk doctor performs, which only this flag pays for; an
 absent guard mode means it could not be resolved, not that no hook is wired.
-The write is atomic, so a second run in the same window adds a file rather
-than overwriting one. The artifact carries a schema version and is never
-reinterpreted across versions, so a release that moves that version needs the
-machines upgraded alongside whatever assembles their artifacts, and the ones
-written at the older version cleared out of the collection directory. Skarn
-does not transmit it; moving the directory is the organization's job. Identity
-comes from SKARN_IDENTITY, falling back to a hostname\-derived tag with a
-warning.
+The optional lastDeny records the newest deny the guard enforced before
+execution on this machine, inside the \-\-hours window (0 means the whole log)
+and, with \-\-project, only for a project the scan itself resolved in
+scope.resolved, using the same resolver for aliases and worktrees. An unscoped
+run accepts any working directory and records an empty project. Skarn reads
+the logs skarn guard report reads with no flags: $SKARN_GUARD_LOG when set,
+otherwise guard\-<agent>\-audit.jsonl under $XDG_CACHE_HOME/skarn or
+~/.cache/skarn; a log configured elsewhere with skarn setup \-\-log <path>
+counts only when $SKARN_GUARD_LOG names it. Post\-execution blocks such as
+PostToolUse, audit\-mode would\-denies, events the host cannot enforce, and a
+Copilot CLI permissionRequest deny, which a later hook can override, never
+count. A secret preview uses only the mask the hook wrote at the redaction
+chokepoint, never a raw value; the working directory, session id and
+fingerprint never enter lastDeny. A record is also ineligible when it does not
+record enforceable as true, when the run sets \-\-project and the record's
+working directory is not an absolute path, when its rule id or tool name uses
+anything other than letters, digits, dots, hyphens and underscores, or when a
+field carries a control byte or a credential\-shaped value. An absent lastDeny
+means no readable log held an eligible deny; missing, unreadable or corrupt
+logs do not stop the drop write. The write is atomic, so a second run in the
+same window adds a file rather than overwriting one. check \-\-drop writes
+only drop schema version 4; fleet aggregate reads the current and previous
+drop schemas, 4 and 3, each under its own key set, and refuses every other
+version. The aggregator refuses a schema 3 drop carrying lastDeny by name, and
+refuses a schema 4 drop whose lastDeny fails the same field screens, names an
+event that is not a pre\-execution event, names a project outside the drop's
+resolved scope, or carries an at outside the scan window that ends at the
+drop's generatedAt. Upgrade the host running fleet aggregate first, then the
+reporting machines, and leave schema 3 drops in the collection directory; an
+older aggregator refuses a schema 4 drop and the whole run. Skarn does not
+transmit it; moving the directory is the organization's job. Identity comes
+from SKARN_IDENTITY, falling back to a hostname\-derived tag with a warning.
 .TP
 \fB\-\-product\fR \fIname\fR
 Release lineage for \-\-format evidence: the product this scan's sessions
@@ -272,24 +422,33 @@ including a home directory that could not be resolved so no session store was
 ever located, or the detection rules could not be loaded so no scan was ever
 defined. Under \-\-fail\-on\-scan\-error an otherwise\-complete run exits 6 as
 well whenever coverage was partial: a tool source dropped out of discovery, a
-session store that exists could not be read, a session's parse failed, the
-assistant compacted a session before the scan so its transcript no longer
-holds the whole conversation, or the run read no sessions at all. That verdict
-is computed BEFORE the report is rendered, so the SARIF invocation exit code,
-the evidence pack and the audit record all carry 6 rather than describing the
-run as clean and then exiting nonzero. A \-\-baseline\-create run is refused
-on the same condition before it writes anything, so an incomplete scan is
-never recorded as the accepted set and the previous baseline survives. For
-check \-\-audit\-verify: the audit log exists but could not be read, so the
-hash chain was never examined (an absent log is a valid empty chain and exits
-0). For vet: the home directory could not be resolved (so the configuration
-was never located at all), or a config file that exists was not read \- it
-could not be read, or it was skipped because it is not that assistant's live
-configuration \- so the configuration was only partly seen. For doctor: the
-home directory could not be resolved, so every per\-assistant check would have
-read an empty machine \- a diagnostic that could not be produced is never
-reported as a healthy one. Fail\-closed \- the result is not trustworthy, so
-it is never reported as clean.
+session store that exists could not be read, a session's parse failed, a
+session held a record that could not be parsed (in a Gemini CLI chat after
+such a record, also a patch record whose target the lost line held) and so was
+scanned only as raw text, up to its first 1 MiB and within a per\-session
+budget of 256 such records or 16 MiB, past which the record was not scanned at
+all (an unterminated last line that does not parse but begins a JSON object,
+in an uncompressed file modified within the last 5 minutes, is a write in
+progress and is exempt), a session held a record with a string value over 8
+MiB that was shortened before parsing and so was scanned without the rest of
+that value, a session held a value nested deeper than 64 levels that was not
+scanned, the assistant compacted a session before the scan so its transcript
+no longer holds the whole conversation, or the run read no sessions at all.
+That verdict is computed BEFORE the report is rendered, so the SARIF
+invocation exit code, the evidence pack and the audit record all carry 6
+rather than describing the run as clean and then exiting nonzero. A
+\-\-baseline\-create run is refused on the same condition before it writes
+anything, so an incomplete scan is never recorded as the accepted set and the
+previous baseline survives. For check \-\-audit\-verify: the audit log exists
+but could not be read, so the hash chain was never examined (an absent log is
+a valid empty chain and exits 0). For vet: the home directory could not be
+resolved (so the configuration was never located at all), or a config file
+that exists was not read \- it could not be read, or it was skipped because it
+is not that assistant's live configuration \- so the configuration was only
+partly seen. For doctor: the home directory could not be resolved, so every
+per\-assistant check would have read an empty machine \- a diagnostic that
+could not be produced is never reported as a healthy one. Fail\-closed \- the
+result is not trustworthy, so it is never reported as clean.
 .TP
 \fB7\fR
 No usable license is present \- none was found via SKARN_LICENSE,

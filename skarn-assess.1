@@ -1,4 +1,4 @@
-.TH "SKARN-ASSESS" "1" "2026-06-23" "skarn 0.33.0" "Skarn Manual"
+.TH "SKARN-ASSESS" "1" "2026-06-23" "skarn 0.34.0" "Skarn Manual"
 .SH NAME
 skarn\-assess \- Scan every AI session, print a redacted summary. Free, no
 license
@@ -16,19 +16,49 @@ fleet\-managed one.
 The zero\-config machine\-scan wedge: scan every AI coding session on the
 machine and print a friendly risk summary, no flags and no license. \-o writes
 a shareable redacted report (HTML or Markdown); \-\-json emits the redacted
-scan for scripting. The scan is scoped by the same filters as check.
+scan for scripting. The scan is scoped by the same filters as check. The
+Findings line says how many critical findings are attack chains or behaviors
+with no secret value, so a reader knows why the exposures list below can hold
+fewer rows than the critical count. The summary, the Markdown report and the
+HTML report show one row per distinct secret value per session file, naming
+the other rules that matched it after also matched; \-\-json keeps every
+incident and marks the primary with also_matched, a member with grouped_under,
+and stats.distinct_secret_values with the number of primaries, one per
+distinct value per session file.
 .SH OPTIONS
 .TP
 \fB\-o\fR, \fB\-\-out\fR \fIfile\fR
 Write a self\-contained, redacted share report to this file; .md or .markdown
 renders Markdown, any other extension renders HTML. The report names a session
 file by its basename and a project by its display name, and writes a home
-directory inside a code\-context snippet as ~.
+directory inside a code\-context snippet as ~. The Markdown report ends each
+exposure line with the finding's confidence and adds likely test value when
+that flag is set; the HTML report shows both in the finding drawer. Both
+reports open with the Act on this first section that the check text format
+prints, and its line of deprioritized values; in the HTML report each row
+opens its finding drawer, and selecting a tool, a project or a user hides the
+section. The file is written atomically as a new owner\-only file on macOS and
+Linux (on Windows it takes the permissions of its directory): a regular file
+at the path, or a symlink to one, is replaced by the new file; a device or
+FIFO at the path is written in place and keeps its own permissions, and so is
+a symlink to one of those or to a process stream such as /dev/stdout; a
+directory at the path is refused.
 .TP
 \fB\-\-json\fR
 Emit the redacted scan as JSON (the same shape as the serve /api/scan view)
-for scripting, instead of the friendly summary. With \-\-dossier the body is
-the dossier envelope that wraps this scan, not the bare scan shape.
+for scripting, instead of the friendly summary. Each incident carries
+confidence and likely_test_value, the same values `skarn check \-\-format
+json` reports as confidence and likelyTestValue. A ranked incident carries
+triage_rank (1 to 5), triage_reasons (its confidence, active use, issuer class
+and attack chain labels) and triage_seen (the YYYY\-MM\-DD date its recency
+was ranked on), and stats carries triage_more and the three deprioritized
+counts deprioritized_likely_test_value, deprioritized_low_confidence and
+deprioritized_suppressed. Every other incident carries triage_rank null, an
+empty triage_reasons array and an empty triage_seen. A dossier, and an
+/api/scan response filtered by cli, project or user, carries every incident at
+those defaults and the four counts at 0, so no section renders there. With
+\-\-dossier the body is the dossier envelope that wraps this scan, not the
+bare scan shape.
 .TP
 \fB\-\-offline\fR
 Disable all network access. Assess is already egress\-free; this is the
@@ -47,7 +77,8 @@ default is low.
 Restrict the scan to one assistant's sessions. If this machine has no tool by
 that name, skarn exits 6 rather than scanning nothing. A custom tool declared
 in ~/.skarn.json is accepted by its configured name. One of: claude, gemini,
-codex, cursor, copilot, kimi, grok, grokbot, antigravity, opencode, cline.
+codex, cursor, copilot, kimi, grok, grokbot, antigravity, opencode, cline,
+copilot\-code.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict the scan to matching projects: a comma\-separated list of names or
@@ -60,7 +91,10 @@ excludes it.
 Assess a single session by id.
 .TP
 \fB\-\-rules\fR \fIpath\fR
-Load a custom TOML rules file in addition to the bundled rules.
+Load a custom TOML rules file in addition to the bundled rules. A rule pattern
+whose compiled form exceeds 16 KiB is refused like any pattern that fails to
+compile, so skarn exits 6 without scanning; an allowlist pattern over that
+bound is skipped, so its suppression does not apply.
 .TP
 \fB\-\-baseline\fR \fIpath\fR
 Suppress findings recorded in this accepted\-findings baseline. Without this
@@ -80,8 +114,12 @@ Article 14 reporting fields Skarn cannot supply. It is a local share artifact;
 Skarn does not file reports or determine severity. Every format names a
 project by its display name. The HTML and JSON dossiers name a session file by
 its basename, write a home directory inside a code\-context snippet as ~, and
-leave out the project root and the user and workspace ids; the Markdown
-dossier prints none of those fields.
+leave out the project root and the user and workspace ids. The Markdown
+dossier prints none of those fields except the basename of a selected session
+file that held a record the scan could not parse, and it states the coverage
+counters of the whole scan the dossier was drawn from. The HTML dossier shows
+the coverage warning of the HTML report whenever that scan was incomplete, and
+its compliance export notice whenever that scan withheld export sessions.
 .TP
 \fB\-\-user\fR \fIname\fR
 Restrict the scan to matching users: a comma\-separated list of user ids or

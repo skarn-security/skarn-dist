@@ -1,4 +1,4 @@
-.TH "SKARN-EXPORT" "1" "2026-06-23" "skarn 0.33.0" "Skarn Manual"
+.TH "SKARN-EXPORT" "1" "2026-06-23" "skarn 0.34.0" "Skarn Manual"
 .SH NAME
 skarn\-export \- Export sessions as text, json, ndjson, html; secrets masked
 .SH SYNOPSIS
@@ -13,7 +13,7 @@ masked.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot, kimi, grok, grokbot, antigravity, opencode, cline.
+copilot, kimi, grok, grokbot, antigravity, opencode, cline, copilot\-code.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths,
@@ -63,10 +63,17 @@ Restrict to a single session by id (prefix\-matched).
 Output format. One of: text, json, ndjson, html. The default is text.
 .TP
 \fB\-\-out\fR \fIfile\fR
-Write to this file instead of stdout.
+Write to this file instead of stdout. The file is written atomically as a new
+owner\-only file on macOS and Linux (on Windows it takes the permissions of
+its directory): a regular file at the path, or a symlink to one, is replaced
+by the new file; a device or FIFO at the path is written in place and keeps
+its own permissions, and so is a symlink to one of those or to a process
+stream such as /dev/stdout; a directory at the path is refused.
 .TP
 \fB\-\-open\fR
-Open the written file in the default viewer (needs \-\-out).
+Open the written file in the default viewer (needs \-\-out). When the viewer
+program cannot be started, or on Windows the path has a shape the shell would
+misread, the command exits 1 after the file is written.
 .TP
 \fB\-\-gzip\fR
 Gzip\-compress the output (needs \-\-out, or \-\-format html).

@@ -1,4 +1,4 @@
-.TH "SKARN-BASELINE" "1" "2026-06-23" "skarn 0.33.0" "Skarn Manual"
+.TH "SKARN-BASELINE" "1" "2026-06-23" "skarn 0.34.0" "Skarn Manual"
 .SH NAME
 skarn\-baseline \- Triage into a baseline (audit); accept a false positive
 (accept)
@@ -17,17 +17,27 @@ accept scans nothing and needs no license. The audit scan is scoped by the
 same filters as check. A false positive is suppressed on every later scan. A
 finding labeled a true positive is recorded and keeps firing until the
 credential is rotated, and those are the same labels the real\-time guard
-honors. A true positive wins over a false positive on the same fingerprint
-wherever the two meet, in one file or across the member files of an org
-baseline directory, so one member cannot silence a leak another member
-confirmed. A finding that carries a secret is fingerprinted by that secret, so
-its acceptance follows the secret across sessions and machines. A finding with
-no secret, such as a behavioral prompt\-poisoning finding, is fingerprinted by
-the session it fired in, so accepting it silences that rule in that session
-only and the same rule in any other session keeps firing. To accept a finding
-the guard flagged, use `skarn guard accept <fingerprint>`: it takes the
-fingerprint straight from the guard's audit record and defaults to the
-personal baseline the guard reads.
+honors. A true\-positive label also overrides comment suppression, so a
+confirmed leak on a commented line keeps gating. A true positive wins over a
+false positive on the same fingerprint wherever the two meet, in one file or
+across the member files of an org baseline directory, so one member cannot
+silence a leak another member confirmed. A finding that carries a secret is
+fingerprinted by that secret, so its acceptance follows the secret across
+sessions and machines. A finding with no secret, such as a behavioral
+prompt\-poisoning finding, is fingerprinted by the session it fired in, so
+accepting it silences that rule in that session only and the same rule in any
+other session keeps firing. To accept a finding the guard flagged, use `skarn
+guard accept <fingerprint>`: it takes the fingerprint straight from the
+guard's audit record and defaults to the personal baseline the guard reads. An
+audit's decisions are merged into the file as it stands when the audit ends,
+under the baseline lock, and never downgrade a true positive recorded
+meanwhile; an audit whose every decision was overtaken that way leaves the
+file untouched and counts those decisions as skipped. When the lock cannot be
+taken (a directory, a link, or an unopenable file at <file>.lock), audit
+refuses before it shows the first finding, so no decision is typed and then
+lost. Every baseline write lands through one atomic save that is readable by
+its owner only on macOS and Linux, and a write whose sibling .lock file cannot
+be opened or created is refused with nothing written.
 .SH OPTIONS
 .TP
 \fB\-\-reason\fR \fItext\fR
@@ -40,7 +50,8 @@ $SKARN_IDENTITY.
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict the audit scan to one assistant's sessions. One of: claude, gemini,
-codex, cursor, copilot, kimi, grok, grokbot, antigravity, opencode, cline.
+codex, cursor, copilot, kimi, grok, grokbot, antigravity, opencode, cline,
+copilot\-code.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict the audit scan to matching projects: a comma\-separated list of names
@@ -54,7 +65,9 @@ Audit a single session by id.
 .TP
 \fB\-\-rules\fR \fIpath\fR
 Load a custom TOML rules file for the audit scan in addition to the bundled
-rules.
+rules. A rule pattern whose compiled form exceeds 16 KiB is refused like any
+pattern that fails to compile, so skarn exits 6 without auditing; an allowlist
+pattern over that bound is skipped, so its suppression does not apply.
 .TP
 \fB\-\-hours\fR \fIn\fR
 Audit scan window in hours; 0 means no time limit. The default is 720.
