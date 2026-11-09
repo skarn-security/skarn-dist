@@ -1,4 +1,4 @@
-.TH "SKARN-SETUP" "1" "2026-06-23" "skarn 0.34.0" "Skarn Manual"
+.TH "SKARN-SETUP" "1" "2026-06-23" "skarn 0.35.0" "Skarn Manual"
 .SH NAME
 skarn\-setup \- Wire the guard hook into detected assistants, then self\-test
 it
@@ -83,9 +83,9 @@ guard, or one on the free tier, runs audit\-only regardless. One of: audit,
 enforce. The default is audit.
 .TP
 \fB\-\-strict\fR
-Add \-\-strict to the generated guard commands (also gates Read operations,
-and turns the ask the guard gives an event it cannot fully classify into a
-deny).
+Add \-\-strict to the generated guard commands (gates Read operations on the
+hosts that do not gate them by default, and turns the ask the guard gives an
+event it cannot fully classify into a deny).
 .TP
 \fB\-\-log\fR \fIpath\fR
 Guard log path wired into the hook commands: a SKARN_GUARD_LOG= prefix on the

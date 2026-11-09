@@ -1,6 +1,6 @@
 # Skarn editions - the free/paid boundary
 
-Generated from docs/cli-model.toml by docs/build_manpage.py (regenerate with `zig build man`); do not edit by hand. skarn 0.34.0.
+Generated from docs/cli-model.toml by docs/build_manpage.py (regenerate with `zig build man`); do not edit by hand. skarn 0.35.0.
 
 One binary for every tier. The free tier is the full local product, not a trial: the entire detection engine, every output format except the Pro evidence pack, and redaction, under a free license available to anyone who registers - an individual or an organization alike. Paid tiers unlock org capabilities: distributing policy and accepted-findings baselines across a team, compliance evidence, the maintained feed, and real-time enforcement. Pro unlocks them for one developer. Team unlocks the same for 2 to 24 developers and adds seat assignment, invitations and organization management, which the licensing service provides and the binary does not gate, so the Team table below has no rows of its own.
 
@@ -27,6 +27,7 @@ skarn check and the serve security view require a license; the free license is i
 | skarn setup and skarn guard --self-test - guided onboarding and wiring verification | The path TO the guard: assistant detection, merge-based hook install with backups, and the end-to-end self-test work unlicensed. |
 | skarn taxonomies and --audit-verify | Auditors verify evidence and the standards crosswalk without a license. |
 | The Copilot in Code session store and its session index | Every session store on a single machine is read on the free tier, the Copilot in Code transcripts and their session-store.db included; the one store the paid tiers gate is the Compliance API export. |
+| skarn inventory and the skarn.inventory ndjson line | Knowing which assistants, MCP servers and guard modes a machine has is the inventory a defender needs before any paid control. |
 
 ## Pro
 

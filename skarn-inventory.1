@@ -1,0 +1,68 @@
+.TH "SKARN-INVENTORY" "1" "2026-06-23" "skarn 0.35.0" "Skarn Manual"
+.SH NAME
+skarn\-inventory \- Inventory assistants, MCP servers, guard mode. Free, no
+license
+.SH SYNOPSIS
+\fBskarn\fR \fBinventory\fR [options]
+.SH DESCRIPTION
+Print one inventory record for this machine: per assistant, the completeness
+of its session and configuration observation, its declared session store
+roots, the client versions observed in a session, its declared and called MCP
+server counts, its last activity and session count; per machine, the
+configured and effective guard mode. Read\-only and offline; free, no license.
+.PP
+Print one inventory record for this machine: per assistant, how completely
+Skarn could observe its sessions and its configuration, the declared session
+store roots, the client versions observed in a session and when, how many MCP
+servers its configuration declares by transport and how many its sessions
+called in the window, the last activity and the session count; per machine,
+the guard mode the configured hooks ask for and the mode the guard runs in. To
+build it, inventory reads the session stores, the assistant configuration
+files skarn vet reads, the guard configuration layers and the installed
+license, all read\-only and offline. A path is written as an anchor such as
+~/.claude.json or $COPILOT_HOME/mcp\-config.json, never as its expanded value,
+and a user\-named hook file, plugin directory or custom\-tool root as
+<custom>. A run with no \-\-project writes no server name and no project name;
+with \-\-project, the names of servers called in sessions in scope and of
+servers declared in the project\-local configuration of a project root those
+sessions recorded are written masked. Versions are observed in a session,
+never installed. The record is the same object skarn check \-\-format ndjson
+writes as its skarn.inventory line, documented in NDJSON\-CONTRACT.md. Free,
+no license; exit 0 on success, 1 on a usage error, 6 when the home directory
+cannot be resolved, the \-\-rules pack cannot be loaded or the collection
+fails. On exit 6 stdout still carries the record, as a failure record with
+event.outcome failure and an error.code.
+.SH OPTIONS
+.TP
+\fB\-\-format\fR \fIfmt\fR
+Output format. json prints the record indented; ndjson prints it as one
+skarn.inventory line. One of: json, ndjson. The default is json.
+.TP
+\fB\-\-hours\fR \fIN\fR
+Read sessions modified in the last N hours; 0 reads the whole history. The
+default is 720.
+.TP
+\fB\-\-cli\fR \fItool\fR
+Read sessions of one tool only, named as check names it; the other assistants
+with a session reader are reported as filtered, and their configuration is
+still read and counted. A name that matches no session source on this machine
+is a usage error.
+.TP
+\fB\-\-project\fR \fIlist\fR
+Scope to sessions whose project name or root matches an entry of this
+comma\-separated list, as check matches it, and write the server and project
+names that scope allows.
+.TP
+\fB\-\-user\fR \fIlist\fR
+Keep only sessions whose recorded user id or email matches an entry of this
+comma\-separated list, as check matches it.
+.TP
+\fB\-\-rules\fR \fIpath\fR
+Mask names with this detection rule pack, applied to session\-derived and
+configuration\-derived names alike; a missing or malformed pack exits 6.
+.SH "SEE ALSO"
+skarn(1)
+.SH COPYRIGHT
+Copyright (c) 2026 Skarn Software OÜ. All rights reserved. Skarn is
+proprietary software; see the LICENSE distributed with the binary and
+https://getskarn.com.

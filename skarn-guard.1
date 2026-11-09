@@ -1,5 +1,5 @@
 '\" t
-.TH "SKARN-GUARD" "1" "2026-06-23" "skarn 0.34.0" "Skarn Manual"
+.TH "SKARN-GUARD" "1" "2026-06-23" "skarn 0.35.0" "Skarn Manual"
 .SH NAME
 skarn\-guard \- Pre\-execution hook: read an event on stdin, emit a verdict
 .SH SYNOPSIS
@@ -85,8 +85,10 @@ paid\-tier license; an unlicensed guard, or one on the free tier, runs
 audit\-only. One of: audit, enforce. The default is audit.
 .TP
 \fB\-\-strict\fR
-Also gate Read operations (credential\-file reconnaissance), and turn the ask
-the guard gives an event it cannot fully classify (unparseable, oversized, a
+Gate Read operations (credential\-file reconnaissance) on the hosts that do
+not gate them by default; Claude Code gates Read without this flag and scans
+the file a Read names before the read runs. On every host, turn the ask the
+guard gives an event it cannot fully classify (unparseable, oversized, a
 repeated key, or a tool input nested past the flatten bound) into a deny.
 Without it that event asks in enforce on every host, degraded to the host's
 deny where it has no ask channel; a scan\-infrastructure failure (unreadable
@@ -223,9 +225,11 @@ configs wire the event or leave it opt\-in. Audit mode never blocks on a
 finding; the line above each table says how it speaks and how a guard failure
 lands.
 .SS "Claude Code"
-Audit mode advises without deciding. A non\-zero guard exit fails closed on
-the events that can block, and an event the guard cannot classify asks in
-enforce (denies under \-\-strict).
+Audit mode advises without deciding. A guard crash or timeout fails open on
+Claude Code unless the hook entry sets onFailure to block (on Windows without
+Git Bash a failed shell\-form PreToolUse or PermissionRequest command hook
+blocks), and an event the guard cannot classify asks in enforce (denies under
+\-\-strict).
 .PP
 .TS
 lB lB lB lB
@@ -237,7 +241,7 @@ Event	Fires on	Enforce	Shipped
 \&UserPromptExpansion	\&expanded command	\&deny	\&yes
 \&TaskCreated	\&new task	\&deny	\&yes
 \&PostToolUse	\&tool result	\&deny	\&opt\-in
-\&PostToolBatch	\&tool result batch	\&deny	\&opt\-in
+\&PostToolBatch	\&tool result batch	\&deny	\&yes
 \&Stop	\&response end	\&advises only	\&yes
 .TE
 .SS "Cursor"

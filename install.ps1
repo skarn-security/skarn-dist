@@ -202,6 +202,117 @@ function Get-SkarnLegacyDigest {
     return ($asset.digest -replace "^sha256:", "").ToLowerInvariant()
 }
 
+function Get-SkarnScopePath {
+    param([string]$Scope)
+    return [string][Environment]::GetEnvironmentVariable("PATH", $Scope)
+}
+
+function Set-SkarnUserPath {
+    param([string]$Value)
+    [Environment]::SetEnvironmentVariable("PATH", $Value, "User")
+}
+
+function Get-SkarnPathMatches {
+    param([string]$MachinePath, [string]$UserPath, [string]$PathExt)
+    $extensions = @(($PathExt -split ";") | Where-Object { $_.Trim() })
+    if ($extensions.Count -eq 0) { $extensions = @(".COM", ".EXE", ".BAT", ".CMD") }
+    $seen = New-Object "System.Collections.Generic.HashSet[string]" ([System.StringComparer]::OrdinalIgnoreCase)
+    $found = New-Object "System.Collections.Generic.List[string]"
+    foreach ($entry in ("$MachinePath;$UserPath" -split ";")) {
+        $dir = [Environment]::ExpandEnvironmentVariables($entry.Trim().Trim('"'))
+        if (-not $dir) { continue }
+        foreach ($ext in $extensions) {
+            try {
+                $candidate = [System.IO.Path]::Combine($dir, "skarn" + $ext.Trim().ToLowerInvariant())
+                if ([System.IO.File]::Exists($candidate)) {
+                    $full = [System.IO.Path]::GetFullPath($candidate)
+                    if ($seen.Add($full)) { $found.Add($full) }
+                }
+            } catch {
+                continue
+            }
+        }
+    }
+    return $found.ToArray()
+}
+
+function Get-SkarnCandidateVersion {
+    param([string]$Path, [int]$TimeoutMilliseconds = 5000)
+    try {
+        $start = New-Object System.Diagnostics.ProcessStartInfo
+        $start.FileName = $Path
+        $start.Arguments = "--version"
+        $start.UseShellExecute = $false
+        $start.CreateNoWindow = $true
+        $start.RedirectStandardOutput = $true
+        $start.RedirectStandardError = $true
+        $process = [System.Diagnostics.Process]::Start($start)
+        $stdout = $process.StandardOutput.ReadToEndAsync()
+        $null = $process.StandardError.ReadToEndAsync()
+        if (-not $process.WaitForExit($TimeoutMilliseconds)) {
+            try { $process.Kill() } catch { $null = $_ }
+            return "version unknown"
+        }
+        if ($process.ExitCode -eq 0 -and $stdout.Wait(1000) -and $stdout.Result -match '^skarn (\S+)') {
+            return $Matches[1]
+        }
+    } catch {
+        return "version unknown"
+    }
+    return "version unknown"
+}
+
+function Get-SkarnChannel {
+    param([string]$Path, [string]$SystemRoot = $env:SystemRoot)
+    $windowsPath = $Path -replace '/', '\'
+    if ($SystemRoot -and $windowsPath.StartsWith($SystemRoot.TrimEnd('\') + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
+        $quoted = $Path -replace "'", "''"
+        return "is in a Windows system folder. In PowerShell opened with Run as administrator, run: Remove-Item -LiteralPath '$quoted'"
+    }
+    if ($windowsPath -match '\\scoop\\(shims|apps\\skarn)\\') { return "was installed with Scoop. Run: scoop uninstall skarn" }
+    if ($windowsPath -match '\\WinGet\\(Links|Packages)\\') { return "was installed with winget. Run: winget uninstall --id SkarnSecurity.Skarn --exact" }
+    if ($windowsPath -match '\\AppData\\Roaming\\npm\\') { return "was installed with npm. Run: npm uninstall -g @skarn-security/skarn" }
+    return "came from an installer this script does not recognise. Delete it if you no longer need it."
+}
+
+function Format-SkarnPathReport {
+    param([string[]]$Found, [string]$Installed)
+    $installedFull = [System.IO.Path]::GetFullPath($Installed)
+    $installedAt = -1
+    for ($i = 0; $i -lt $Found.Count; $i++) {
+        if ([string]::Equals($Found[$i], $installedFull, [System.StringComparison]::OrdinalIgnoreCase)) {
+            $installedAt = $i
+            break
+        }
+    }
+    if ($installedAt -eq 0) {
+        return [pscustomobject]@{ Shadowed = $false; Lines = @("Typing skarn in a new terminal runs the copy just installed: $installedFull") }
+    }
+    if ($Found.Count -eq 0) {
+        return [pscustomobject]@{ Shadowed = $true; Lines = @("A new terminal does not find skarn on your PATH. Run the copy just installed by its full path: $installedFull") }
+    }
+    $lines = New-Object "System.Collections.Generic.List[string]"
+    $lines.Add("Typing skarn in a new terminal runs another copy, not the one just installed.")
+    $lines.Add("Every skarn on your PATH, in the order Windows searches them:")
+    for ($i = 0; $i -lt $Found.Count; $i++) {
+        $note = ""
+        if ($i -eq 0) { $note = " - runs when you type skarn" } elseif ($i -eq $installedAt) { $note = " - just installed" }
+        $lines.Add("  $($i + 1). $($Found[$i]) ($(Get-SkarnCandidateVersion -Path $Found[$i]))$note")
+    }
+    $shadowing = $Found
+    if ($installedAt -lt 0) {
+        $lines.Add("The copy just installed, $installedFull, is not on your PATH.")
+    } else {
+        $shadowing = $Found[0..($installedAt - 1)]
+    }
+    $lines.Add("To run the new copy instead, remove each copy that comes before it:")
+    foreach ($copy in $shadowing) {
+        $lines.Add("  $copy $(Get-SkarnChannel -Path $copy)")
+    }
+    $lines.Add("This installer removed nothing. Until you remove them, run the new copy by its full path: $installedFull")
+    return [pscustomobject]@{ Shadowed = $true; Lines = $lines.ToArray() }
+}
+
 function Install-Skarn {
     param([string]$Version, [string]$Dir)
 
@@ -273,9 +384,9 @@ function Install-Skarn {
         }
     }
 
-    $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+    $userPath = Get-SkarnScopePath -Scope User
     if (($userPath -split ";") -notcontains $Dir) {
-        [Environment]::SetEnvironmentVariable("PATH", "$userPath;$Dir", "User")
+        Set-SkarnUserPath -Value "$userPath;$Dir"
         Write-Host "Added $Dir to your user PATH. Open a new terminal for it to take effect."
     }
     if (($env:PATH -split ";") -notcontains $Dir) {
@@ -290,6 +401,16 @@ function Install-Skarn {
     Write-Host "  4. Verify it's working:      skarn doctor"
     Write-Host ""
     Write-Host "skarn assess needs no license. skarn check scans need the free license from https://getskarn.com/free"
+
+    $found = @(Get-SkarnPathMatches -MachinePath (Get-SkarnScopePath -Scope Machine) -UserPath (Get-SkarnScopePath -Scope User) -PathExt $env:PATHEXT)
+    $report = Format-SkarnPathReport -Found $found -Installed $target
+    Write-Host ""
+    if ($report.Shadowed) {
+        Write-Warning $report.Lines[0]
+        $report.Lines | Select-Object -Skip 1 | ForEach-Object { Write-Host $_ }
+    } else {
+        Write-Host $report.Lines[0]
+    }
 }
 
 Install-Skarn -Version $Version -Dir $InstallDir

@@ -1,4 +1,4 @@
-.TH "SKARN" "1" "2026-06-23" "skarn 0.34.0" "Skarn Manual"
+.TH "SKARN" "1" "2026-06-23" "skarn 0.35.0" "Skarn Manual"
 .SH NAME
 skarn \- AI coding session security scanner with built\-in session search
 .SH SYNOPSIS
@@ -26,6 +26,7 @@ skarn \- AI coding session security scanner with built\-in session search
 \fBskarn\fR \fBlicense\fR [<file>|\-|renew] [options]
 \fBskarn\fR \fBeula\fR [accept]
 \fBskarn\fR \fBfleet\fR \fIaggregate|readout\fR \fIpath\fR [options]
+\fBskarn\fR \fBinventory\fR [options]
 skarn \fB\-\-version\fR
 skarn \fB\-\-help\fR
 .fi
@@ -138,6 +139,9 @@ Print the End User License Agreement, or record acceptance.
 .TP
 \fBfleet\fR \fIaggregate|readout\fR \fIpath\fR [options]
 Fold drops into the org aggregate; render the executive readout.
+.TP
+\fBinventory\fR [options]
+Inventory assistants, MCP servers, guard mode. Free, no license.
 .SH OPTIONS
 .SS "Check options"
 See \fBskarn\-check\fR(1).
@@ -214,7 +218,16 @@ Scan a single session by id.
 .TP
 \fB\-\-format\fR \fIfmt\fR
 Output format. ndjson is an ECS\-shaped event stream, one redacted finding per
-line, for SIEM ingest. A finding read from a Compliance API export carries the
+line, for SIEM ingest. NDJSON\-CONTRACT.md is the field contract for the
+ndjson stream. Every ndjson line carries host.name, skarn.identity, skarn.org
+and skarn.scanner_user when each is known; skarn.scanner_user is the operating
+system account that ran the scan, written as **** when it contains @. Finding
+and coverage lines name their assistant as skarn.cli, the summary line lists
+the assistants read as skarn.clis, and a line read from a Compliance API
+export carries skarn.subject_host set to export. json carries on each incident
+a fingerprint equal to the ndjson skarn.fingerprint and, when the incident
+belongs to an attack chain, a chainId equal to skarn.chain_id, the first chain
+the incident joined. A finding read from a Compliance API export carries the
 user id as user.id and the workspace as skarn.workspace_id, both as recorded,
 and the email address as user.email fixed to **** when the session carries one
 and omitted when it does not, so the mask says an address exists and is
@@ -249,7 +262,16 @@ private key or a database URI), membership of an attack chain and the most
 recent sighting. Each row states the redacted value and those facts, and a
 line below the rows counts the values left out as a likely test value, low
 confidence or suppressed. json, sarif, ndjson and evidence carry no section.
-One of: text, json, sarif, ndjson, evidence. The default is text.
+The ndjson stream also carries one skarn.inventory line directly after the
+summary, the record skarn inventory prints, so check \-\-format ndjson reads
+the assistant configuration files skarn vet reads, the guard configuration
+layers and the installed license, read\-only; if that collection fails the
+line carries event.outcome failure, stderr names it, and it counts as a
+scan\-infrastructure gap that \-\-fail\-on\-scan\-error turns into exit 6.
+Rules that check loads through \-\-feed or \-\-update\-rules do not reach the
+inventory line; a \-\-rules pack does. Any other verdict exit takes precedence
+over that 6, so read event.outcome on the line to learn whether the collection
+completed. One of: text, json, sarif, ndjson, evidence. The default is text.
 .TP
 \fB\-v\fR, \fB\-\-verbose\fR
 Verbose output.
@@ -638,8 +660,10 @@ paid\-tier license; an unlicensed guard, or one on the free tier, runs
 audit\-only. One of: audit, enforce. The default is audit.
 .TP
 \fB\-\-strict\fR
-Also gate Read operations (credential\-file reconnaissance), and turn the ask
-the guard gives an event it cannot fully classify (unparseable, oversized, a
+Gate Read operations (credential\-file reconnaissance) on the hosts that do
+not gate them by default; Claude Code gates Read without this flag and scans
+the file a Read names before the read runs. On every host, turn the ask the
+guard gives an event it cannot fully classify (unparseable, oversized, a
 repeated key, or a tool input nested past the flatten bound) into a deny.
 Without it that event asks in enforce on every host, degraded to the host's
 deny where it has no ask channel; a scan\-infrastructure failure (unreadable
@@ -786,9 +810,9 @@ guard, or one on the free tier, runs audit\-only regardless. One of: audit,
 enforce. The default is audit.
 .TP
 \fB\-\-strict\fR
-Add \-\-strict to the generated guard commands (also gates Read operations,
-and turns the ask the guard gives an event it cannot fully classify into a
-deny).
+Add \-\-strict to the generated guard commands (gates Read operations on the
+hosts that do not gate them by default, and turns the ask the guard gives an
+event it cannot fully classify into a deny).
 .TP
 \fB\-\-log\fR \fIpath\fR
 Guard log path wired into the hook commands: a SKARN_GUARD_LOG= prefix on the
@@ -1613,6 +1637,35 @@ current aggregate.
 With readout: emit the underlying comparison object (coverage, fleet totals,
 per\-machine movement, the ranked risk list) instead of Markdown; without
 \-\-prior the movement fields are null.
+.SS "Inventory options"
+See \fBskarn\-inventory\fR(1).
+.TP
+\fB\-\-format\fR \fIfmt\fR
+Output format. json prints the record indented; ndjson prints it as one
+skarn.inventory line. One of: json, ndjson. The default is json.
+.TP
+\fB\-\-hours\fR \fIN\fR
+Read sessions modified in the last N hours; 0 reads the whole history. The
+default is 720.
+.TP
+\fB\-\-cli\fR \fItool\fR
+Read sessions of one tool only, named as check names it; the other assistants
+with a session reader are reported as filtered, and their configuration is
+still read and counted. A name that matches no session source on this machine
+is a usage error.
+.TP
+\fB\-\-project\fR \fIlist\fR
+Scope to sessions whose project name or root matches an entry of this
+comma\-separated list, as check matches it, and write the server and project
+names that scope allows.
+.TP
+\fB\-\-user\fR \fIlist\fR
+Keep only sessions whose recorded user id or email matches an entry of this
+comma\-separated list, as check matches it.
+.TP
+\fB\-\-rules\fR \fIpath\fR
+Mask names with this detection rule pack, applied to session\-derived and
+configuration\-derived names alike; a missing or malformed pack exits 6.
 .SH "EXIT STATUS"
 .TP
 \fB0\fR
@@ -1755,11 +1808,13 @@ the override.
 \fBSKARN_IDENTITY\fR
 Local\-first identity tag (an SSO subject, email, or CI principal) stamped as
 provenance on baseline entries created with \-\-baseline\-create. Optional;
-Skarn never authenticates it.
+Skarn never authenticates it. It is also stamped as skarn.identity on every
+check ndjson line.
 .TP
 \fBSKARN_ORG\fR
 Local\-first org or team tag stamped alongside SKARN_IDENTITY on baseline
-provenance. Optional.
+provenance. Optional. It is also stamped as skarn.org on every check ndjson
+line.
 .TP
 \fBSKARN_FEED_URL\fR
 Default feed channel URL used by check \-\-update\-rules when \-\-feed\-url is
@@ -1929,6 +1984,25 @@ Bash and MSYS2 usually convert such a value to native form before a native
 binary sees it, but it arrives unconverted when MSYS2_ENV_CONV_EXCL excludes
 it, when a process outside that shell exports it, or when a scheduler or
 service passes it through.
+.TP
+\fBUSER\fR
+Read only to fill skarn.scanner_user on check ndjson lines on macOS and Linux,
+before LOGNAME. Skarn never authenticates it, and a value that contains @ is
+written as ****.
+.TP
+\fBLOGNAME\fR
+Read only to fill skarn.scanner_user on check ndjson lines on macOS and Linux
+when USER is unset or empty. Skarn never authenticates it, and a value that
+contains @ is written as ****.
+.TP
+\fBUSERNAME\fR
+Read only to fill skarn.scanner_user on check ndjson lines on Windows. Skarn
+never authenticates it, and a value that contains @ is written as ****.
+.TP
+\fBCOMPUTERNAME\fR
+The Windows host name, written as host.name on every check ndjson line and
+carried by the \-\-drop artifact. On macOS and Linux the host name comes from
+the operating system instead.
 .SH FILES
 .TP
 \fB/Library/Application Support/ClaudeCode/managed\-settings.json, /etc/claude\-code/managed\-settings.json, C:\eProgram Files\eClaudeCode\emanaged\-settings.json\fR
@@ -2719,7 +2793,7 @@ skarn\-baseline(1), skarn\-search(1), skarn\-recent(1), skarn\-restore(1),
 skarn\-messages(1), skarn\-stats(1), skarn\-tools(1), skarn\-mcps(1),
 skarn\-cmds(1), skarn\-export(1), skarn\-guard(1), skarn\-setup(1),
 skarn\-doctor(1), skarn\-serve(1), skarn\-license(1), skarn\-eula(1),
-skarn\-fleet(1), https://getskarn.com, gitleaks(1)
+skarn\-fleet(1), skarn\-inventory(1), https://getskarn.com, gitleaks(1)
 .SH AUTHOR
 Skarn is developed by the Skarn project. See https://getskarn.com.
 .SH "REPORTING BUGS"

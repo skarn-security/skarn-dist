@@ -1,4 +1,4 @@
-.TH "SKARN-CHECK" "1" "2026-06-23" "skarn 0.34.0" "Skarn Manual"
+.TH "SKARN-CHECK" "1" "2026-06-23" "skarn 0.35.0" "Skarn Manual"
 .SH NAME
 skarn\-check \- Scan AI sessions for leaked credentials and attack patterns
 .SH SYNOPSIS
@@ -140,7 +140,16 @@ Scan a single session by id.
 .TP
 \fB\-\-format\fR \fIfmt\fR
 Output format. ndjson is an ECS\-shaped event stream, one redacted finding per
-line, for SIEM ingest. A finding read from a Compliance API export carries the
+line, for SIEM ingest. NDJSON\-CONTRACT.md is the field contract for the
+ndjson stream. Every ndjson line carries host.name, skarn.identity, skarn.org
+and skarn.scanner_user when each is known; skarn.scanner_user is the operating
+system account that ran the scan, written as **** when it contains @. Finding
+and coverage lines name their assistant as skarn.cli, the summary line lists
+the assistants read as skarn.clis, and a line read from a Compliance API
+export carries skarn.subject_host set to export. json carries on each incident
+a fingerprint equal to the ndjson skarn.fingerprint and, when the incident
+belongs to an attack chain, a chainId equal to skarn.chain_id, the first chain
+the incident joined. A finding read from a Compliance API export carries the
 user id as user.id and the workspace as skarn.workspace_id, both as recorded,
 and the email address as user.email fixed to **** when the session carries one
 and omitted when it does not, so the mask says an address exists and is
@@ -175,7 +184,16 @@ private key or a database URI), membership of an attack chain and the most
 recent sighting. Each row states the redacted value and those facts, and a
 line below the rows counts the values left out as a likely test value, low
 confidence or suppressed. json, sarif, ndjson and evidence carry no section.
-One of: text, json, sarif, ndjson, evidence. The default is text.
+The ndjson stream also carries one skarn.inventory line directly after the
+summary, the record skarn inventory prints, so check \-\-format ndjson reads
+the assistant configuration files skarn vet reads, the guard configuration
+layers and the installed license, read\-only; if that collection fails the
+line carries event.outcome failure, stderr names it, and it counts as a
+scan\-infrastructure gap that \-\-fail\-on\-scan\-error turns into exit 6.
+Rules that check loads through \-\-feed or \-\-update\-rules do not reach the
+inventory line; a \-\-rules pack does. Any other verdict exit takes precedence
+over that 6, so read event.outcome on the line to learn whether the collection
+completed. One of: text, json, sarif, ndjson, evidence. The default is text.
 .TP
 \fB\-v\fR, \fB\-\-verbose\fR
 Verbose output.
