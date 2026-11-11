@@ -64,7 +64,7 @@ An export's `skarn.cli` is a Claude family label taken from the export's product
 
 ## Dataset `skarn.scan`
 
-One summary line per run, written first, so a SIEM has a record of the run even when it found nothing. Beside the envelope and scanner identity it carries `skarn.clis` and these counters, each an integer: `skarn.sessions_scanned`, `skarn.findings` (findings not suppressed), `skarn.suppressed`, `skarn.chain_count`, `skarn.risk_score`, `skarn.verdict` (the exit code the run computed), `skarn.tools_dropped`, `skarn.stores_unreadable`, `skarn.sessions_incomplete`, `skarn.sessions_truncated`, `skarn.turns_unavailable`, `skarn.turns_unverified`, `skarn.compliance_withheld`, `skarn.records_skipped`, `skarn.records_truncated`, `skarn.records_shortened`, `skarn.records_depth_cut` and `skarn.records_uncaptured`.
+One summary line per run, written first, so a SIEM has a record of the run even when it found nothing. Beside the envelope and scanner identity it carries `skarn.clis` and these counters, each an integer: `skarn.sessions_scanned`, `skarn.findings` (findings not suppressed), `skarn.suppressed`, `skarn.chain_count`, `skarn.risk_score`, `skarn.verdict` (the exit code the run computed), `skarn.tools_dropped`, `skarn.stores_unreadable`, `skarn.sessions_incomplete`, `skarn.sessions_truncated`, `skarn.turns_unavailable`, `skarn.turns_unverified`, `skarn.compliance_withheld`, `skarn.records_skipped`, `skarn.records_truncated`, `skarn.records_shortened`, `skarn.records_depth_cut`, `skarn.records_uncaptured`, `skarn.sensitivity_label.tool_results` and `skarn.sensitivity_label.sessions`. The two `skarn.sensitivity_label` counters are described under Sensitivity label observation.
 
 ## Dataset `skarn.coverage`
 
@@ -93,6 +93,50 @@ One alert per finding, suppressed findings included. Beside the envelope, scanne
 | `skarn.likely_test_value` | `true` when the matched value looks like a test value. |
 | `skarn.also_matched`, `skarn.grouped_under` | Other rules that matched the same value, and the finding this one is grouped under, when either applies. |
 | `skarn.taxonomy` | An array of the OWASP LLM Top 10, MITRE ATLAS and CWE identifiers the rule maps to. |
+| `skarn.sensitivity_label.observed` | `true` when a sighting merged into the finding was inside a tool result that carried a sensitivity label shape. Omitted otherwise, never `false`. |
+| `skarn.sensitivity_label.shapes` | An array of the label shapes those tool results carried. Present only with `skarn.sensitivity_label.observed`, never empty. |
+
+## Sensitivity label observation
+
+`skarn check` reports when a tool result in a session carried a Microsoft sensitivity label. Skarn reads this from the text of the tool result; it makes no call to Microsoft Purview or Microsoft Graph. A tool result counts when its text carries at least one of three label shapes:
+
+| Shape | What it matches |
+|-------|-----------------|
+| `label_object` | A `sensitivityLabel` JSON object whose own level holds a non-empty `displayName` or a label id: a hit in a Work IQ `retrieve` result, or a Microsoft Graph beta search hit. |
+| `label_id` | A `sensitivityLabelId` key followed by a label GUID: the Microsoft Graph `extractSensitivityLabels` result, or the label of a beta search hit. |
+| `msip_metadata` | A Microsoft Information Protection `MSIP_Label_<GUID>_Enabled` or `_EnabledV2` attribute set to `true`: the `msip_labels` mail header, or a document's custom properties written as `key=value`, `key: value` or a JSON pair. |
+
+A Work IQ `retrieve` result that the assistant records as a `structuredContent` object, which is the form Microsoft's own payload takes, is not observed today when its label carries only a display name. Some session parsers flatten a structured tool result into its leaf values and drop the parent key, so no `sensitivityLabel` key is left to match, and a bare `displayName` is not evidence of a label. A label id or an MSIP attribute in the same structured form is still observed, because the flattened text keeps its own key.
+
+The observation reaches the output through four keys:
+
+| Key | Line | Value |
+|-----|------|-------|
+| `skarn.sensitivity_label.observed` | finding | `true` when at least one sighting merged into the finding was inside a tool result that carried a shape. Omitted otherwise. |
+| `skarn.sensitivity_label.shapes` | finding | The shapes those tool results carried, in the fixed order `label_object`, `label_id`, `msip_metadata`. Present only with `skarn.sensitivity_label.observed`. |
+| `skarn.sensitivity_label.tool_results` | summary | The tool results in scope that carried at least one shape. Always present, `0` included. |
+| `skarn.sensitivity_label.sessions` | summary | The sessions in scope that held at least one such tool result. Always present, `0` included. |
+
+`skarn check --format json` writes `sensitivityLabelObserved` and `sensitivityLabelShapes` on each incident under the same rule, and `sensitivityLabelToolResults` and `sensitivityLabelSessions` at the top level on every run. `skarn check --format text` prints one `INFO` line, `<n> tool result(s) in <m> session(s) carried a Microsoft sensitivity label`, only when `<n>` is not zero. Coverage lines, the inventory line, SARIF and every other output carry no observation.
+
+What an observation means:
+
+- The text of a tool result carried a label shape. It does not say that the matched value itself was labeled, which label applied, or that Purview would have blocked the content.
+- Every enabled label counts the same. In a tenant with mandatory labeling, a `Public` or `General` label triggers the observation exactly as `Confidential` does.
+- A finding merges every sighting of the same value under the same rule in the same session file, comparing the value case-insensitively. The finding is marked when any one of those sightings sat inside a labeled tool result, so its `log.file.line` need not be the labeled sighting.
+- Only tool results are read for a shape. The tool input of the same call, the messages, injected context and session metadata never mark a finding. Findings from the structural detectors, which run over the whole session after the tool results, are never marked either, even when such a detector reads its value out of a labeled tool result, as the Gradle credential and environment dump detectors do.
+- No label display name, label unique name, label id, site id or tenant id is written on any of the four keys. To identify the label, open the session file that the finding names and search it for the shape.
+- The counters follow `--hours`, `--cli`, `--project` and `--user`, the scope of the findings, and do not depend on `--severity`.
+- The counters cover one run over its window. Scheduled runs whose windows overlap count the same tool result again, so a SIEM reads the latest run for each host and scope rather than summing runs.
+- The verdict and the exit code do not change. No rule, severity, confidence or risk score depends on the observation.
+
+What is not observed:
+
+- The legacy Outlook and calendar `sensitivity` property (`normal`, `personal`, `private`, `confidential`), which is not a sensitivity label.
+- The tenant's label catalogue, a list of `#microsoft.graph.security.sensitivityLabel` definitions.
+- An MSIP attribute written as an XML `<property>` element or as a `{name, value}` pair.
+- A quoted key or value inside JSON that was serialized into a string more than once. A bare `sensitivityLabelId: <GUID>` line or `MSIP_Label_<GUID>_Enabled=true` pair carries no quotes, so it is read inside serialized JSON too when literal whitespace or punctuation separates it from the text around it; one that only a JSON escape such as `\n` separates, or that ends a string serialized inside another string, is not read.
+- The `sensitivityLabel`, `sensitivityLabelId` and `displayName` keys spelled in another case, such as `SensitivityLabel` from a serialized PowerShell object, or with single quotes; a GUID written in braces; and a key, a GUID or `true` spelled with `\u` escapes.
 
 ## Fields by dataset
 
@@ -117,6 +161,10 @@ Y means the key is on every line of that dataset, K means it is present when its
 | `skarn.subject_host` | - | K | K | - | - |
 | `skarn.fingerprint` | - | - | Y | - | `fingerprint` |
 | `skarn.chain_id` | - | - | K | - | `chainId` |
+| `skarn.sensitivity_label.observed` | - | - | K | - | `sensitivityLabelObserved` |
+| `skarn.sensitivity_label.shapes` | - | - | K | - | `sensitivityLabelShapes` |
+| `skarn.sensitivity_label.tool_results` | Y | - | - | - | `sensitivityLabelToolResults` at the top level |
+| `skarn.sensitivity_label.sessions` | Y | - | - | - | `sensitivityLabelSessions` at the top level |
 | summary counters | Y | - | - | - | top-level counters |
 | per-file counters | - | Y | - | - | `skippedRecords` |
 

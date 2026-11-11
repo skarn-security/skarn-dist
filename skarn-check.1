@@ -1,4 +1,4 @@
-.TH "SKARN-CHECK" "1" "2026-06-23" "skarn 0.35.0" "Skarn Manual"
+.TH "SKARN-CHECK" "1" "2026-06-23" "skarn 0.36.0" "Skarn Manual"
 .SH NAME
 skarn\-check \- Scan AI sessions for leaked credentials and attack patterns
 .SH SYNOPSIS
@@ -133,7 +133,8 @@ Restrict the scan to matching projects: a comma\-separated list of names or
 paths, matched case\-insensitively against a session's project display name,
 its canonical root path, or a parent directory of that root. A session read
 from a Compliance API export carries no project, so any \-\-project value
-excludes it.
+excludes it. On a \-\-project run the json reach object of each finding also
+lists, as projectNames, the masked names of the projects the finding reached.
 .TP
 \fB\-\-session\fR \fIid\fR
 Scan a single session by id.
@@ -176,24 +177,51 @@ high when it is detected at critical severity or is part of an attack chain
 within its session, and medium otherwise; a later non\-production downrank of
 its severity does not change its confidence. It is not an exposure ranking,
 and neither field changes severity, the risk score or the exit code; the
-evidence pack carries neither. The text format opens with an Act on this first
-section: at most five findings that carry a matched value, one row per value,
-ranked by a triggered canary first, then confidence, use of the value in a
-tool call, a high\-value issuer (GitHub, AWS, GCP, Azure, a Stripe live key, a
-private key or a database URI), membership of an attack chain and the most
-recent sighting. Each row states the redacted value and those facts, and a
-line below the rows counts the values left out as a likely test value, low
-confidence or suppressed. json, sarif, ndjson and evidence carry no section.
-The ndjson stream also carries one skarn.inventory line directly after the
-summary, the record skarn inventory prints, so check \-\-format ndjson reads
-the assistant configuration files skarn vet reads, the guard configuration
-layers and the installed license, read\-only; if that collection fails the
-line carries event.outcome failure, stderr names it, and it counts as a
-scan\-infrastructure gap that \-\-fail\-on\-scan\-error turns into exit 6.
-Rules that check loads through \-\-feed or \-\-update\-rules do not reach the
-inventory line; a \-\-rules pack does. Any other verdict exit takes precedence
-over that 6, so read event.outcome on the line to learn whether the collection
-completed. One of: text, json, sarif, ndjson, evidence. The default is text.
+evidence pack carries neither. Every finding also carries a reach, counted
+over the whole run for the same rule and the same value: the distinct sessions
+it appeared in, where a session is its assistant, its session store and its
+session id; the distinct assistants and projects; the attack chains its
+incidents joined; how many of its occurrences there were and how many of them
+a baseline or a commented line suppressed; and an execution of executed,
+written or unknown. executed means the content sits inside the command
+argument of a shell call the agent issued, and says nothing about whether the
+command succeeded; written means the agent wrote it into a file that nothing
+in the session ran; unknown covers everything else, a file that a later shell
+call ran included, because the transcript cannot show that the file still held
+the content when it ran. text prints an indented Reach: line under a finding
+whose reach spans more than one session, joins an attack chain, names an
+execution or counts a suppressed occurrence. json carries a reach object with
+sessions, assistants, assistantNames, projects, chains, findings,
+suppressedFindings and execution, and adds projectNames only on a \-\-project
+run. Reach changes no severity, risk score, exit code or triage order, and
+ndjson, sarif, evidence and the \-\-drop artifact carry none. The text format
+opens with an Act on this first section: at most five findings that carry a
+matched value, one row per value, ranked by a triggered canary first, then
+confidence, use of the value in a tool call, a high\-value issuer (GitHub,
+AWS, GCP, Azure, a Stripe live key, a private key or a database URI),
+membership of an attack chain and the most recent sighting. Each row states
+the redacted value and those facts, and a line below the rows counts the
+values left out as a likely test value, low confidence or suppressed. json,
+sarif, ndjson and evidence carry no section. The ndjson stream also carries
+one skarn.inventory line directly after the summary, the record skarn
+inventory prints, so check \-\-format ndjson reads the assistant configuration
+files skarn vet reads, the guard configuration layers and the installed
+license, read\-only; if that collection fails the line carries event.outcome
+failure, stderr names it, and it counts as a scan\-infrastructure gap that
+\-\-fail\-on\-scan\-error turns into exit 6. Rules that check loads through
+\-\-feed or \-\-update\-rules do not reach the inventory line; a \-\-rules
+pack does. Any other verdict exit takes precedence over that 6, so read
+event.outcome on the line to learn whether the collection completed. A finding
+whose matched value was seen inside a tool result that carried a Microsoft
+sensitivity label shape is marked with skarn.sensitivity_label.observed and
+skarn.sensitivity_label.shapes in ndjson and with sensitivityLabelObserved and
+sensitivityLabelShapes in json. The ndjson summary line
+(skarn.sensitivity_label.tool_results and skarn.sensitivity_label.sessions),
+the json top\-level counters sensitivityLabelToolResults and
+sensitivityLabelSessions, and one text line count the tool results that
+carried a label shape and the sessions that held them. No label name or label
+id is written, and the observation changes neither the verdict nor the exit
+code. One of: text, json, sarif, ndjson, evidence. The default is text.
 .TP
 \fB\-v\fR, \fB\-\-verbose\fR
 Verbose output.

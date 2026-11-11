@@ -1,4 +1,4 @@
-.TH "SKARN-SERVE" "1" "2026-06-23" "skarn 0.35.0" "Skarn Manual"
+.TH "SKARN-SERVE" "1" "2026-06-23" "skarn 0.36.0" "Skarn Manual"
 .SH NAME
 skarn\-serve \- Local web UI on 127.0.0.1, with every detected secret masked
 .SH SYNOPSIS
@@ -31,12 +31,14 @@ its rows, only when a session was left out. The recall views (search, recent,
 stats) need no license. The security view (/api/scan) is the same engine as
 check and requires one the same way: without it the endpoint answers 403 and
 the Security tab shows how to register free. Opening a finding in the Security
-view shows a detail drawer with the severity, the taxonomy crosswalk, the
-attack\-chain context and the redacted code context, and from there you can
-accept the finding into your baseline as a false positive. That is the same
-write path as skarn baseline accept, and it records only the finding's
-fingerprint, never its secret. The license is resolved once at startup, so
-installing one while the server is running needs a restart.
+view shows a detail drawer with the severity, the reach (sessions, assistants,
+projects, execution, chains and suppressed occurrences, never a project name),
+the taxonomy crosswalk, the attack\-chain context and the redacted code
+context, and from there you can accept the finding into your baseline as a
+false positive. That is the same write path as skarn baseline accept, and it
+records only the finding's fingerprint, never its secret. The license is
+resolved once at startup, so installing one while the server is running needs
+a restart.
 .SH OPTIONS
 .TP
 \fB\-\-port\fR \fIn\fR

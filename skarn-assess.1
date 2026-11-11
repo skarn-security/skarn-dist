@@ -1,4 +1,4 @@
-.TH "SKARN-ASSESS" "1" "2026-06-23" "skarn 0.35.0" "Skarn Manual"
+.TH "SKARN-ASSESS" "1" "2026-06-23" "skarn 0.36.0" "Skarn Manual"
 .SH NAME
 skarn\-assess \- Scan every AI session, print a redacted summary. Free, no
 license
@@ -33,22 +33,27 @@ renders Markdown, any other extension renders HTML. The report names a session
 file by its basename and a project by its display name, and writes a home
 directory inside a code\-context snippet as ~. The Markdown report ends each
 exposure line with the finding's confidence and adds likely test value when
-that flag is set; the HTML report shows both in the finding drawer. Both
-reports open with the Act on this first section that the check text format
-prints, and its line of deprioritized values; in the HTML report each row
-opens its finding drawer, and selecting a tool, a project or a user hides the
-section. The file is written atomically as a new owner\-only file on macOS and
-Linux (on Windows it takes the permissions of its directory): a regular file
-at the path, or a symlink to one, is replaced by the new file; a device or
-FIFO at the path is written in place and keeps its own permissions, and so is
-a symlink to one of those or to a process stream such as /dev/stdout; a
-directory at the path is refused.
+that flag is set, then the reach as the number of sessions and assistants when
+the value appeared in more than one session, and the execution when the
+transcript records the content written or executed; the HTML report shows all
+of them in the finding drawer. Both reports open with the Act on this first
+section that the check text format prints, and its line of deprioritized
+values; in the HTML report each row opens its finding drawer, and selecting a
+tool, a project or a user hides the section. The file is written atomically as
+a new owner\-only file on macOS and Linux (on Windows it takes the permissions
+of its directory): a regular file at the path, or a symlink to one, is
+replaced by the new file; a device or FIFO at the path is written in place and
+keeps its own permissions, and so is a symlink to one of those or to a process
+stream such as /dev/stdout; a directory at the path is refused.
 .TP
 \fB\-\-json\fR
 Emit the redacted scan as JSON (the same shape as the serve /api/scan view)
 for scripting, instead of the friendly summary. Each incident carries
 confidence and likely_test_value, the same values `skarn check \-\-format
-json` reports as confidence and likelyTestValue. A ranked incident carries
+json` reports as confidence and likelyTestValue, and a reach object with
+sessions, assistants, assistant_names, projects, chains, findings,
+suppressed_findings and execution, the counts `skarn check \-\-format json`
+reports as reach, never with project names. A ranked incident carries
 triage_rank (1 to 5), triage_reasons (its confidence, active use, issuer class
 and attack chain labels) and triage_seen (the YYYY\-MM\-DD date its recency
 was ranked on), and stats carries triage_more and the three deprioritized

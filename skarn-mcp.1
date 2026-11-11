@@ -1,4 +1,4 @@
-.TH "SKARN-MCP" "1" "2026-06-23" "skarn 0.35.0" "Skarn Manual"
+.TH "SKARN-MCP" "1" "2026-06-23" "skarn 0.36.0" "Skarn Manual"
 .SH NAME
 skarn\-mcp \- Local stdio MCP server: read\-only, redacted scan and config
 tools
@@ -44,43 +44,44 @@ JSON array is answered with one \-32600 error. Four read\-only tools are
 exposed by default, and \-\-enable\-recall adds search_sessions and
 get_session, which return transcript text and are described under that option.
 scan_sessions returns the same redacted scan report that `skarn assess
-\-\-json` prints, minus the per\-incident context snippet and minus every
-transcript\-authored label, which means the project labels on both the
-incidents and the attack chains and the tool name on an incident; it takes
-severity, hours, project and user, where user is a comma\-separated list of
-the user ids or email addresses a Compliance API export recorded, an id
-matched exactly and an address case\-insensitively. vet_configs returns the
-masked findings report that `skarn vet \-\-format json` prints and takes no
-arguments; those findings quote this machine's own configuration, including
-hook command lines and MCP server definitions, with any credential\-shaped
-value masked. list_sessions returns recent sessions as identifiers and counts
-only \- session id, assistant, the two timestamps, message and tool counts,
-token totals, and the user id a Compliance API export recorded \- and takes
-hours, limit, project, cli and user. session_stats returns the same aggregate
-counts across those sessions and takes hours, project, cli and user. Every
-tool is annotated read\-only, non\-destructive and closed\-world. No tool
-writes, changes or removes a file, no tool opens a network connection, and no
-default tool returns session message text or a label authored inside a
-transcript such as a project name, a git branch, a model id or a tool name.
-Every value a detector matched is reported only in its masked form, which
-keeps at most the first character and last two characters and discards the
-middle; a value under 16 characters, and any personal data, is replaced whole.
-That is a truncated preview rather than a one\-way transform of the whole
-value. Three classes of string are still passed through as they are: a file
-path, a session id, and a timestamp. Each is a locator the tools exist to hand
-back, and each is read from the transcript or the store rather than generated
-by Skarn, so a credential deliberately planted in a session id or a directory
-name reaches the client verbatim. A Claude Code store also encodes the project
-directory into its transcript file name, so the returned session_file carries
-that directory in encoded form. Every other Skarn surface passes those three
-through the same way. The user id and workspace id a Compliance API export
-recorded are passed through as locators too, on list_sessions rows and
-scan_sessions incidents and chains, while the email address it recorded never
-reaches any tool result. Tool results are returned to the MCP client that
-spawned the server, which is the assistant, so they travel wherever that
-assistant sends its context. The verb needs no license. Project\-level
-configuration for vet_configs is read from the server process's working
-directory, which is whatever directory the client spawned it in.
+\-\-json` prints, minus the per\-incident context snippet, minus the reach
+object and minus every transcript\-authored label, which means the project
+labels on both the incidents and the attack chains and the tool name on an
+incident; it takes severity, hours, project and user, where user is a
+comma\-separated list of the user ids or email addresses a Compliance API
+export recorded, an id matched exactly and an address case\-insensitively.
+vet_configs returns the masked findings report that `skarn vet \-\-format
+json` prints and takes no arguments; those findings quote this machine's own
+configuration, including hook command lines and MCP server definitions, with
+any credential\-shaped value masked. list_sessions returns recent sessions as
+identifiers and counts only \- session id, assistant, the two timestamps,
+message and tool counts, token totals, and the user id a Compliance API export
+recorded \- and takes hours, limit, project, cli and user. session_stats
+returns the same aggregate counts across those sessions and takes hours,
+project, cli and user. Every tool is annotated read\-only, non\-destructive
+and closed\-world. No tool writes, changes or removes a file, no tool opens a
+network connection, and no default tool returns session message text or a
+label authored inside a transcript such as a project name, a git branch, a
+model id or a tool name. Every value a detector matched is reported only in
+its masked form, which keeps at most the first character and last two
+characters and discards the middle; a value under 16 characters, and any
+personal data, is replaced whole. That is a truncated preview rather than a
+one\-way transform of the whole value. Three classes of string are still
+passed through as they are: a file path, a session id, and a timestamp. Each
+is a locator the tools exist to hand back, and each is read from the
+transcript or the store rather than generated by Skarn, so a credential
+deliberately planted in a session id or a directory name reaches the client
+verbatim. A Claude Code store also encodes the project directory into its
+transcript file name, so the returned session_file carries that directory in
+encoded form. Every other Skarn surface passes those three through the same
+way. The user id and workspace id a Compliance API export recorded are passed
+through as locators too, on list_sessions rows and scan_sessions incidents and
+chains, while the email address it recorded never reaches any tool result.
+Tool results are returned to the MCP client that spawned the server, which is
+the assistant, so they travel wherever that assistant sends its context. The
+verb needs no license. Project\-level configuration for vet_configs is read
+from the server process's working directory, which is whatever directory the
+client spawned it in.
 .SH OPTIONS
 .TP
 \fB\-\-enable\-recall\fR
