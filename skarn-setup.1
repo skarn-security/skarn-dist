@@ -1,4 +1,4 @@
-.TH "SKARN-SETUP" "1" "2026-06-23" "skarn 0.36.0" "Skarn Manual"
+.TH "SKARN-SETUP" "1" "2026-06-23" "skarn 0.37.0" "Skarn Manual"
 .SH NAME
 skarn\-setup \- Wire the guard hook into detected assistants, then self\-test
 it
@@ -17,53 +17,85 @@ instead. A config file setup creates is readable by its owner only on macOS
 and Linux, and an existing file keeps its mode.
 .PP
 Guided onboarding: detect installed AI coding assistants (Claude Code, Cursor,
-Codex CLI, Copilot CLI, Gemini CLI, Grok Build, Copilot in Code), merge the
-skarn guard hook into each one's native config in audit mode, and prove the
-wiring with the guard self\-test. Copilot in Code gets one hook file per
-profile, <profile>\ehooks\eskarn.json, for every profile under the
-CopilotCodingHome directories of %LOCALAPPDATA%; its folder projects read the
-\&.github/hooks/skarn.json that \-\-agent copilot \-\-scope project writes, so
-\-\-agent copilot\-code refuses \-\-scope project. \-\-scope project writes
+Codex CLI, Copilot CLI, Gemini CLI, Grok Build, Copilot in Code, Cline, the
+Kiro CLI), merge the skarn guard hook into each one's native config in audit
+mode, and prove the wiring with the guard self\-test. Copilot in Code gets one
+hook file per profile, <profile>\ehooks\eskarn.json, for every profile under
+the CopilotCodingHome directories of %LOCALAPPDATA%; its folder projects read
+the .github/hooks/skarn.json that \-\-agent copilot \-\-scope project writes,
+so \-\-agent copilot\-code refuses \-\-scope project. \-\-scope project writes
 committed, shareable configs whose commands are portable by construction: a
 PATH\-guarded invocation and a literal $HOME log path, never this machine's
 absolute paths. Gemini CLI and Grok Build are the one honest exception,
 because each reads a single cross\-platform command field: a file committed
 from a POSIX machine carries the POSIX form, and a native\-Windows teammate's
 hook then fails open with a warning instead of running. Grok's project hooks
-additionally wait on a /hooks\-trust grant. On native Windows, or with a
-\-\-command that names a drive or UNC path, setup still writes the Claude Code
-and Cursor hooks, which have no Windows arm, and prints one warning line when
-doctor's Windows reading finds no hook wired. Cursor runs that hook through
-PowerShell, which does not parse its POSIX form, so the hook fails open and
-actions run unscanned. Claude Code runs it through Git Bash when that is
-installed, which skarn has not validated, and otherwise through PowerShell,
-where the guard never starts and a tool call can be blocked instead.
-\-\-plugin commits the claude plugin requirement instead of hook entries; the
-two project routes are mutually exclusive, and each removes the other's
-skarn\-owned entries so the guard can never fire twice. Existing foreign hooks
-are never touched. Every modified file is backed up first
+additionally wait on a /hooks\-trust grant. Cline is the other exception, for
+a different reason: a project run writes only the pair for the platform it
+runs on, the extensionless PreToolUse and UserPromptSubmit on POSIX or the
+\&.ps1 files on Windows, so a .clinerules/hooks/ directory committed from one
+platform holds no hook a teammate's Cline on the other platform runs, and
+doctor on that machine does not count the committed files as protection. On
+native Windows, or with a \-\-command that names a drive or UNC path, setup
+still writes the Claude Code and Cursor hooks, which have no Windows arm, and
+prints one warning line when doctor's Windows reading finds no hook wired.
+Cursor runs that hook through PowerShell, which does not parse its POSIX form,
+so the hook fails open and actions run unscanned. Claude Code runs it through
+Git Bash when that is installed, which skarn has not validated, and otherwise
+through PowerShell, where the guard never starts and a tool call can be
+blocked instead. \-\-plugin commits the claude plugin requirement instead of
+hook entries; the two project routes are mutually exclusive, and each removes
+the other's skarn\-owned entries so the guard can never fire twice. Existing
+foreign hooks are never touched. Every modified file is backed up first
 (*.skarn\-bak.<timestamp>, carrying the target's own permissions) and
-rewritten atomically, and a target file that does not parse as JSON is refused
-rather than overwritten. At \-\-scope project skarn also refuses a target that
-is a symlink, that sits behind a symlinked directory, or whose path it cannot
-examine at all, before anything is read or created: a committed symlink can
-name any file on the machine, and following it would copy that file's bytes
-into a backup beside it and rewrite it in place. At user scope setup writes
-through a symlinked config to the file it names and leaves the link in place,
-because a dotfiles manager legitimately puts one there; it refuses a link
-whose file is missing or whose directory it cannot write, \-\-remove reports a
-link whose file is missing as unchanged, and a rewrite that fails or is rolled
-back after its verify read leaves no backup behind. A Copilot in Code hook
-file reached through a link whose target is a network path is refused before
-anything is read or created. A config file setup creates is readable by its
-owner only on macOS and Linux, while an existing file keeps its mode; on
-Windows a new file takes the permissions of the directory it is created in. On
-a terminal setup runs an interactive wizard: the mode prompt accepts audit,
-enforce, or an empty line for audit, each install prompt accepts y, yes, n,
-no, or an empty line for yes, and any other answer is asked again. \-\-yes
-accepts everything and \-\-print writes nothing. The result names the mode it
-wired, and whether an enforce request runs audit because the machine is
-unlicensed or its license is on the free tier.
+rewritten atomically, and a JSON target file that does not parse as JSON is
+refused rather than overwritten. At \-\-scope project skarn also refuses a
+target that is a symlink, that sits behind a symlinked directory, or whose
+path it cannot examine at all, before anything is read or created: a committed
+symlink can name any file on the machine, and following it would copy that
+file's bytes into a backup beside it and rewrite it in place. At user scope
+setup writes through a symlinked config to the file it names and leaves the
+link in place, because a dotfiles manager legitimately puts one there; it
+refuses a link whose file is missing or whose directory it cannot write,
+\-\-remove reports a link whose file is missing as unchanged, and a rewrite
+that fails or is rolled back after its verify read leaves no backup behind. A
+Copilot in Code hook file reached through a link whose target is a network
+path is refused before anything is read or created. A JSON config file setup
+creates is readable by its owner only on macOS and Linux, while an existing
+file keeps its mode; on Windows a new file takes the permissions of the
+directory it is created in. On a terminal setup runs an interactive wizard:
+the mode prompt accepts audit, enforce, or an empty line for audit, each
+install prompt accepts y, yes, n, no, or an empty line for yes, and any other
+answer is asked again. \-\-yes accepts everything and \-\-print writes
+nothing. The result names the mode it wired, and whether an enforce request
+runs audit because the machine is unlicensed or its license is on the free
+tier. Cline gets executable PreToolUse and UserPromptSubmit files with mode
+0755 on POSIX, or PreToolUse.ps1 and UserPromptSubmit.ps1 on Windows. At user
+scope setup writes only ~/Documents/Cline/Hooks/, which both runtimes read.
+Documents is the literal folder joined to HOME, and CLINE_DIR does not move
+it. Setup never writes ~/.cline/hooks/, because installing in both directories
+would make the CLI run two skarn hooks per call. At project scope it writes
+\&.clinerules/hooks/. Setup never creates PostToolUse, but \-\-update and
+\-\-remove include a recognized PostToolUse file already there. Those
+operations accept only a file setup recognizes as its current render or the
+older hand\-copied plugin file; they refuse other guard\-invoking scripts. The
+extension reads the files on its next hook event; reload the window if it does
+not. Restart a running cline CLI session. The Kiro CLI gets two surfaces,
+because its two harnesses read hooks from different places: the hook file
+~/.kiro/hooks/skarn.json, which the V3 harness loads in every session, and the
+guard merged into every agent config in ~/.kiro/agents/, because the V2
+harness runs hooks only from the agent config a session selects. $KIRO_HOME
+moves both when it names a directory of its own. Setup reads each agent config
+the way kiro\-cli agent upgrade \-\-dry\-run does: it merges into a
+V2\-format, out\-of\-sync or upgraded agent in the form that agent's hooks
+value takes, skips a V3\-only profile on install while \-\-update and
+\-\-remove still maintain a Skarn entry it carries, and refuses a file Kiro
+does not read as an agent config. Setup never creates an agent config, so a
+machine with none gets the hook file and a skipped row saying that V2 sessions
+run unscanned. Kiro reads a single command field on every platform, so a
+committed .kiro/hooks/skarn.json or agent config carries the same caveat as
+Gemini and Grok. Start a new kiro\-cli session to load the hooks; in a
+workspace, an interactive V3 session runs only once the workspace is trusted.
 .SH OPTIONS
 .TP
 \fB\-\-agent\fR \fIname\fR
@@ -72,8 +104,14 @@ assistant is detected when its config directory exists or its CLI is on PATH,
 and Copilot in Code when one of its profiles exists); naming an assistant
 explicitly also targets it when undetected, except copilot\-code, which setup
 refuses when it finds no profile and names where it looked. all targets every
-assistant, and copilot\-code only when a profile exists at user scope. One of:
-claude, cursor, codex, copilot, gemini, grok, all, copilot\-code.
+assistant, with copilot\-code only when a profile exists at user scope and
+cline only when detected. Cline is detected when ~/.cline (or CLINE_DIR), the
+data directory (CLINE_DATA_DIR, else CLINE_DIR/data, else ~/.cline/data), or
+~/Documents/Cline is a directory, or cline is on PATH. An explicit \-\-agent
+cline writes regardless. Kiro is detected when ~/.kiro/agents (or
+$KIRO_HOME/agents) is a directory or kiro\-cli is on PATH; ~/.kiro alone does
+not count, because the Kiro IDE may create it. One of: claude, cursor, codex,
+copilot, gemini, grok, all, copilot\-code, cline, kiro.
 .TP
 \fB\-\-mode\fR \fImode\fR
 Guard mode written into the hook commands. Audit records would\-be verdicts to
@@ -117,29 +155,43 @@ per hook; the PowerShell form of a Gemini or Grok hook keeps backslashes. An
 entry an earlier setup wrote with backslashes on that arm is replaced whole on
 the next run when its Windows arm runs skarn. At project scope the default is
 the bare name skarn, and a value containing a path separator is refused: a
-committed config must resolve skarn from PATH on every machine. The default is
-this binary's absolute path.
+committed config must resolve skarn from PATH on every machine. A Cline hook
+takes the bare name skarn or an absolute path to an executable named skarn
+(skarn.exe on Windows), and on Windows a path that holds [ is refused, because
+the Windows PowerShell call operator reads it as wildcard syntax and the hook
+never starts skarn. A Windows Cline hook whose command or log path holds a
+non\-ASCII character starts with a UTF\-8 byte\-order mark, because Windows
+PowerShell 5.1 reads a script without one in the ANSI code page and misreads
+the path. The default is this binary's absolute path.
 .TP
 \fB\-\-scope\fR \fIscope\fR
 Write user\-level configs (~/.claude/settings.json, ~/.cursor/hooks.json,
 ~/.codex/hooks.json, ~/.copilot/hooks/skarn.json, ~/.gemini/settings.json,
-~/.grok/hooks/skarn.json) or project\-level ones (./.claude, ./.cursor,
-\&./.codex, ./.github/hooks/skarn.json, ./.gemini, ./.grok/hooks/skarn.json
-relative to the working directory), meant to be committed and shared. The two
-scopes write different command shapes on purpose: user scope bakes this
-binary's absolute path, immune to a GUI host's missing PATH, and project scope
-emits a portable PATH\-guarded command (if command \-v skarn ...; then ...;
-else exit 0; fi) with a literal $HOME log path, so the committed file runs
-unmodified on every teammate's machine and exits 0 where skarn is not
-installed. Gemini and Grok are the two exceptions to that promise, because
-each reads a single command field on every platform: the committed POSIX form
-does not run under the PowerShell a native\-Windows teammate's host uses, the
-hook exits non\-zero, the host treats that as a warning and continues, and
-that machine is unprotected until it wires its own. The same caveat therefore
-applies to a committed .grok/hooks/skarn.json, whose project hooks
-additionally run only once the folder is trusted with /hooks\-trust. Copilot
-honors $COPILOT_HOME as its user\-scope root, and grok honors $GROK_HOME. One
-of: user, project. The default is user.
+~/.grok/hooks/skarn.json, the two Cline hook files in
+~/Documents/Cline/Hooks/, ~/.kiro/hooks/skarn.json and the agent configs in
+~/.kiro/agents/) or project\-level ones (./.claude, ./.cursor, ./.codex,
+\&./.github/hooks/skarn.json, ./.gemini, ./.grok/hooks/skarn.json,
+\&./.clinerules/hooks/, ./.kiro/hooks/skarn.json and the agent configs in
+\&./.kiro/agents/ relative to the working directory), meant to be committed and
+shared. The two scopes write different command shapes on purpose: user scope
+bakes this binary's absolute path, immune to a GUI host's missing PATH, and
+project scope emits a portable PATH\-guarded command (if command \-v skarn
+\&...; then ...; else exit 0; fi) with a literal $HOME log path, so the
+committed file runs unmodified on every teammate's machine and exits 0 where
+skarn is not installed. Gemini and Grok are the two exceptions to that
+promise, because each reads a single command field on every platform: the
+committed POSIX form does not run under the PowerShell a native\-Windows
+teammate's host uses, the hook exits non\-zero, the host treats that as a
+warning and continues, and that machine is unprotected until it wires its own.
+The same caveat therefore applies to a committed .grok/hooks/skarn.json, whose
+project hooks additionally run only once the folder is trusted with
+/hooks\-trust. Cline's project scope writes only the running platform's pair
+(the extensionless files on POSIX, the .ps1 files on Windows), so a committed
+\&.clinerules/hooks/ directory covers teammates on that platform only. The Kiro
+CLI also reads a single command field, so a committed .kiro/hooks/skarn.json
+or agent config carries the same Windows caveat. Copilot honors $COPILOT_HOME
+as its user\-scope root, grok honors $GROK_HOME, and kiro honors $KIRO_HOME
+under Kiro's own fallback rule. One of: user, project. The default is user.
 .TP
 \fB\-\-plugin\fR
 With \-\-scope project, claude only: write the committed plugin requirement
@@ -156,7 +208,9 @@ are never touched.
 .TP
 \fB\-\-print\fR
 Print the final per\-assistant config to stdout and write nothing; the
-paste\-it\-yourself and fleet\-template path.
+paste\-it\-yourself and fleet\-template path. At a terminal, a printed hook
+script has its control bytes shown as ? and is cut at 16 KiB; redirected, it
+is printed byte for byte.
 .TP
 \fB\-\-format\fR \fIfmt\fR
 With \-\-print: json emits one {agent, path, content} envelope per assistant
@@ -242,6 +296,65 @@ second skarn hook file sits beside it, and reads each profile's settings.json
 for disableAllHooks. On macOS and Linux setup and doctor reach a profile only
 through a $COPILOT_HOME that names it. Verified against Copilot app
 `156.0.4314.58`.
+.TP
+\fB~/Documents/Cline/Hooks/\fR
+Cline's shared user hook directory, read by the extension and the CLI.
+Documents is the literal folder joined to HOME; CLINE_DIR does not move it.
+Setup writes only this user directory to avoid duplicate CLI invocations,
+using executable PreToolUse and UserPromptSubmit files on POSIX or
+PreToolUse.ps1 and UserPromptSubmit.ps1 on Windows. Doctor reports each file
+as part of the four peer directories.
+.TP
+\fB~/.cline/hooks/\fR
+Cline's CLI\-only user hook directory, relocated to <CLINE_DIR>/hooks when
+CLINE_DIR is set. Doctor reads it as a peer of the shared user and two
+workspace directories. Setup never writes here, because the CLI also reads
+~/Documents/Cline/Hooks/ and would run duplicate hooks.
+.TP
+\fB.clinerules/hooks/\fR
+Cline's shared workspace hook directory, read by the extension and the CLI.
+Setup writes PreToolUse and UserPromptSubmit here with \-\-scope project, or
+PreToolUse.ps1 and UserPromptSubmit.ps1 on Windows. Doctor reads it as a peer
+of both user directories and .cline/hooks/.
+.TP
+\fB.cline/hooks/\fR
+Cline's CLI\-only workspace hook directory. Doctor reads each file as a peer
+of the other three hook directories; any cancel wins. Setup writes project
+hooks only to .clinerules/hooks/.
+.TP
+\fB~/.kiro/hooks/skarn.json\fR
+The Kiro CLI's user hook file for skarn, a v1 document whose hooks array runs
+skarn guard \-\-agent kiro on PreToolUse and UserPromptSubmit. skarn setup
+\-\-agent kiro writes it whole, and doctor reads it as the setup\-owned half
+of Kiro's user layer. The V3 harness loads every *.json in ~/.kiro/hooks in
+every session, so doctor folds the directory's other files into the same
+layer; the V2 harness never loads a hook file. An entry with enabled set to
+false is skipped by Kiro, so doctor does not count it. $KIRO_HOME moves the
+directory.
+.TP
+\fB.kiro/hooks/skarn.json\fR
+The Kiro CLI's workspace hook file for skarn, written by skarn setup \-\-agent
+kiro \-\-scope project with a PATH\-guarded command and meant to be committed.
+The V3 harness loads it in every session in the workspace; an interactive
+session runs only once the workspace is trusted, and headless runs are not
+gated.
+.TP
+\fB~/.kiro/agents/\fR
+The Kiro CLI's user agent configs. skarn setup \-\-agent kiro merges the guard
+into each one Kiro reads as an agent config: the camelCase hooks object of a
+V2\-format or out\-of\-sync agent, or the camelCase hooks array of an agent
+Kiro upgraded. It skips a V3\-only profile on install and refuses a file that
+is not an agent config. Both harnesses run an agent's hooks only while a
+session selects that agent, so doctor names the agent files that carry a skarn
+hook and states V2 coverage as those agents only. Kiro skips an entry with
+enabled set to false in an upgraded agent's hooks array but runs it in the
+object form, and doctor counts each the way Kiro runs it. $KIRO_HOME moves the
+directory, and doctor then reports it as unverified for the V2 harness.
+.TP
+\fB.kiro/agents/\fR
+The Kiro CLI's workspace agent configs, which skarn setup \-\-agent kiro
+\-\-scope project merges into with a PATH\-guarded command and doctor reads as
+a project layer, under the same rules as ~/.kiro/agents/.
 .SH "SEE ALSO"
 skarn(1)
 .SH COPYRIGHT

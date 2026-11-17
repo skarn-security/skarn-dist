@@ -1,4 +1,4 @@
-.TH "SKARN-BASELINE" "1" "2026-06-23" "skarn 0.36.0" "Skarn Manual"
+.TH "SKARN-BASELINE" "1" "2026-06-23" "skarn 0.37.0" "Skarn Manual"
 .SH NAME
 skarn\-baseline \- Triage into a baseline (audit); accept a false positive
 (accept)
@@ -21,23 +21,34 @@ honors. A true\-positive label also overrides comment suppression, so a
 confirmed leak on a commented line keeps gating. A true positive wins over a
 false positive on the same fingerprint wherever the two meet, in one file or
 across the member files of an org baseline directory, so one member cannot
-silence a leak another member confirmed. A finding that carries a secret is
+silence a leak another member confirmed. A true positive recorded with its
+secret hash also wins over every false positive on the same value, under any
+rule, so that hash is enforcement data. When a confirmed entry's secretSha256
+is not a 64\-character hash, or does not reproduce the fingerprint of an entry
+that names its rule, every scan keeps all confirmations from that baseline and
+honors none of its value\-wide accepts. accept, audit and \-\-baseline\-merge
+refuse such a baseline, and one holding two different hashes for one
+fingerprint, and write nothing. A finding that carries a secret is
 fingerprinted by that secret, so its acceptance follows the secret across
 sessions and machines. A finding with no secret, such as a behavioral
 prompt\-poisoning finding, is fingerprinted by the session it fired in, so
 accepting it silences that rule in that session only and the same rule in any
 other session keeps firing. To accept a finding the guard flagged, use `skarn
-guard accept <fingerprint>`: it takes the fingerprint straight from the
-guard's audit record and defaults to the personal baseline the guard reads. An
-audit's decisions are merged into the file as it stands when the audit ends,
-under the baseline lock, and never downgrade a true positive recorded
-meanwhile; an audit whose every decision was overtaken that way leaves the
-file untouched and counts those decisions as skipped. When the lock cannot be
-taken (a directory, a link, or an unopenable file at <file>.lock), audit
-refuses before it shows the first finding, so no decision is typed and then
-lost. Every baseline write lands through one atomic save that is readable by
-its owner only on macOS and Linux, and a write whose sibling .lock file cannot
-be opened or created is refused with nothing written.
+guard accept <fingerprint>`: it takes the value fingerprint from the guard's
+audit record, which covers every rule that fires on that value, and defaults
+to the personal baseline the guard reads. An audit's decisions are merged into
+the file as it stands when the audit ends, under the baseline lock, and never
+downgrade a true positive recorded meanwhile; an audit whose every decision
+was overtaken that way leaves the file untouched and counts those decisions as
+skipped. When the lock cannot be taken (a directory, a link, or an unopenable
+file at <file>.lock), audit refuses before it shows the first finding, so no
+decision is typed and then lost. Every baseline write lands through one atomic
+save that is readable by its owner only on macOS and Linux, and a write whose
+sibling .lock file cannot be opened or created is refused with nothing
+written. When a detection rule stopped at its regex work limit during the
+audit scan, audit says so: with nothing to triage it reports the scan as
+incomplete instead of saying there is nothing to triage, and with findings it
+says they are a floor.
 .SH OPTIONS
 .TP
 \fB\-\-reason\fR \fItext\fR
@@ -51,7 +62,7 @@ $SKARN_IDENTITY.
 \fB\-\-cli\fR \fIname\fR
 Restrict the audit scan to one assistant's sessions. One of: claude, gemini,
 codex, cursor, copilot, kimi, grok, grokbot, antigravity, opencode, cline,
-copilot\-code.
+copilot\-code, kiro.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict the audit scan to matching projects: a comma\-separated list of names

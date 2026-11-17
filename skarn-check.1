@@ -1,4 +1,4 @@
-.TH "SKARN-CHECK" "1" "2026-06-23" "skarn 0.36.0" "Skarn Manual"
+.TH "SKARN-CHECK" "1" "2026-06-23" "skarn 0.37.0" "Skarn Manual"
 .SH NAME
 skarn\-check \- Scan AI sessions for leaked credentials and attack patterns
 .SH SYNOPSIS
@@ -126,7 +126,7 @@ Restrict the scan to one assistant's sessions. If this machine has no tool by
 that name, skarn exits 6 rather than scanning nothing. A custom tool declared
 in ~/.skarn.json is accepted by its configured name. One of: claude, gemini,
 codex, cursor, copilot, kimi, grok, grokbot, antigravity, opencode, cline,
-copilot\-code.
+copilot\-code, kiro.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict the scan to matching projects: a comma\-separated list of names or
@@ -290,18 +290,32 @@ exhaust its stack; the scan counts each such value in its JSON, SARIF, NDJSON
 and assess outputs, names each session file that holds one, and counts it as a
 coverage gap, so a session whose only credential sits past that depth is never
 reported clean, unless the text the parser builds from the tool input or
-result that holds the value has already reached its size limit. The shortened
-count and then the depth count end the coverage sentence wherever that
-sentence is printed. By default a partial scan still reports, and an empty
-scan still warns on stderr.
+result that holds the value has already reached its size limit. A detection
+rule whose regex search stops at its work limit (the PCRE2 match, depth, heap
+or JIT stack limit) has not checked the rest of that text, while the next rule
+still runs; the scan counts each such search once per session, rule and
+searched text in its JSON, SARIF, NDJSON and assess outputs and in the audit
+record, names each session file where one happened, and counts it as a
+coverage gap, so a session is never reported clean because a rule gave up. A
+search that stopped over a session's own project, project root or working
+directory label leaves that label impossible to mask safely, so that label
+prints as [withheld: regex work limit] on its incidents, attack chains and
+coverage record and in the project list, so does the context of a finding
+drawn from that label, and the session's file path prints as the same marker
+followed by a short hash of the path, which keeps the findings of different
+sessions apart in a baseline. The shortened count, the depth count and then
+the work\-limit count end the coverage sentence wherever that sentence is
+printed. By default a partial scan still reports, and an empty scan still
+warns on stderr.
 .TP
 \fB\-\-baseline\fR \fIpath\fR
 Suppress findings recorded in this baseline, so the scan fails only on new
 ones. A single file is free; a directory unions every .json baseline inside
 it, an org\-shared accepted set, and requires a Pro license. That union leaves
-out any fingerprint a member labelled a true positive. Without this flag skarn
-applies ~/.config/skarn/baseline.json when it exists, for suppression only;
-the \-\-baseline\-create and \-\-baseline\-merge targets stay explicit.
+out any fingerprint a member labelled a true positive, and every value such a
+true positive records its hash for. Without this flag skarn applies
+~/.config/skarn/baseline.json when it exists, for suppression only; the
+\-\-baseline\-create and \-\-baseline\-merge targets stay explicit.
 .TP
 \fB\-\-baseline\-create\fR
 Write the current findings to the \-\-baseline file as the accepted set, then
@@ -478,7 +492,8 @@ in an uncompressed file modified within the last 5 minutes, is a write in
 progress and is exempt), a session held a record with a string value over 8
 MiB that was shortened before parsing and so was scanned without the rest of
 that value, a session held a value nested deeper than 64 levels that was not
-scanned, the assistant compacted a session before the scan so its transcript
+scanned, a detection rule stopped at its regex work limit before the end of
+its text, the assistant compacted a session before the scan so its transcript
 no longer holds the whole conversation, or the run read no sessions at all.
 That verdict is computed BEFORE the report is rendered, so the SARIF
 invocation exit code, the evidence pack and the audit record all carry 6
@@ -488,13 +503,14 @@ anything, so an incomplete scan is never recorded as the accepted set and the
 previous baseline survives. For check \-\-audit\-verify: the audit log exists
 but could not be read, so the hash chain was never examined (an absent log is
 a valid empty chain and exits 0). For vet: the home directory could not be
-resolved (so the configuration was never located at all), or a config file
-that exists was not read \- it could not be read, or it was skipped because it
-is not that assistant's live configuration \- so the configuration was only
-partly seen. For doctor: the home directory could not be resolved, so every
-per\-assistant check would have read an empty machine \- a diagnostic that
-could not be produced is never reported as a healthy one. Fail\-closed \- the
-result is not trustworthy, so it is never reported as clean.
+resolved outside \-\-project\-only (so the configuration was never located at
+all), or a config file that exists was not read \- it could not be read, or it
+was skipped because it is not that assistant's live configuration \- so the
+configuration was only partly seen. For doctor: the home directory could not
+be resolved, so every per\-assistant check would have read an empty machine \-
+a diagnostic that could not be produced is never reported as a healthy one.
+Fail\-closed \- the result is not trustworthy, so it is never reported as
+clean.
 .TP
 \fB7\fR
 No usable license is present \- none was found via SKARN_LICENSE,
@@ -512,7 +528,11 @@ redacted in check's reports, in everything the recall commands print (search,
 recent, messages, stats, cmds, tools, mcps, restore, export), in the ndjson
 stream, the evidence pack, the artifacts written by \-\-drop, serve and
 assess, the baseline files, the mcp tools, the guard, and every serve API
-route that returns session content. No flag lifts the mask.
+route that returns session content. No flag lifts the mask. A detection rule
+that stops at its regex work limit in the masking scan that the recall
+commands, serve and the mcp content tools run before they print has not
+checked the rest of that text, so the request prints no session content and
+names the refusal instead; one such session refuses the whole output.
 .PP
 Two commands transmit anything off the machine, and only when you type them.
 skarn check \-\-update\-rules fetches a signed feed bundle from the subscriber

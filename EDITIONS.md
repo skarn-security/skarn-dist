@@ -1,6 +1,6 @@
 # Skarn editions - the free/paid boundary
 
-Generated from docs/cli-model.toml by docs/build_manpage.py (regenerate with `zig build man`); do not edit by hand. skarn 0.36.0.
+Generated from docs/cli-model.toml by docs/build_manpage.py (regenerate with `zig build man`); do not edit by hand. skarn 0.37.0.
 
 One binary for every tier. The free tier is the full local product, not a trial: the entire detection engine, every output format except the Pro evidence pack, and redaction, under a free license available to anyone who registers - an individual or an organization alike. Paid tiers unlock org capabilities: distributing policy and accepted-findings baselines across a team, compliance evidence, the maintained feed, and real-time enforcement. Pro unlocks them for one developer. Team unlocks the same for 2 to 24 developers and adds seat assignment, invitations and organization management, which the licensing service provides and the binary does not gate, so the Team table below has no rows of its own.
 
@@ -12,7 +12,7 @@ skarn check and the serve security view require a license; the free license is i
 |---|---|
 | skarn assess - the zero-config machine-scan wedge | One command scans every AI session on the machine and prints a friendly risk summary plus an optional shareable redacted report; no flags, no config, no license. Add --dossier to scope a shareable incident dossier to one finding or session. |
 | skarn mcp - the local MCP server | Read-only tools over the operator's own sessions and configuration, answered to the operator's own assistant. Nothing here is gated: the local detection engine is not a paid line, and org distribution and the maintained feed are. |
-| skarn vet - static vetting of the local AI assistant configuration | A read-only, offline pass over the operator's own hooks, MCP servers, permission grants, and installed extensions. The entire local detection engine is free; the paid asset is org distribution and the maintained feed, not the engine. |
+| skarn vet - static vetting of the local AI assistant configuration | A read-only, offline pass over the operator's own hooks, MCP servers, permission grants and rules, and installed extensions. The entire local detection engine is free; the paid asset is org distribution and the maintained feed, not the engine. |
 | skarn check - the full local scan | Every bundled detection rule, behavioral attack-chain correlation, the risk score, decode-then-rescan, canary checks - under the free license, issued at https://getskarn.com/free after a quick email confirmation. The scanner is not crippled. |
 | Output formats text, json, sarif, ndjson | Output formats are not a paid line; CI and SIEM ingest work on the free tier. The one exception is --format evidence, the Pro evidence pack. |
 | Redaction, in every format | Safety is not a tier. |

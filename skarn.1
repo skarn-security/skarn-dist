@@ -1,4 +1,4 @@
-.TH "SKARN" "1" "2026-06-23" "skarn 0.36.0" "Skarn Manual"
+.TH "SKARN" "1" "2026-06-23" "skarn 0.37.0" "Skarn Manual"
 .SH NAME
 skarn \- AI coding session security scanner with built\-in session search
 .SH SYNOPSIS
@@ -36,9 +36,9 @@ It detects leaked credentials and the attack patterns that cause or exploit
 them in the local session transcripts of AI coding assistants (Claude Code,
 Gemini CLI, Antigravity, Codex CLI, Cursor, VS Code Copilot Chat, GitHub
 Copilot CLI, Copilot in Code, Kimi Code CLI, Grok Build, Grok Bot, OpenCode,
-and Cline, plus Claude Code and Cowork transcripts exported from a Claude
-Enterprise organization through the Compliance API), and it lets you search,
-browse, and analyze those sessions.
+Cline, and Kiro CLI, plus Claude Code and Cowork transcripts exported from a
+Claude Enterprise organization through the Compliance API), and it lets you
+search, browse, and analyze those sessions.
 .PP
 Skarn is a single static binary. It scans locally and makes no network
 connection by default; the only features that transmit data off the machine
@@ -204,7 +204,7 @@ Restrict the scan to one assistant's sessions. If this machine has no tool by
 that name, skarn exits 6 rather than scanning nothing. A custom tool declared
 in ~/.skarn.json is accepted by its configured name. One of: claude, gemini,
 codex, cursor, copilot, kimi, grok, grokbot, antigravity, opencode, cline,
-copilot\-code.
+copilot\-code, kiro.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict the scan to matching projects: a comma\-separated list of names or
@@ -368,18 +368,32 @@ exhaust its stack; the scan counts each such value in its JSON, SARIF, NDJSON
 and assess outputs, names each session file that holds one, and counts it as a
 coverage gap, so a session whose only credential sits past that depth is never
 reported clean, unless the text the parser builds from the tool input or
-result that holds the value has already reached its size limit. The shortened
-count and then the depth count end the coverage sentence wherever that
-sentence is printed. By default a partial scan still reports, and an empty
-scan still warns on stderr.
+result that holds the value has already reached its size limit. A detection
+rule whose regex search stops at its work limit (the PCRE2 match, depth, heap
+or JIT stack limit) has not checked the rest of that text, while the next rule
+still runs; the scan counts each such search once per session, rule and
+searched text in its JSON, SARIF, NDJSON and assess outputs and in the audit
+record, names each session file where one happened, and counts it as a
+coverage gap, so a session is never reported clean because a rule gave up. A
+search that stopped over a session's own project, project root or working
+directory label leaves that label impossible to mask safely, so that label
+prints as [withheld: regex work limit] on its incidents, attack chains and
+coverage record and in the project list, so does the context of a finding
+drawn from that label, and the session's file path prints as the same marker
+followed by a short hash of the path, which keeps the findings of different
+sessions apart in a baseline. The shortened count, the depth count and then
+the work\-limit count end the coverage sentence wherever that sentence is
+printed. By default a partial scan still reports, and an empty scan still
+warns on stderr.
 .TP
 \fB\-\-baseline\fR \fIpath\fR
 Suppress findings recorded in this baseline, so the scan fails only on new
 ones. A single file is free; a directory unions every .json baseline inside
 it, an org\-shared accepted set, and requires a Pro license. That union leaves
-out any fingerprint a member labelled a true positive. Without this flag skarn
-applies ~/.config/skarn/baseline.json when it exists, for suppression only;
-the \-\-baseline\-create and \-\-baseline\-merge targets stay explicit.
+out any fingerprint a member labelled a true positive, and every value such a
+true positive records its hash for. Without this flag skarn applies
+~/.config/skarn/baseline.json when it exists, for suppression only; the
+\-\-baseline\-create and \-\-baseline\-merge targets stay explicit.
 .TP
 \fB\-\-baseline\-create\fR
 Write the current findings to the \-\-baseline file as the accepted set, then
@@ -552,7 +566,7 @@ Restrict the scan to one assistant's sessions. If this machine has no tool by
 that name, skarn exits 6 rather than scanning nothing. A custom tool declared
 in ~/.skarn.json is accepted by its configured name. One of: claude, gemini,
 codex, cursor, copilot, kimi, grok, grokbot, antigravity, opencode, cline,
-copilot\-code.
+copilot\-code, kiro.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict the scan to matching projects: a comma\-separated list of names or
@@ -606,8 +620,19 @@ See \fBskarn\-vet\fR(1).
 .TP
 \fB\-\-format\fR \fIfmt\fR
 Output format. json and sarif carry the same rule ids, severities, config
-paths, and locators as the text list. One of: text, json, sarif. The default
-is text.
+paths, and locators as the text list. Each JSON finding and each SARIF
+result's properties also carry project: the absolute main checkout path,
+otherwise the git top, otherwise the starting directory, scrubbed and masked
+like configPath; a home, system, host\-home or profile finding carries an
+empty string. When a file belongs to both the home and project layers, the
+home visit wins unless you use \-\-project\-only. JSON includes projectsVetted
+and projectsSkipped at the top level, and SARIF includes them in the run
+properties. projectsVetted counts distinct project roots, so multiple recorded
+paths in one repository count as one project; projectsSkipped counts recorded
+paths that are not existing absolute directories. The default and
+\-\-project\-only scopes report 1 and 0. Under \-\-all\-projects, text adds
+one summary line with both counts. One of: text, json, sarif. The default is
+text.
 .TP
 \fB\-\-fail\-on\-severity\fR \fIlevel\fR
 Exit 1 if any finding is at or above this severity. Without it, vet always
@@ -618,7 +643,8 @@ Fail closed with exit 6 when a config file that exists was not read: it could
 not be read, or it was skipped because it is not that assistant's live
 configuration. A partial view of the configuration is never reported as clean.
 Implied by \-\-fail\-on\-severity. A home directory that cannot be resolved at
-all exits 6 regardless of this flag, since nothing was examined.
+all exits 6 regardless of this flag, except under \-\-project\-only, which
+reads no home file.
 .TP
 \fB\-\-offline\fR
 Disable all network access. Vet never makes a network call; this is the
@@ -626,6 +652,25 @@ belt\-and\-suspenders guarantee.
 .TP
 \fB\-\-no\-color\fR
 Disable colored output.
+.TP
+\fB\-\-all\-projects\fR
+Add the projects Claude Code records as projects keys in ~/.claude.json and in
+the .claude.json of each config directory named by CLAUDE_CONFIG_DIR or
+SKARN_CLAUDE_DIRS. Vet reads only the projects keys from those declared
+directories' state files and vets none of their other content. Skarn always
+vets the working directory's own project too, so projectsVetted is at least 1.
+Each project includes its starting directory, git top and main checkout when
+present. A recorded path that is not an existing absolute directory counts as
+skipped; a refused key is a coverage gap. Vet resolves at most 1024 distinct
+keys in sorted order across all state files; keys past that budget produce one
+ProjectBudgetExceeded coverage gap. You cannot combine \-\-all\-projects with
+\-\-project\-only.
+.TP
+\fB\-\-project\-only\fR
+Read project files only, with no home, system, host\-home or Copilot in Code
+profile file. Vet needs no home directory in this scope and still resolves the
+git top and main checkout from the working directory. You cannot combine
+\-\-project\-only with \-\-all\-projects.
 .SS "Mcp options"
 See \fBskarn\-mcp\fR(1).
 .TP
@@ -638,7 +683,11 @@ leaves the machine through the connected MCP client and reaches the model
 provider. The search_sessions response carries no echo of the query or of the
 project filter, and its skipped count names how many sessions were left out
 because their file changed on disk while it was being read; those sessions
-contribute no row rather than being masked from stale bytes.
+contribute no row rather than being masked from stale bytes. When a detection
+rule stops at its regex work limit in the masking scan of a session the
+response would include, either tool returns the redaction error and no
+transcript content, because a value the rule did not finish checking could
+otherwise be returned unmasked.
 .SS "Baseline options"
 See \fBskarn\-baseline\fR(1).
 .TP
@@ -653,7 +702,7 @@ $SKARN_IDENTITY.
 \fB\-\-cli\fR \fIname\fR
 Restrict the audit scan to one assistant's sessions. One of: claude, gemini,
 codex, cursor, copilot, kimi, grok, grokbot, antigravity, opencode, cline,
-copilot\-code.
+copilot\-code, kiro.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict the audit scan to matching projects: a comma\-separated list of names
@@ -700,8 +749,10 @@ guard gives an event it cannot fully classify (unparseable, oversized, a
 repeated key, or a tool input nested past the flatten bound) into a deny.
 Without it that event asks in enforce on every host, degraded to the host's
 deny where it has no ask channel; a scan\-infrastructure failure (unreadable
-rules) is unchanged by this flag on Claude, which asks, and fails closed only
-with it on every other host.
+rules) is unchanged by this flag on Claude and the sdk host, which ask, and
+fails closed only with it on every other host. On the sdk host the guard scans
+every tool kind, read included, without this flag, so \-\-strict changes only
+the verdict an unclassifiable call gets there.
 .TP
 \fB\-\-agent\fR \fIname\fR
 Hook host. By default, auto\-detect from the event shape. Pass codex for Codex
@@ -713,17 +764,28 @@ pin is load\-bearing rather than uniform policy: a host embedding kimi's older
 hook engine sends no client_type, and its Claude\-shaped prompt event then
 fails open under the Claude adapter. On Cline the shipped executables pin
 \-\-agent cline all the same, because a hook file copied between machines and
-forks carries nothing else that names the host. Grok Build is the one host
-that overrides an explicit pin: an event delivered by grok's own hook runner
-is scanned by the grok adapter even where the invoking config pins another
-host, because grok runs Claude\-config and Cursor\-config hooks with its own
-payload dialect. With \-\-self\-test, all (the default) tests the claude,
-cursor, codex, copilot, gemini, grok, antigravity, kimi, and cline adapters,
-copilot on both its CLI and VS Code dialects. With report, this option
-restricts the summary to one assistant, repeatable or comma\-separated, and
-copilot\-code selects the records the copilot adapter labels when a Copilot in
-Code hook runs with a COPILOT_HOME that names a Code profile. One of: claude,
-cursor, codex, copilot, gemini, grok, antigravity, kimi, cline, all.
+forks carries nothing else that names the host. The Kiro CLI never
+auto\-detects: a V3 tool event has the shape of a Claude Code or Copilot CLI
+event and a V2 tool event that of a Copilot CLI one, so pass kiro, as every
+shipped Kiro entry does; without the pin a Kiro event reaches an adapter that
+leaves it unscanned or answers in a shape Kiro ignores, and in enforce an
+unpinned V2 tool event is refused as unparseable, which blocks every tool
+call. Grok Build is the one host that overrides an explicit pin: an event
+delivered by grok's own hook runner is scanned by the grok adapter even where
+the invoking config pins another host, because grok runs Claude\-config and
+Cursor\-config hooks with its own payload dialect. With \-\-self\-test, all
+(the default) tests the claude, cursor, codex, copilot, gemini, grok,
+antigravity, kimi, cline, and kiro adapters, copilot on both its CLI and VS
+Code dialects and kiro on both its V2 and V3 harnesses; the self\-test also
+tests the sdk adapter. With report, this option restricts the summary to one
+assistant, repeatable or comma\-separated, and copilot\-code selects the
+records the copilot adapter labels when a Copilot in Code hook runs with a
+COPILOT_HOME that names a Code profile. Use sdk for a server\-side agent
+runtime that calls the guard through Skarn's own versioned envelope rather
+than a vendor hook payload; an envelope with an integer v and a string runtime
+auto\-detects after every vendor tell, and your runtime client pins \-\-agent
+sdk anyway. One of: claude, cursor, codex, copilot, gemini, grok, antigravity,
+kimi, cline, all, sdk, kiro.
 .TP
 \fB\-\-event\fR \fIname\fR
 The hook event this config entry fires on, for a host whose payload does not
@@ -778,7 +840,9 @@ and reads no host config, so it never proves that a host is calling the hook:
 skarn doctor reads the host configs for that, and on a host doctor does not
 cover (kimi today) the only proof is a flagged action driven through the host
 itself. Exit 0 when every adapter passes, 1 otherwise; works unlicensed, with
-audit semantics.
+audit semantics. The sdk adapter gets the benign, credential, encoded, deep
+and output fixtures in its own envelope. Its output fixture is a post_tool_use
+whose result string carries the fake keys.
 .TP
 \fB\-\-log\fR \fIpath\fR
 On the hook invocation, `skarn guard \-\-log <path|none>` names where this
@@ -794,7 +858,16 @@ set, otherwise the log skarn setup wires for each assistant
 it when a log already exists there). A log that does not exist is named in the
 output with the command that wires it, never silently counted as zero, and a
 configured path the guard refuses is named as refused rather than shown as
-empty.
+empty. A record the sdk adapter writes also carries the envelope runtime label
+and, when the envelope names one, the identity it asserts, which the guard
+does not authenticate. A runtime label longer than 64 bytes or outside
+[A\-Za\-z0\-9._\-], an identity longer than 128 bytes or outside
+[A\-Za\-z0\-9._@+\-], and either one shaped like a credential, read as one by
+the detection rules, whose own scan stopped a detection rule at its regex work
+limit, or containing a value the call's own scan matched is recorded as
+withheld; an email address in identity is kept. With report and no \-\-log,
+the sdk log (guard\-sdk\-audit.jsonl under the same cache) is listed only when
+it exists or when \-\-agent sdk names it, because no laptop host writes it.
 .TP
 \fB\-\-window\fR \fIspan\fR
 With report: how far back to summarize, as <N>d or all. The default is 7d.
@@ -813,8 +886,8 @@ $XDG_CONFIG_HOME), created on first use. `skarn baseline accept` always names
 its file instead, because an accept the guard does not read would not stop the
 block. Always a file, never a directory: the org\-union form is not reachable
 from the guard. Accepting a fingerprint already recorded as a confirmed true
-positive is refused, so a fingerprint\-only accept can never re\-silence a
-real leak.
+positive, or a value fingerprint whose value a true positive confirms, is
+refused, so a fingerprint\-only accept can never re\-silence a real leak.
 .TP
 \fB\-\-reason\fR \fItext\fR
 With accept: why this finding is a false positive, recorded in the baseline
@@ -832,8 +905,14 @@ assistant is detected when its config directory exists or its CLI is on PATH,
 and Copilot in Code when one of its profiles exists); naming an assistant
 explicitly also targets it when undetected, except copilot\-code, which setup
 refuses when it finds no profile and names where it looked. all targets every
-assistant, and copilot\-code only when a profile exists at user scope. One of:
-claude, cursor, codex, copilot, gemini, grok, all, copilot\-code.
+assistant, with copilot\-code only when a profile exists at user scope and
+cline only when detected. Cline is detected when ~/.cline (or CLINE_DIR), the
+data directory (CLINE_DATA_DIR, else CLINE_DIR/data, else ~/.cline/data), or
+~/Documents/Cline is a directory, or cline is on PATH. An explicit \-\-agent
+cline writes regardless. Kiro is detected when ~/.kiro/agents (or
+$KIRO_HOME/agents) is a directory or kiro\-cli is on PATH; ~/.kiro alone does
+not count, because the Kiro IDE may create it. One of: claude, cursor, codex,
+copilot, gemini, grok, all, copilot\-code, cline, kiro.
 .TP
 \fB\-\-mode\fR \fImode\fR
 Guard mode written into the hook commands. Audit records would\-be verdicts to
@@ -877,29 +956,43 @@ per hook; the PowerShell form of a Gemini or Grok hook keeps backslashes. An
 entry an earlier setup wrote with backslashes on that arm is replaced whole on
 the next run when its Windows arm runs skarn. At project scope the default is
 the bare name skarn, and a value containing a path separator is refused: a
-committed config must resolve skarn from PATH on every machine. The default is
-this binary's absolute path.
+committed config must resolve skarn from PATH on every machine. A Cline hook
+takes the bare name skarn or an absolute path to an executable named skarn
+(skarn.exe on Windows), and on Windows a path that holds [ is refused, because
+the Windows PowerShell call operator reads it as wildcard syntax and the hook
+never starts skarn. A Windows Cline hook whose command or log path holds a
+non\-ASCII character starts with a UTF\-8 byte\-order mark, because Windows
+PowerShell 5.1 reads a script without one in the ANSI code page and misreads
+the path. The default is this binary's absolute path.
 .TP
 \fB\-\-scope\fR \fIscope\fR
 Write user\-level configs (~/.claude/settings.json, ~/.cursor/hooks.json,
 ~/.codex/hooks.json, ~/.copilot/hooks/skarn.json, ~/.gemini/settings.json,
-~/.grok/hooks/skarn.json) or project\-level ones (./.claude, ./.cursor,
-\&./.codex, ./.github/hooks/skarn.json, ./.gemini, ./.grok/hooks/skarn.json
-relative to the working directory), meant to be committed and shared. The two
-scopes write different command shapes on purpose: user scope bakes this
-binary's absolute path, immune to a GUI host's missing PATH, and project scope
-emits a portable PATH\-guarded command (if command \-v skarn ...; then ...;
-else exit 0; fi) with a literal $HOME log path, so the committed file runs
-unmodified on every teammate's machine and exits 0 where skarn is not
-installed. Gemini and Grok are the two exceptions to that promise, because
-each reads a single command field on every platform: the committed POSIX form
-does not run under the PowerShell a native\-Windows teammate's host uses, the
-hook exits non\-zero, the host treats that as a warning and continues, and
-that machine is unprotected until it wires its own. The same caveat therefore
-applies to a committed .grok/hooks/skarn.json, whose project hooks
-additionally run only once the folder is trusted with /hooks\-trust. Copilot
-honors $COPILOT_HOME as its user\-scope root, and grok honors $GROK_HOME. One
-of: user, project. The default is user.
+~/.grok/hooks/skarn.json, the two Cline hook files in
+~/Documents/Cline/Hooks/, ~/.kiro/hooks/skarn.json and the agent configs in
+~/.kiro/agents/) or project\-level ones (./.claude, ./.cursor, ./.codex,
+\&./.github/hooks/skarn.json, ./.gemini, ./.grok/hooks/skarn.json,
+\&./.clinerules/hooks/, ./.kiro/hooks/skarn.json and the agent configs in
+\&./.kiro/agents/ relative to the working directory), meant to be committed and
+shared. The two scopes write different command shapes on purpose: user scope
+bakes this binary's absolute path, immune to a GUI host's missing PATH, and
+project scope emits a portable PATH\-guarded command (if command \-v skarn
+\&...; then ...; else exit 0; fi) with a literal $HOME log path, so the
+committed file runs unmodified on every teammate's machine and exits 0 where
+skarn is not installed. Gemini and Grok are the two exceptions to that
+promise, because each reads a single command field on every platform: the
+committed POSIX form does not run under the PowerShell a native\-Windows
+teammate's host uses, the hook exits non\-zero, the host treats that as a
+warning and continues, and that machine is unprotected until it wires its own.
+The same caveat therefore applies to a committed .grok/hooks/skarn.json, whose
+project hooks additionally run only once the folder is trusted with
+/hooks\-trust. Cline's project scope writes only the running platform's pair
+(the extensionless files on POSIX, the .ps1 files on Windows), so a committed
+\&.clinerules/hooks/ directory covers teammates on that platform only. The Kiro
+CLI also reads a single command field, so a committed .kiro/hooks/skarn.json
+or agent config carries the same Windows caveat. Copilot honors $COPILOT_HOME
+as its user\-scope root, grok honors $GROK_HOME, and kiro honors $KIRO_HOME
+under Kiro's own fallback rule. One of: user, project. The default is user.
 .TP
 \fB\-\-plugin\fR
 With \-\-scope project, claude only: write the committed plugin requirement
@@ -916,7 +1009,9 @@ are never touched.
 .TP
 \fB\-\-print\fR
 Print the final per\-assistant config to stdout and write nothing; the
-paste\-it\-yourself and fleet\-template path.
+paste\-it\-yourself and fleet\-template path. At a terminal, a printed hook
+script has its control bytes shown as ? and is cut at 16 KiB; redirected, it
+is printed byte for byte.
 .TP
 \fB\-\-format\fR \fIfmt\fR
 With \-\-print: json emits one {agent, path, content} envelope per assistant
@@ -1021,7 +1116,8 @@ See \fBskarn\-recent\fR(1).
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot, kimi, grok, grokbot, antigravity, opencode, cline, copilot\-code.
+copilot, kimi, grok, grokbot, antigravity, opencode, cline, copilot\-code,
+kiro.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths,
@@ -1087,7 +1183,8 @@ See \fBskarn\-messages\fR(1).
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot, kimi, grok, grokbot, antigravity, opencode, cline, copilot\-code.
+copilot, kimi, grok, grokbot, antigravity, opencode, cline, copilot\-code,
+kiro.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths,
@@ -1152,7 +1249,8 @@ See \fBskarn\-search\fR(1).
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot, kimi, grok, grokbot, antigravity, opencode, cline, copilot\-code.
+copilot, kimi, grok, grokbot, antigravity, opencode, cline, copilot\-code,
+kiro.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths,
@@ -1253,7 +1351,8 @@ See \fBskarn\-stats\fR(1).
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot, kimi, grok, grokbot, antigravity, opencode, cline, copilot\-code.
+copilot, kimi, grok, grokbot, antigravity, opencode, cline, copilot\-code,
+kiro.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths,
@@ -1336,7 +1435,8 @@ See \fBskarn\-export\fR(1).
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot, kimi, grok, grokbot, antigravity, opencode, cline, copilot\-code.
+copilot, kimi, grok, grokbot, antigravity, opencode, cline, copilot\-code,
+kiro.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths,
@@ -1412,7 +1512,8 @@ See \fBskarn\-cmds\fR(1).
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot, kimi, grok, grokbot, antigravity, opencode, cline, copilot\-code.
+copilot, kimi, grok, grokbot, antigravity, opencode, cline, copilot\-code,
+kiro.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths,
@@ -1484,7 +1585,8 @@ See \fBskarn\-mcps\fR(1).
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot, kimi, grok, grokbot, antigravity, opencode, cline, copilot\-code.
+copilot, kimi, grok, grokbot, antigravity, opencode, cline, copilot\-code,
+kiro.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths,
@@ -1556,7 +1658,8 @@ See \fBskarn\-tools\fR(1).
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot, kimi, grok, grokbot, antigravity, opencode, cline, copilot\-code.
+copilot, kimi, grok, grokbot, antigravity, opencode, cline, copilot\-code,
+kiro.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths,
@@ -1762,7 +1865,8 @@ in an uncompressed file modified within the last 5 minutes, is a write in
 progress and is exempt), a session held a record with a string value over 8
 MiB that was shortened before parsing and so was scanned without the rest of
 that value, a session held a value nested deeper than 64 levels that was not
-scanned, the assistant compacted a session before the scan so its transcript
+scanned, a detection rule stopped at its regex work limit before the end of
+its text, the assistant compacted a session before the scan so its transcript
 no longer holds the whole conversation, or the run read no sessions at all.
 That verdict is computed BEFORE the report is rendered, so the SARIF
 invocation exit code, the evidence pack and the audit record all carry 6
@@ -1772,13 +1876,14 @@ anything, so an incomplete scan is never recorded as the accepted set and the
 previous baseline survives. For check \-\-audit\-verify: the audit log exists
 but could not be read, so the hash chain was never examined (an absent log is
 a valid empty chain and exits 0). For vet: the home directory could not be
-resolved (so the configuration was never located at all), or a config file
-that exists was not read \- it could not be read, or it was skipped because it
-is not that assistant's live configuration \- so the configuration was only
-partly seen. For doctor: the home directory could not be resolved, so every
-per\-assistant check would have read an empty machine \- a diagnostic that
-could not be produced is never reported as a healthy one. Fail\-closed \- the
-result is not trustworthy, so it is never reported as clean.
+resolved outside \-\-project\-only (so the configuration was never located at
+all), or a config file that exists was not read \- it could not be read, or it
+was skipped because it is not that assistant's live configuration \- so the
+configuration was only partly seen. For doctor: the home directory could not
+be resolved, so every per\-assistant check would have read an empty machine \-
+a diagnostic that could not be produced is never reported as a healthy one.
+Fail\-closed \- the result is not trustworthy, so it is never reported as
+clean.
 .TP
 \fB7\fR
 No usable license is present \- none was found via SKARN_LICENSE,
@@ -1800,7 +1905,9 @@ identical for any value; only latency changes.
 \fBSKARN_CLAUDE_DIRS\fR
 Colon\-separated list of additional Claude Code config directories to scan
 beyond the default ~/.claude. Each entry is the dir that contains projects/.
-Roots are de\-duplicated.
+Roots are de\-duplicated. skarn vet \-\-all\-projects also reads the projects
+keys of each entry's .claude.json, and none of its other content. The colon
+separator cannot carry a Windows drive path, for either session scans or vet.
 .TP
 \fBSKARN_TZ_OFFSET\fR
 Default timezone offset in hours applied when grouping recall and stats output
@@ -1821,9 +1928,9 @@ one it names. No other command reads it.
 .TP
 \fBSKARN_GUARD_LOG\fR
 Path to append a redacted JSONL verdict log for guard (opt\-in; off when
-unset). One record per flagged call, carrying the fingerprint that `skarn
-guard accept` takes; clean calls, and calls whose every finding was already
-accepted, are not logged.
+unset). One record per flagged call, carrying the rule fingerprint and the
+value fingerprint that `skarn guard accept` takes; clean calls, and calls
+whose every finding was already accepted, are not logged.
 .TP
 \fBGEMINI_CLI_SYSTEM_SETTINGS_PATH\fR
 Gemini CLI's own override for the path of its managed system settings file.
@@ -1873,7 +1980,9 @@ Path to a file containing a license token.
 .TP
 \fBCLAUDE_CONFIG_DIR\fR
 A Claude Code config directory visible in Skarn's environment; folded into the
-claude source like an SKARN_CLAUDE_DIRS entry.
+claude source like an SKARN_CLAUDE_DIRS entry. skarn vet \-\-all\-projects
+also reads the projects keys of that directory's .claude.json, and none of its
+other content.
 .TP
 \fBCOPILOT_HOME\fR
 GitHub Copilot CLI config directory visible in Skarn's environment. The CLI
@@ -2036,6 +2145,33 @@ never authenticates it, and a value that contains @ is written as ****.
 The Windows host name, written as host.name on every check ndjson line and
 carried by the \-\-drop artifact. On macOS and Linux the host name comes from
 the operating system instead.
+.TP
+\fBKIRO_HOME\fR
+Kiro CLI's home directory. When it is set to an absolute path other than a
+filesystem root, the home directory or an ancestor of the home directory,
+skarn also reads $KIRO_HOME/sessions/cli for V2 harness sessions and
+$KIRO_HOME/sessions for V3 sessions. Skarn always reads the ~/.kiro defaults.
+A probe with Kiro CLI 3.3.0 on macOS measured both paths. The scan reads
+nothing else under KIRO_HOME. skarn setup \-\-agent kiro writes
+$KIRO_HOME/hooks/skarn.json and merges into $KIRO_HOME/agents/*.json under the
+same rule, and doctor reads both; doctor names the agents directory under a
+set KIRO_HOME as unverified for the V2 harness, which was not measured reading
+agent configs there. The guard itself never reads KIRO_HOME.
+.TP
+\fBCLINE_DIR\fR
+Cline root in place of ~/.cline. Session discovery uses its data directory
+unless CLINE_DATA_DIR selects another. Setup uses this directory for Cline
+detection but still writes user hooks only to ~/Documents/Cline/Hooks/, with
+Documents joined literally to HOME. Doctor reads the CLI's SDK\-only hooks
+directory under this root and its data/globalState.json unless CLINE_DATA_DIR
+selects another data directory.
+.TP
+\fBCLINE_DATA_DIR\fR
+Cline data directory in place of CLINE_DIR/data or ~/.cline/data, for session
+discovery and the globalState.json whose hooksEnabled setting doctor reads.
+That setting silences only the extension, not the CLI. Setup uses this
+directory for Cline detection; it does not move the user hook destination
+~/Documents/Cline/Hooks/.
 .SH FILES
 .TP
 \fB/Library/Application Support/ClaudeCode/managed\-settings.json, /etc/claude\-code/managed\-settings.json, C:\eProgram Files\eClaudeCode\emanaged\-settings.json\fR
@@ -2533,6 +2669,115 @@ See \fBskarn\-vet\fR(1).
 .TP
 \fB./.github/hooks/\fR
 See \fBskarn\-vet\fR(1).
+.TP
+\fB~/.cursor/projects/<workspace>/terminals/<id>.txt, ~/.cursor/projects/<workspace>/agent\-tools/<id>.txt\fR
+Cursor agent terminal and tool output files. Cursor writes one text file under
+terminals/ for each background command its agent runs: a header block that
+names the command, its working directory and its start time, then the
+command's output, then a footer with the exit code. The header holds the
+command as one quoted string, with each line break of a multi\-line command
+written as \en. The Cursor cloud agent also saves tool outputs under
+agent\-tools/. All of a workspace's files are one cursor session, ordered by
+start time, whose id is 16 hex digits followed by \-cursor\-agent\-outputs;
+text listings print the first eight characters of that id, which come from the
+workspace hash, and \-\-json prints the full id that \-\-session takes. The
+scan behind skarn check and skarn assess reads each file as its own unit under
+that session id and counts the workspace as one session: the header is scanned
+as tool input exactly as Cursor wrote it, the decoded command as the tool
+call, and the rest of the file as tool result; a finding names the file and,
+for a matched value, the value's line in that file, which for a value inside
+the command is the header's command line. It reads up to 512 files per
+workspace, 16 MiB per file and 64 MiB per workspace, newest first; a file over
+a size cap, a file beyond the first 512, and a file or folder that cannot be
+read each count as a record that could not be read, a coverage gap. Links and
+entries that are not regular files are skipped. The files read are always the
+regular .txt files directly under terminals/ and agent\-tools/ of each
+workspace in ~/.cursor/projects: a sessions_path of null for cursor in
+~/.skarn.json turns the source off, and no other sessions_path or session_glob
+given to cursor or to a based_on: cursor clone changes which files are read. A
+value that one file exposes and another file echoes back is reported as a
+cross\-session chain between the two files; a value that one command prints
+and another command only sends, plainly or encoded into a URL, is reported as
+two findings with no chain. The recall commands show each command as a tool
+call and its output as a tool result, masked like every other session text:
+recent lists the session, messages prints the calls and results in start
+order, search reaches each command and the first 1 MiB of each output, tools
+lists every call, and cmds lists the decoded command of every terminal file
+that names one; a command value that is not a well\-formed quoted string is
+shown as written. Verified against desktop Cursor 3.30.14 on macOS for
+terminals/, multi\-line commands included; the agent\-tools/ layout comes from
+a Cursor cloud agent, and the Windows and Linux layouts are unverified.
+.TP
+\fB~/Library/Application Support/kiro\-cli/data.sqlite3, ${LOCALAPPDATA}/kiro\-cli/data.sqlite3, ~/.local/share/kiro\-cli/data.sqlite3\fR
+Kiro CLI conversation database on macOS, Windows and Linux, respectively. On
+Linux, skarn also reads $XDG_DATA_HOME/kiro\-cli/data.sqlite3. Each
+conversations_v2 or legacy conversations row is one session; its key supplies
+the working directory. The auth_kv and state tables hold sign\-in credentials
+and are never read, nor is history. A database that cannot be opened or read
+makes the scan incomplete. The Windows path has been verified only under
+emulation. cmds, mcps and tools list this store's calls, with MCP server names
+from the conversation's tool declarations.
+.TP
+\fB~/Library/Application Support/amazon\-q/data.sqlite3, ${LOCALAPPDATA}/amazon\-q/data.sqlite3, ~/.local/share/amazon\-q/data.sqlite3\fR
+Amazon Q Developer CLI conversation database on macOS, Windows and Linux,
+respectively. On Linux, skarn also reads
+$XDG_DATA_HOME/amazon\-q/data.sqlite3. This frozen store remains after
+conversion to Kiro. A conversation converted into the kiro\-cli database
+during the Amazon Q to Kiro conversion is listed once per database under the
+same session id. Skarn reads the two files independently and never merges
+them. Each legacy conversations row is one session; its key supplies the
+working directory. Skarn never reads auth_kv, state or history. A database
+that cannot be opened or read makes the scan incomplete. The Windows path has
+been verified only under emulation. cmds, mcps and tools list this store's
+calls, with MCP server names from the conversation's tool declarations.
+.TP
+\fB~/.kiro/sessions/cli/<uuid>.json, $KIRO_HOME/sessions/cli/<uuid>.json\fR
+Kiro CLI V2 harness sessions: metadata in <uuid>.json and the transcript in
+<uuid>.jsonl beside it. Skarn never reads sess_<uuid>.history. Measured only
+on macOS with Kiro CLI 3.3.0; Linux and Windows are assumed to use the same
+home\-relative path. Resuming a V2 session in V3 creates a V3 copy, so the
+conversation lists twice under two ids. Cloud sessions are not local and skarn
+does not read them. cmds, mcps and tools list this store's calls, with MCP
+server names from the result's tool kind.
+.TP
+\fB~/.kiro/sessions/<key>/sess_<uuid>/, $KIRO_HOME/sessions/<key>/sess_<uuid>/\fR
+Kiro CLI V3 session directories: skarn reads session.json and messages.jsonl.
+It never reads .lock, .index/, session\-index/, session\-leases/ or
+workspace\-roots/. A session stopped before its first message lists as empty.
+Measured only on macOS with Kiro CLI 3.3.0; Linux and Windows are assumed to
+use the same home\-relative path. Resuming a V2 session in V3 creates a V3
+copy, so the conversation lists twice under two ids. Cloud sessions are not
+local and skarn does not read them. The reader cannot distinguish a CLI
+session from a Kiro IDE session if the IDE writes here. cmds, mcps and tools
+list this store's calls, with MCP server names from the tool_call id
+tool::<server>::<tool>.
+.TP
+\fB~/Documents/Cline/Hooks/\fR
+See \fBskarn\-guard\fR(1), \fBskarn\-setup\fR(1), \fBskarn\-doctor\fR(1).
+.TP
+\fB~/.cline/hooks/\fR
+See \fBskarn\-guard\fR(1), \fBskarn\-setup\fR(1), \fBskarn\-doctor\fR(1).
+.TP
+\fB.clinerules/hooks/\fR
+See \fBskarn\-guard\fR(1), \fBskarn\-setup\fR(1), \fBskarn\-doctor\fR(1).
+.TP
+\fB.cline/hooks/\fR
+See \fBskarn\-guard\fR(1), \fBskarn\-setup\fR(1), \fBskarn\-doctor\fR(1).
+.TP
+\fB~/.kiro/hooks/skarn.json\fR
+See \fBskarn\-setup\fR(1), \fBskarn\-doctor\fR(1).
+.TP
+\fB.kiro/hooks/skarn.json\fR
+See \fBskarn\-setup\fR(1), \fBskarn\-doctor\fR(1).
+.TP
+\fB~/.kiro/agents/\fR
+See \fBskarn\-setup\fR(1), \fBskarn\-doctor\fR(1).
+.TP
+\fB.kiro/agents/\fR
+See \fBskarn\-setup\fR(1), \fBskarn\-doctor\fR(1).
+.TP
+\fB.amazonq/cli\-agents/\fR
+See \fBskarn\-doctor\fR(1).
 .SH EXAMPLES
 Show which license this machine is using, where it came from, and when it
 expires.
@@ -2599,8 +2844,8 @@ skarn assess \-o report.html
 .RE
 .PP
 Statically vet this machine's AI assistant configuration \- hooks, MCP
-servers, permission grants, plugins and skills \- and list the risky patterns
-found. Read\-only, offline, no license.
+servers, permission grants and rules, plugins and skills \- and list the risky
+patterns found. Read\-only, offline, no license.
 .RS 4
 .EX
 skarn vet
@@ -2678,9 +2923,9 @@ skarn guard report \-\-format json
 .RE
 .PP
 Accept a finding the guard flagged (the fingerprint printed under the deny in
-guard report) as a false positive, so the identical call stops being blocked.
-Writes the personal baseline the guard reads; a real leak is never accepted
-this way.
+guard report) as a false positive. The printed fingerprint names the value, so
+every rule that fires on that value stops blocking it. Writes the personal
+baseline the guard reads; a real leak is never accepted this way.
 .RS 4
 .EX
 skarn guard accept 7d343e3a105ae026589b3371d565a4ad2943dd5ba5f81a19c7500b2ab4dbb1f0 \-\-reason 'internal test credential'
@@ -2782,13 +3027,34 @@ loop.
 skarn baseline accept .skarn\-baseline.json 7d343e3a105ae026589b3371d565a4ad2943dd5ba5f81a19c7500b2ab4dbb1f0 \-\-reason 'internal test credential'
 .EE
 .RE
+.PP
+Vet project configuration at the working directory, the git top and the main
+checkout, without reading home, system, host\-home or profile files.
+.RS 4
+.EX
+skarn vet \-\-project\-only
+.EE
+.RE
+.PP
+Add every project Claude Code records in the default and declared config
+directories' .claude.json files and print the masked JSON findings with
+project counts.
+.RS 4
+.EX
+skarn vet \-\-all\-projects \-\-format json
+.EE
+.RE
 .SH SECURITY
 Skarn scans locally and makes no network connection by default. Secrets are
 redacted in check's reports, in everything the recall commands print (search,
 recent, messages, stats, cmds, tools, mcps, restore, export), in the ndjson
 stream, the evidence pack, the artifacts written by \-\-drop, serve and
 assess, the baseline files, the mcp tools, the guard, and every serve API
-route that returns session content. No flag lifts the mask.
+route that returns session content. No flag lifts the mask. A detection rule
+that stops at its regex work limit in the masking scan that the recall
+commands, serve and the mcp content tools run before they print has not
+checked the rest of that text, so the request prints no session content and
+names the refusal instead; one such session refuses the whole output.
 .PP
 Two commands transmit anything off the machine, and only when you type them.
 skarn check \-\-update\-rules fetches a signed feed bundle from the subscriber

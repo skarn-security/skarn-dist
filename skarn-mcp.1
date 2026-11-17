@@ -1,4 +1,4 @@
-.TH "SKARN-MCP" "1" "2026-06-23" "skarn 0.36.0" "Skarn Manual"
+.TH "SKARN-MCP" "1" "2026-06-23" "skarn 0.37.0" "Skarn Manual"
 .SH NAME
 skarn\-mcp \- Local stdio MCP server: read\-only, redacted scan and config
 tools
@@ -74,14 +74,20 @@ deliberately planted in a session id or a directory name reaches the client
 verbatim. A Claude Code store also encodes the project directory into its
 transcript file name, so the returned session_file carries that directory in
 encoded form. Every other Skarn surface passes those three through the same
-way. The user id and workspace id a Compliance API export recorded are passed
-through as locators too, on list_sessions rows and scan_sessions incidents and
-chains, while the email address it recorded never reaches any tool result.
-Tool results are returned to the MCP client that spawned the server, which is
-the assistant, so they travel wherever that assistant sends its context. The
-verb needs no license. Project\-level configuration for vet_configs is read
-from the server process's working directory, which is whatever directory the
-client spawned it in.
+way, with one exception: a scan report, scan_sessions included, prints the
+file path of a session whose own project, project root or working directory
+label stopped a detection rule at its regex work limit as [withheld: regex
+work limit] followed by a short hash of the path. The user id and workspace id
+a Compliance API export recorded are passed through as locators too, on
+list_sessions rows and scan_sessions incidents and chains, while the email
+address it recorded never reaches any tool result. Tool results are returned
+to the MCP client that spawned the server, which is the assistant, so they
+travel wherever that assistant sends its context. The verb needs no license.
+vet_configs reads project configuration at the server process's working
+directory, at the top of its git repository and, in a linked worktree, at the
+main checkout; the client chooses the working directory when it spawns the
+server. The tool takes neither \-\-all\-projects nor \-\-project\-only; use
+the CLI for either scope.
 .SH OPTIONS
 .TP
 \fB\-\-enable\-recall\fR
@@ -93,7 +99,11 @@ leaves the machine through the connected MCP client and reaches the model
 provider. The search_sessions response carries no echo of the query or of the
 project filter, and its skipped count names how many sessions were left out
 because their file changed on disk while it was being read; those sessions
-contribute no row rather than being masked from stale bytes.
+contribute no row rather than being masked from stale bytes. When a detection
+rule stops at its regex work limit in the masking scan of a session the
+response would include, either tool returns the redaction error and no
+transcript content, because a value the rule did not finish checking could
+otherwise be returned unmasked.
 .SH "SEE ALSO"
 skarn(1)
 .SH COPYRIGHT

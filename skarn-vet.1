@@ -1,4 +1,4 @@
-.TH "SKARN-VET" "1" "2026-06-23" "skarn 0.36.0" "Skarn Manual"
+.TH "SKARN-VET" "1" "2026-06-23" "skarn 0.37.0" "Skarn Manual"
 .SH NAME
 skarn\-vet \- Vet the local AI config, read\-only and offline. Free, no
 license
@@ -6,48 +6,57 @@ license
 \fBskarn\fR \fBvet\fR [options]
 .SH DESCRIPTION
 Statically vet the local AI assistant configuration (hooks, MCP servers,
-permission grants, plugins and skills) for risky patterns across Claude Code,
-Codex CLI, Cursor, Copilot, Copilot in Code, Gemini CLI, Grok Build, Grok Bot,
-and Microsoft Scout. Read\-only and offline; free, no license.
+permission grants and rules, plugins and skills) for risky patterns across
+Claude Code, Codex CLI, Cursor, Copilot, Copilot in Code, Gemini CLI, Grok
+Build, Grok Bot, and Microsoft Scout. Read\-only and offline; free, no
+license.
 .PP
 Statically vet this machine's AI assistant configuration \- hook commands, MCP
-server definitions, permission grants, and installed plugins and skills across
-Claude Code, Codex CLI, Cursor, Copilot, Copilot in Code, Gemini CLI, Grok
-Build, Grok Bot, and Microsoft Scout \- and report the risky patterns it
-finds: hooks that exfiltrate local content or fetch\-and\-execute remote code,
-hooks that post the session event envelope to a remote http endpoint, hooks
-that rewrite an assistant's own config, MCP endpoints on remote hosts, MCP
-launchers with no pinned version or digest, permission grants that approve a
-whole class of actions, grants that let the assistant ask to widen its own
-authority, and extensions installed from a remote source or carrying no
-integrity marker. Two more patterns come from permission metadata and declared
-posture flags alone: a plaintext credential store whose file mode grants group
-or other read, and an assistant configured with an always\-on local\-exec and
-egress channel. Vet reports declared configuration, not the effective merge
-across layers, so a grant a higher layer denies, or a permission mode an
-administrator lock disables, is still surfaced: the declaration exists and is
-one edit away from active. Project configuration is read at the cwd\-level
-file only, so a host that also loads configuration from parent directories is
-covered there and no further. A hook entry's command, bash and powershell
-fields are each vetted, and the hook rules also match the PowerShell forms of
-a download, an upload, an execution and a write, in any letter case; a command
-passed through \-EncodedCommand or an abbreviation of it is flagged as
-dangerous and is not decoded. Vet is read\-only and offline: it opens each
-config file it reads for reading, never writes one, and makes no network call.
-A config file that does not exist is skipped; a config file that exists but
-cannot be read is a coverage gap that fails closed under a \-\-fail\-on flag.
-Each per\-assistant configuration file listed below whose contents vet reads
-is opened once, and its permission metadata is read off that same handle. The
-stat\-only stores are the exception, because their contents are never wanted:
-Grok Bot's sand\-secrets.json, the Copilot CLI's data.db and each Copilot in
-Code profile's data.db, whose file mode alone decides a finding, and Grok
-Bot's local\-exec\-daemon\-connection.json, whose presence alone does, are
-measured by a stat that does not follow a symlink and are never opened, so a
-symlinked store is reported as a coverage gap named SymlinkNotFollowed rather
-than measured through its target. Every other config file is still read
-through a symlink, so a dotfiles\-managed configuration keeps its coverage. A
-path that is not a regular file is named as a coverage gap rather than read.
-The config\-file count the report prints, and the configFilesRead field in the
+server definitions, permission grants and rules, and installed plugins and
+skills across Claude Code, Codex CLI, Cursor, Copilot, Copilot in Code, Gemini
+CLI, Grok Build, Grok Bot, and Microsoft Scout \- and report the risky
+patterns it finds: hooks that exfiltrate local content or fetch\-and\-execute
+remote code, hooks that post the session event envelope to a remote http
+endpoint, hooks that rewrite an assistant's own config, MCP endpoints on
+remote hosts, MCP launchers with no pinned version or digest, permission
+grants that approve a whole class of actions, grants that let the assistant
+ask to widen its own authority, and extensions installed from a remote source
+or carrying no integrity marker. Two more patterns come from permission
+metadata and declared posture flags alone: a plaintext credential store whose
+file mode grants group or other read, and an assistant configured with an
+always\-on local\-exec and egress channel. Vet reports declared configuration,
+not the effective merge across layers, so a grant a higher layer denies, or a
+permission mode an administrator lock disables, is still surfaced: the
+declaration exists and is one edit away from active. Vet reads project
+configuration at the working directory, at the top of its git repository and,
+in a linked worktree, at the main checkout, so a host that also loads
+configuration from other directories is covered at those three and no further.
+\-\-all\-projects adds the projects Claude Code records in ~/.claude.json and
+in the .claude.json of each config directory named by CLAUDE_CONFIG_DIR or
+SKARN_CLAUDE_DIRS; those declared directories contribute only their projects
+keys, and Skarn does not vet their other content. \-\-project\-only reads the
+project files alone. Vet deduplicates project file visits across roots and
+keeps the first visit's path; separate hard links still count as separate
+files. A hook entry's command, bash and powershell fields are each vetted, and
+the hook rules also match the PowerShell forms of a download, an upload, an
+execution and a write, in any letter case; a command passed through
+\-EncodedCommand or an abbreviation of it is flagged as dangerous and is not
+decoded. Vet is read\-only and offline: it opens each config file it reads for
+reading, never writes one, and makes no network call. A config file that does
+not exist is skipped; a config file that exists but cannot be read is a
+coverage gap that fails closed under a \-\-fail\-on flag. Each per\-assistant
+configuration file listed below whose contents vet reads is opened once, and
+its permission metadata is read off that same handle. The stat\-only stores
+are the exception, because their contents are never wanted: Grok Bot's
+sand\-secrets.json, the Copilot CLI's data.db and each Copilot in Code
+profile's data.db, whose file mode alone decides a finding, and Grok Bot's
+local\-exec\-daemon\-connection.json, whose presence alone does, are measured
+by a stat that does not follow a symlink and are never opened, so a symlinked
+store is reported as a coverage gap named SymlinkNotFollowed rather than
+measured through its target. Every other config file is still read through a
+symlink, so a dotfiles\-managed configuration keeps its coverage. A path that
+is not a regular file is named as a coverage gap rather than read. The
+config\-file count the report prints, and the configFilesRead field in the
 json and sarif output, count every such file vet examined, including those
 stores. The hook directories and extension manifests vet also walks keep their
 own older read path. A JSON config that repeats a key is read both ways, as
@@ -72,18 +81,50 @@ and the stat\-only stores are still never opened. Only a redacted preview of
 the matched value is printed, and every matched value is scrubbed from every
 field of every finding in the report and from every coverage\-gap path and
 reason, in every spelling it can take there (case, percent\-encoding, control
-masking), overlapping matches masked as one span, and every path, a finding's
+masking), overlapping matches masked as one span, a field the scrub cannot
+finish within its fixed work bound masked whole, and every path, a finding's
 config path and a coverage path alike, is scrubbed before it is masked or
 shortened for display. If the embedded rule pack cannot be loaded, that is a
 coverage gap that the stderr notice names and the other rules still run; if
-the gap itself cannot be recorded, vet exits 6. Vet surfaces risky
-configuration and does not change it.
+the gap itself cannot be recorded, vet exits 6. A detection rule that stops at
+its regex work limit on an MCP server env or header value, or on a permission
+grant or rule, has not checked the whole value, so vet masks that value whole
+wherever it appears, reports no secret\-shaped finding for it, keeps any
+finding a rule did complete with its preview fully masked, as it masks the
+preview of the same value in any other finding, reports an overbroad grant
+with its rule text withheld, and lists the file once as a coverage gap that it
+names as not fully scanned rather than unreadable; that gap fails closed under
+a \-\-fail\-on flag like any other. Vet also runs the embedded rule pack over
+every permission grant and rule string it reads from any host, including
+Claude Code allow, ask, and deny entries directly under permissions and legacy
+allowedTools lists directly under an entry in the root projects object in
+~/.claude.json, both as written and with a `Name(command)` tool wrapper and
+one trailing `:*` or ` *` removed, and reports a match as
+vet\-permission\-plaintext\-credential at high, naming the matched detection
+rule with a redacted preview. Only the rule pack decides whether a rule string
+carries a credential; there is no secret\-shaped tier for rule strings. Vet
+never judges ask, deny, or legacy allowedTools entries as overbroad. The
+matched values and their derived spellings join the report\-wide scrub set. An
+overbroad finding on a grant that carries a matched value prints the detail
+`rule text withheld: it carries a value a detection rule matched`. Vet
+surfaces risky configuration and does not change it.
 .SH OPTIONS
 .TP
 \fB\-\-format\fR \fIfmt\fR
 Output format. json and sarif carry the same rule ids, severities, config
-paths, and locators as the text list. One of: text, json, sarif. The default
-is text.
+paths, and locators as the text list. Each JSON finding and each SARIF
+result's properties also carry project: the absolute main checkout path,
+otherwise the git top, otherwise the starting directory, scrubbed and masked
+like configPath; a home, system, host\-home or profile finding carries an
+empty string. When a file belongs to both the home and project layers, the
+home visit wins unless you use \-\-project\-only. JSON includes projectsVetted
+and projectsSkipped at the top level, and SARIF includes them in the run
+properties. projectsVetted counts distinct project roots, so multiple recorded
+paths in one repository count as one project; projectsSkipped counts recorded
+paths that are not existing absolute directories. The default and
+\-\-project\-only scopes report 1 and 0. Under \-\-all\-projects, text adds
+one summary line with both counts. One of: text, json, sarif. The default is
+text.
 .TP
 \fB\-\-fail\-on\-severity\fR \fIlevel\fR
 Exit 1 if any finding is at or above this severity. Without it, vet always
@@ -94,7 +135,8 @@ Fail closed with exit 6 when a config file that exists was not read: it could
 not be read, or it was skipped because it is not that assistant's live
 configuration. A partial view of the configuration is never reported as clean.
 Implied by \-\-fail\-on\-severity. A home directory that cannot be resolved at
-all exits 6 regardless of this flag, since nothing was examined.
+all exits 6 regardless of this flag, except under \-\-project\-only, which
+reads no home file.
 .TP
 \fB\-\-offline\fR
 Disable all network access. Vet never makes a network call; this is the
@@ -102,15 +144,39 @@ belt\-and\-suspenders guarantee.
 .TP
 \fB\-\-no\-color\fR
 Disable colored output.
+.TP
+\fB\-\-all\-projects\fR
+Add the projects Claude Code records as projects keys in ~/.claude.json and in
+the .claude.json of each config directory named by CLAUDE_CONFIG_DIR or
+SKARN_CLAUDE_DIRS. Vet reads only the projects keys from those declared
+directories' state files and vets none of their other content. Skarn always
+vets the working directory's own project too, so projectsVetted is at least 1.
+Each project includes its starting directory, git top and main checkout when
+present. A recorded path that is not an existing absolute directory counts as
+skipped; a refused key is a coverage gap. Vet resolves at most 1024 distinct
+keys in sorted order across all state files; keys past that budget produce one
+ProjectBudgetExceeded coverage gap. You cannot combine \-\-all\-projects with
+\-\-project\-only.
+.TP
+\fB\-\-project\-only\fR
+Read project files only, with no home, system, host\-home or Copilot in Code
+profile file. Vet needs no home directory in this scope and still resolves the
+git top and main checkout from the working directory. You cannot combine
+\-\-project\-only with \-\-all\-projects.
 .SH FILES
 .TP
 \fB~/.claude/settings.json, ~/.claude/settings.local.json, ./.claude/settings.json, ./.claude/settings.local.json\fR
-Claude Code hooks and permission grants. Read, never written. The
-project\-local pair is read at the current working directory only.
+Claude Code hooks and permission rules (allow, ask, deny). Read, never
+written. Vet reads the project\-local pair at the working directory, the git
+top and, in a linked worktree, the main checkout.
 .TP
 \fB~/.claude.json, ~/.mcp.json, ./.mcp.json\fR
-Claude Code MCP server definitions. Read, never written. The project\-local
-file is read at the current working directory only.
+Claude Code MCP server definitions and the legacy per\-project allowedTools
+lists in ~/.claude.json. Read, never written. Vet reads the project\-local
+file at the working directory, the git top and, in a linked worktree, the main
+checkout. \-\-all\-projects reads the projects keys in ~/.claude.json and also
+in $CLAUDE_CONFIG_DIR/.claude.json and each $SKARN_CLAUDE_DIRS entry's
+\&.claude.json; Skarn does not vet those declared directories' other content.
 .TP
 \fB~/.claude/plugins/, ~/.claude/skills/\fR
 Installed Claude Code plugins and skills. Vet reads each plugin.json and
@@ -231,11 +297,12 @@ rather than silently truncated.
 .TP
 \fB./.grok/config.toml, ./.grok/hooks/\fR
 Grok Build's project\-scoped configuration and hook directory, contributing
-MCP servers, plugins, and permission rules. Vet reads them at the current
-working directory only, while Grok itself discovers a .grok/config.toml at
-every level from the repository root down. Project hooks are collected
-whatever the folder\-trust state, because a declared hook becomes live the
-moment the folder is trusted, with no configuration change.
+MCP servers, plugins, and permission rules. Vet reads them at the working
+directory, the git top and, in a linked worktree, the main checkout, while
+Grok itself discovers a .grok/config.toml at every level from the repository
+root down. Project hooks are collected whatever the folder\-trust state,
+because a declared hook becomes live the moment the folder is trusted, with no
+configuration change.
 .TP
 \fB%LOCALAPPDATA%\eMicrosoft\eCopilot\eUser Data\eCopilotCodingHome\e<profile>\emcp\-config.json, %LOCALAPPDATA%\eMicrosoft\eCopilot\eUser Data\eCopilotCodingHome\e<profile>\econfig.json, %LOCALAPPDATA%\eMicrosoft\eCopilot\eUser Data\eCopilotCodingHome\e<profile>\esettings.json (Windows)\fR
 The configuration files of one Copilot in Code profile, read by vet. A profile
@@ -295,10 +362,11 @@ the row is skipped, as the other ~/.copilot rows are.
 \fB./.github/hooks/\fR
 The working directory's Copilot hook folder, which the Copilot CLI and the
 Copilot cloud agent read, and which Copilot in Code read in a folder project.
-Vet reads the .json files one level down, regular files only, at the current
-working directory only, and reports each command, bash and powershell field of
-a hook entry. Vet reads it whatever the project type; Copilot in Code reading
-it in a repository project was not measured.
+Vet reads the .json files one level down, regular files only, at the working
+directory, the git top and, in a linked worktree, the main checkout, and
+reports each command, bash and powershell field of a hook entry. Vet reads it
+whatever the project type; Copilot in Code reading it in a repository project
+was not measured.
 .SH "SEE ALSO"
 skarn(1)
 .SH COPYRIGHT

@@ -1,4 +1,4 @@
-.TH "SKARN-MCPS" "1" "2026-06-23" "skarn 0.36.0" "Skarn Manual"
+.TH "SKARN-MCPS" "1" "2026-06-23" "skarn 0.37.0" "Skarn Manual"
 .SH NAME
 skarn\-mcps \- Show the MCP calls made across sessions
 .SH SYNOPSIS
@@ -8,12 +8,19 @@ Show the MCP calls made across sessions.
 .PP
 MCP calls made across sessions. Server names, tool names and call arguments
 are printed with detected secrets masked, while \-\-mcp and \-\-failed match
-the raw text.
+the raw text. Kiro CLI server names come from the conversation's tool
+declarations in the Classic database, the result's tool kind in V2, and the
+tool::<server>::<tool> id of a tool_call call in V3; Classic removes hyphens
+from MCP tool names, so they differ from the server's manifest. Skarn reports
+a name declared by two servers or by a server and a Kiro built\-in as
+(ambiguous), and a call with no recorded server as (unattributed); neither
+placeholder counts as a called server in skarn inventory.
 .SH OPTIONS
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot, kimi, grok, grokbot, antigravity, opencode, cline, copilot\-code.
+copilot, kimi, grok, grokbot, antigravity, opencode, cline, copilot\-code,
+kiro.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths,

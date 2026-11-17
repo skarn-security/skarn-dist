@@ -1,4 +1,4 @@
-.TH "SKARN-TOOLS" "1" "2026-06-23" "skarn 0.36.0" "Skarn Manual"
+.TH "SKARN-TOOLS" "1" "2026-06-23" "skarn 0.37.0" "Skarn Manual"
 .SH NAME
 skarn\-tools \- Show the tools used across sessions
 .SH SYNOPSIS
@@ -7,12 +7,19 @@ skarn\-tools \- Show the tools used across sessions
 Show the tools used across sessions.
 .PP
 Tools used across sessions. Tool names, inputs and results are printed with
-detected secrets masked, while \-\-tool and \-\-failed match the raw text.
+detected secrets masked, while \-\-tool and \-\-failed match the raw text. For
+Kiro CLI, tools maps fs_read, read and read_file to Read; fs_write, write and
+fs_append to Write; str_replace to Edit; execute_bash, execute_cmd, shell and
+execute_pwsh to Bash; glob to Glob; and grep and grep_search to Grep. It lists
+every other tool name and every MCP call under the recorded name, including
+tool_call for all V3 MCP calls, and excludes the Classic dummy placeholder
+declaration.
 .SH OPTIONS
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot, kimi, grok, grokbot, antigravity, opencode, cline, copilot\-code.
+copilot, kimi, grok, grokbot, antigravity, opencode, cline, copilot\-code,
+kiro.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths,

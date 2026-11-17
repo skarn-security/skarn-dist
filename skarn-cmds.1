@@ -1,4 +1,4 @@
-.TH "SKARN-CMDS" "1" "2026-06-23" "skarn 0.36.0" "Skarn Manual"
+.TH "SKARN-CMDS" "1" "2026-06-23" "skarn 0.37.0" "Skarn Manual"
 .SH NAME
 skarn\-cmds \- Show the shell commands run across sessions
 .SH SYNOPSIS
@@ -8,12 +8,17 @@ Show the shell commands run across sessions.
 .PP
 Shell commands run across sessions. Commands, their output and the labels are
 printed with detected secrets masked, while \-\-cmd and \-\-failed match the
-raw text.
+raw text. For Kiro CLI, cmds lists agent shell calls with a command string:
+execute_bash and Windows execute_cmd in the Classic database, shell in V2, and
+execute_bash and Windows execute_pwsh in V3. Skarn never reads the Classic
+history table of user shell activity; tools still lists shell calls whose
+arguments contain no command string.
 .SH OPTIONS
 .TP
 \fB\-\-cli\fR \fIname\fR
 Restrict to one assistant's sessions. One of: claude, gemini, codex, cursor,
-copilot, kimi, grok, grokbot, antigravity, opencode, cline, copilot\-code.
+copilot, kimi, grok, grokbot, antigravity, opencode, cline, copilot\-code,
+kiro.
 .TP
 \fB\-\-project\fR \fIpath\fR
 Restrict to matching projects: a comma\-separated list of names or paths,
