@@ -17,7 +17,7 @@ Everything else is offline: `check` (without `--update-rules`), `assess`, `vet`,
 
 `skarn serve` binds a listener on `127.0.0.1` only. It accepts connections; it never initiates one. This is the only place in the binary a socket is opened outside the two commands above.
 
-`skarn mcp` opens no socket at all, in either direction. It reads stdin and writes stdout of the process that spawned it, and its tools read the same local files `assess` and `vet` read.
+`skarn mcp` opens no socket at all, in either direction. It reads stdin and writes stdout of the process that spawned it, and its tools read the session files `assess` reads and the configuration files `skarn vet` reads at the server's working directory. `assess` also reads the configuration of every project Claude Code records.
 
 ## Sidecars under integrations/
 

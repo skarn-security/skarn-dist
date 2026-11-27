@@ -1,4 +1,4 @@
-.TH "SKARN-RESTORE" "1" "2026-06-23" "skarn 0.37.0" "Skarn Manual"
+.TH "SKARN-RESTORE" "1" "2026-06-23" "skarn 0.38.0" "Skarn Manual"
 .SH NAME
 skarn\-restore \- Restore a session
 .SH SYNOPSIS
@@ -8,7 +8,12 @@ Print the shell command that resumes a session, so `eval $(skarn restore
 <session>)` returns you to its working directory. When the recorded working
 directory or session id carries a byte the running shell would read back as
 something else, skarn refuses to render the command: stdout stays empty, the
-refusal is named on stderr, and restore exits 1.
+refusal is named on stderr, and restore exits 1. When the recorded working
+directory is not a local absolute path for this operating system, a directory
+on it cannot be checked, or a link on it points to a network path, the command
+is printed without `cd <dir> &&` (the Cursor and VS Code forms without the
+workspace argument), and one stderr line says the directory was not used
+without naming it.
 .PP
 Restore a session by id. The resume command is printed from the raw session,
 because a masked working directory would not be a usable command: when the
@@ -16,12 +21,63 @@ recorded working directory carries a detected secret, restore refuses with
 exit 1, says on stderr that the resume command cannot be printed, and prints
 nothing to stdout. The match hint on stderr masks the session id, project,
 branch and assistant name, and a comment line that names a session shows its
-id masked the same way.
+id masked the same way. When the recorded working directory is not a local
+absolute path for this operating system (a network, device or relative path, a
+path written for the other operating system, or one with a control character),
+a directory on it cannot be checked, or a link on it points to a network path,
+restore prints the resume command without `cd <dir> &&`, the Gemini form
+prints `gemini \-\-list\-sessions` because its resume index counts the
+sessions of the current directory, the Grok prompt\-log form prints `grok
+sessions` without it, and the Cursor and VS Code forms print `cursor` and
+`code` without the workspace argument; one stderr line says the recorded
+directory was not used and does not repeat it. A directory on it that passes
+through a link the session link check refuses for another reason (a link it
+cannot resolve, or a component it cannot check for links) takes the same
+fallbacks with a different stderr line: that line names the recorded
+directory, cut at the label length as the evidence\-machine line is, and says
+Skarn did not follow a link on it or could not check a component of it for
+links. The secret refusal and the shell\-byte refusal still exit 1.
 .SH OPTIONS
 .TP
 \fB\-\-session\fR \fIid\fR
 Session id to operate on (prefix\-matched); equivalent to the positional
 argument.
+.TP
+\fB\-\-evidence\-home\fR \fIdir\fR
+Read a copied home's default session stores (Pro). For configuration
+discovery, Skarn reads the copied home's own assistant configuration. Skarn
+looks where this machine's operating system keeps each store, so a copy taken
+on another operating system can show fewer session or configuration rows. The
+Compliance API export root resolves under dir too, and reading it still needs
+Enterprise. Session discovery ignores store overrides, XDG_DATA_HOME,
+XDG_CONFIG_HOME and SKARN_COMPLIANCE_EXPORT_DIR. The license, EULA record,
+~/.skarn.json, caches and outputs stay with the examiner. Skarn ignores the
+copied .skarn.json. Skarn resolves ~/ in sessions_path under dir and reports
+skipped absolute paths. All history is in scope unless you specify \-\-hours,
+\-\-since or \-\-until. Only an explicit \-\-baseline applies. Assess reads
+the copied home's saved permission rules for saved_approvals when in scope.
+Vet reads only home\-layer configuration and refuses \-\-all\-projects and
+\-\-project\-only. Inventory reads sessions and home\-layer configuration. Its
+\-\-project filter applies only to sessions. Check writes the same
+skarn.inventory line with \-\-format ndjson and refuses \-\-drop,
+\-\-audit\-verify and \-\-baseline\-merge. Restore omits cd and names the
+evidence machine's unchecked directory on stderr. The session scan skips
+transcript path checks, reads derived metadata only under dir and follows no
+link below the evidence home: each refused link counts once as an unreadable
+store, and one stderr line per reason gives the count. Configuration discovery
+in vet and inventory follows no symbolic link below dir either. Both accept a
+plain UNC share as the evidence home and exit 6 for a refused network or
+device spelling or a control character. Skarn refuses outputs under dir and
+homes that contain the examiner's home or overlap Skarn's config or cache
+directories (exit 1). Missing, unreadable or non\-directory paths, paths
+containing *, and paths that pass through a link to a network path, a link
+Skarn cannot resolve or a component Skarn cannot check for links cause exit 6;
+the stderr line names the link. Licensing failures exit 7 (no usable license)
+or 5 (insufficient tier) before evidence access. Input files can reside
+anywhere. JSON, SARIF, NDJSON and the audit record have no dedicated
+evidence\-home field. Finding paths show the directory. The evidence pack
+names it on one line. For check, \-\-fail\-on\-scan\-error fails incomplete
+scans. Requires a Pro license.
 .SH "SEE ALSO"
 skarn(1)
 .SH COPYRIGHT

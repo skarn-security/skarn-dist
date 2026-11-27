@@ -1,4 +1,4 @@
-.TH "SKARN-CHECK" "1" "2026-06-23" "skarn 0.37.0" "Skarn Manual"
+.TH "SKARN-CHECK" "1" "2026-06-23" "skarn 0.38.0" "Skarn Manual"
 .SH NAME
 skarn\-check \- Scan AI sessions for leaked credentials and attack patterns
 .SH SYNOPSIS
@@ -10,62 +10,83 @@ Control the security scan: which rules run, the scan window, the output
 format, and CI gating. check needs a license and exits 7 before scanning
 without a usable one. The free license is issued at https://getskarn.com/free
 after an email confirmation, and skarn verifies it offline. Only
-\-\-audit\-verify is exempt. The policy file (\-\-policy), the org baseline
-directory that \-\-baseline unions and \-\-baseline\-merge consolidates, and
-the hash\-chained audit log (\-\-audit\-log) are Pro capabilities of check:
-check reads the policy file and the org baseline directory, and it reads the
-audit log's chain head before appending this scan's record. When it decides a
-verdict, skarn guard consults only the personal accepted\-findings file. The
-four permissive keyword\-assignment rules (generic\-api\-key,
-inline\-credential\-assignment, dotenv\-contents\-leaked and
-export\-secret\-env) report a match on a line that starts with a comment
-marker in a user message or tool result as suppressed with reason comment, so
-it does not gate, until the same rule matches the same value on a live line or
-a true\-positive baseline label confirms it. A finding from those four rules
-is one severity step lower when its key name carries a test word, a file\-read
-tool returned it from a test directory, or a write, or an edit whose path
-field is serialized first, targets an env template (.env.example,
-\&.env.template, .env.sample, .env.dist; on a host that records the tool input
-as flattened key\-value lines, which the JSON\-argument hosts do not); the
-lower step never hides it, and the finding also reports confidence low and
-likely test value. The same four rules report confidence low, with the
-severity untouched, when the field name immediately before the value is a form
-token (csrf, xsrf, authenticity_token, nonce and _token spellings) or the
-match came back from a web\-fetch tool and from nowhere else in the session;
-nothing is removed by either. A provider secret\-key rule reports high on its
-own, without source promotion. The forty\-one rules that shared one delimiter
-group (the Anthropic, OpenAI, Stripe, GCP, npm, Grafana and Hugging Face keys
-among them) match a key whatever delimiter follows it, a delimiter being any
-character outside the shared key alphabet of letters, digits, underscore,
-plus, slash, equals and hyphen (a comma, a closing parenthesis, a period or a
-space as much as a quote); generic\-api\-key, whose value class includes the
-period, ends only at whitespace, a quote, a backtick or one of ; , ) ] } < >
-|, so a value with ! or & in it is matched whole or not at all, and the JWT
-and SendGrid rules refuse a dotted continuation because their alphabets
-include the dot, with the captured value ending at the key; a rule with its
-own delimiter shape, such as the Postman or Vault token, is unchanged. The
-by\-severity line names how many critical findings are attack chains or
-behaviors with no secret value. A dynamic\-payload exfiltration that names at
-least one URL and whose every named destination is a loopback literal
-(localhost, 127.x.x.x in canonical octets, ::1, 0.0.0.0) reports high instead
-of critical, with a description saying so, because a loopback address in the
-command does not prove the data stayed on the machine; a proxy, DNS, interface
-or connection\-override option or a proxy variable on the command line that
-names a host outside the loopback set, a config variable, a unix socket or URL
-file, a command substitution that is not a plain local read, an unknown
-command in the pipeline, or a destination it cannot read as a loopback literal
-keeps it critical. The text findings list and the credential recap print one
-row per distinct secret value per session file (a keyword\-prefixed rule such
-as cloudflare\-api\-key captures its keyword with the value, so it stands
-beside a permissive match on the same value rather than grouping with it), the
-row carrying the strongest finding (an active finding before a suppressed one,
-then the highest severity, then the highest confidence, then the most specific
-rule; an identifier value such as a package or variable name is never grouped
-or counted) and naming the others after also matched; every incident stays in
-the machine formats, where the primary carries alsoMatched, a member carries
-groupedUnder, and the top\-level distinctSecretValues counts the primaries
-(one per distinct value per session file, so a value leaked in five sessions
-counts five) beside the unchanged incident list.
+\-\-audit\-verify is exempt. With \-\-evidence\-home, check \-\-format ndjson
+writes the skarn.inventory line after the summary. It describes the copied
+home's sessions and home\-layer configuration. If the home is an existing
+directory typed in a refused path spelling, the inventory line reports one gap
+at the home and Skarn reads no configuration there. The policy file
+(\-\-policy), the org baseline directory that \-\-baseline unions and
+\-\-baseline\-merge consolidates, and the hash\-chained audit log
+(\-\-audit\-log) are Pro capabilities of check: check reads the policy file
+and the org baseline directory, and it reads the audit log's chain head before
+appending this scan's record. When it decides a verdict, skarn guard consults
+only the personal accepted\-findings file. The four permissive
+keyword\-assignment rules (generic\-api\-key, inline\-credential\-assignment,
+dotenv\-contents\-leaked and export\-secret\-env) report a match on a line
+that starts with a comment marker in a user message or tool result as
+suppressed with reason comment, so it does not gate, until the same rule
+matches the same value on a live line or a true\-positive baseline label
+confirms it. A finding from those four rules is one severity step lower when
+its key name carries a test word, a file\-read tool returned it from a test
+directory, or a write, or an edit whose path field is serialized first,
+targets an env template (.env.example, .env.template, .env.sample, .env.dist;
+on a host that records the tool input as flattened key\-value lines, which the
+JSON\-argument hosts do not); the lower step never hides it, and the finding
+also reports confidence low and likely test value. The same four rules report
+confidence low, with the severity untouched, when the field name immediately
+before the value is a form token (csrf, xsrf, authenticity_token, nonce and
+_token spellings) or the match came back from a web\-fetch tool and from
+nowhere else in the session; nothing is removed by either. A provider
+secret\-key rule reports high on its own, without source promotion. The
+forty\-one rules that shared one delimiter group (the Anthropic, OpenAI,
+Stripe, GCP, npm, Grafana and Hugging Face keys among them) match a key
+whatever delimiter follows it, a delimiter being any character outside the
+shared key alphabet of letters, digits, underscore, plus, slash, equals and
+hyphen (a comma, a closing parenthesis, a period or a space as much as a
+quote); generic\-api\-key, whose value class includes the period, ends only at
+whitespace, a quote, a backtick or one of ; , ) ] } < > |, so a value with !
+or & in it is matched whole or not at all, and the JWT and SendGrid rules
+refuse a dotted continuation because their alphabets include the dot, with the
+captured value ending at the key; a rule with its own delimiter shape, such as
+the Postman or Vault token, is unchanged. The by\-severity line names how many
+critical findings are attack chains or behaviors with no secret value. A
+dynamic\-payload exfiltration that names at least one URL and whose every
+named destination is a loopback literal (localhost, 127.x.x.x in canonical
+octets, ::1, 0.0.0.0) reports high instead of critical, with a description
+saying so, because a loopback address in the command does not prove the data
+stayed on the machine; a proxy, DNS, interface or connection\-override option
+or a proxy variable on the command line that names a host outside the loopback
+set, a config variable, a unix socket or URL file, a command substitution that
+is not a plain local read, an unknown command in the pipeline, or a
+destination it cannot read as a loopback literal keeps it critical. The text
+findings list and the credential recap print one row per distinct secret value
+per session file (a keyword\-prefixed rule such as cloudflare\-api\-key
+captures its keyword with the value, so it stands beside a permissive match on
+the same value rather than grouping with it), the row carrying the strongest
+finding (an active finding before a suppressed one, then the highest severity,
+then the highest confidence, then the most specific rule; an identifier value
+such as a package or variable name is never grouped or counted) and naming the
+others after also matched; every incident stays in the machine formats, where
+the primary carries alsoMatched, a member carries groupedUnder, and the
+top\-level distinctSecretValues counts the primaries (one per distinct value
+per session file, so a value leaked in five sessions counts five) beside the
+unchanged incident list. A link on a session store path that Skarn does not
+follow counts as one unreadable store per link: its target is a network path,
+it cannot be resolved, a path component on it cannot be checked for links, or,
+under \-\-evidence\-home, it lies below the evidence home. The one exception
+is Copilot in Code, whose session\-state link inside a profile and linked
+profile candidate folder are skipped without a count. On Windows a link whose
+target is a device path other than a drive letter or a volume GUID path is not
+followed either: a MUP or UNC device path counts as a network target, and any
+other device path as a component that could not be checked for links. After
+the output, stderr gives one line per reason with its count, and the
+\-\-format evidence pack lists the same lines under Coverage; a recorded
+working directory that passes through such a link gets its own line and is not
+counted. Skarn checks a path for links immediately before each open, so a
+directory or file replaced by a link, or a link whose target changes, between
+the check and the open is followed. A path component that could not be checked
+for links has no file identity, so two different spellings of it can count
+twice.
 .SH OPTIONS
 .TP
 \fB\-\-rules\fR \fIpath\fR
@@ -221,7 +242,12 @@ the json top\-level counters sensitivityLabelToolResults and
 sensitivityLabelSessions, and one text line count the tool results that
 carried a label shape and the sessions that held them. No label name or label
 id is written, and the observation changes neither the verdict nor the exit
-code. One of: text, json, sarif, ndjson, evidence. The default is text.
+code. json carries, as top\-level fields, the thirteen coverage counts the
+sarif invocation properties carry: toolsDropped, storesUnreadable,
+sessionsIncomplete, sessionsTruncated, turnsUnavailable, turnsUnverified,
+complianceWithheld, recordsSkipped, recordsTruncated, recordsShortened,
+recordsDepthCut, matchLimitHits and recordsUncaptured. One of: text, json,
+sarif, ndjson, evidence. The default is text.
 .TP
 \fB\-v\fR, \fB\-\-verbose\fR
 Verbose output.
@@ -249,45 +275,51 @@ Exit 2 if the session risk score exceeds this threshold.
 .TP
 \fB\-\-fail\-on\-scan\-error\fR
 Fail closed with exit 6 when the scan was incomplete: a tool source failed
-discovery, a session store that exists could not be read, a session failed to
-parse, a session held a record that could not be parsed (a malformed line, or
-a line cut at the line limit, 64 MiB of bytes or 8 Mi structural tokens
-outside strings, which then never parses, and in a Gemini CLI chat after such
-a line also a patch record whose message or tool call the lost line held; the
-first 1 MiB of its bytes is scanned as raw text, labelled raw record, so the
-detectors still run over those bytes, and the record stays a coverage gap
-because its role, tool and the rest of its content are unknown; a session
-keeps at most 256 such records or 16 MiB of them, and a refused record past
-that budget is counted and not scanned), a session had truncated or compacted
-transcript content so it no longer holds the whole conversation (the assistant
-compacted it before the scan, or a compliance transcript export carried a
-truncated tool block, a truncated text block, or a compaction marker), a
-compliance transcript export withheld a turn as unavailable or carried a
-client\-asserted turn the feed did not verify, or the scan read no sessions.
-Truncated or compacted content counts sessions, because a cut block is a
-partial turn and nobody can count what a compaction removed; withheld and
-unverified content counts turns, because the export names each one. Every
-truncated tool block counts its session, including a block returned as a
-placeholder instead of cut text, so a coverage gap is over\-reported rather
-than missed. A record that could not be parsed counts itself, and the JSON and
-NDJSON output name each session file that dropped one. An unterminated last
-line that does not parse but begins a JSON object (its first character after
-leading whitespace is an opening brace), in an uncompressed session file
-modified within the last 5 minutes, is a write in progress and is not counted;
-the same line in an older or compressed file is counted, and so is an
-unterminated last line that does not parse and does not begin a JSON object. A
-string value longer than 8 MiB inside a record (a pasted image stored inline,
-a huge tool result) is shortened to a marker before the record is parsed, so
-the record and every other value in it are scanned as usual; the scan counts
-such records as shortened in its JSON, SARIF, NDJSON and assess outputs, names
-each session file that holds one beside the files that dropped a record, and
-counts them as a coverage gap, because the bytes past the cap were never
-scanned. A Grok prompt log prompt is cut at the same 8 MiB without a marker
-and counted the same way on its session. A value nested deeper than 64 levels
-inside a tool input, a tool result or another structured part of a session is
-not read, because the parser stops descending there so hostile nesting cannot
-exhaust its stack; the scan counts each such value in its JSON, SARIF, NDJSON
-and assess outputs, names each session file that holds one, and counts it as a
+discovery, a session store that exists could not be read (a link on a session
+store path that Skarn did not follow, because its target is a network path, it
+cannot be resolved, a component on it cannot be checked for links or, under
+\-\-evidence\-home, it lies below the evidence home, counts here, and one
+stderr line per reason gives the count after the report; a Copilot in Code
+session\-state link inside a profile and a linked profile candidate folder are
+skipped without a count), a session failed to parse, a session held a record
+that could not be parsed (a malformed line, or a line cut at the line limit,
+64 MiB of bytes or 8 Mi structural tokens outside strings, which then never
+parses, and in a Gemini CLI chat after such a line also a patch record whose
+message or tool call the lost line held; the first 1 MiB of its bytes is
+scanned as raw text, labelled raw record, so the detectors still run over
+those bytes, and the record stays a coverage gap because its role, tool and
+the rest of its content are unknown; a session keeps at most 256 such records
+or 16 MiB of them, and a refused record past that budget is counted and not
+scanned), a session had truncated or compacted transcript content so it no
+longer holds the whole conversation (the assistant compacted it before the
+scan, or a compliance transcript export carried a truncated tool block, a
+truncated text block, or a compaction marker), a compliance transcript export
+withheld a turn as unavailable or carried a client\-asserted turn the feed did
+not verify, or the scan read no sessions. Truncated or compacted content
+counts sessions, because a cut block is a partial turn and nobody can count
+what a compaction removed; withheld and unverified content counts turns,
+because the export names each one. Every truncated tool block counts its
+session, including a block returned as a placeholder instead of cut text, so a
+coverage gap is over\-reported rather than missed. A record that could not be
+parsed counts itself, and the JSON and NDJSON output name each session file
+that dropped one. An unterminated last line that does not parse but begins a
+JSON object (its first character after leading whitespace is an opening
+brace), in an uncompressed session file modified within the last 5 minutes, is
+a write in progress and is not counted; the same line in an older or
+compressed file is counted, and so is an unterminated last line that does not
+parse and does not begin a JSON object. A string value longer than 8 MiB
+inside a record (a pasted image stored inline, a huge tool result) is
+shortened to a marker before the record is parsed, so the record and every
+other value in it are scanned as usual; the scan counts such records as
+shortened in its JSON, SARIF, NDJSON and assess outputs, names each session
+file that holds one beside the files that dropped a record, and counts them as
+a coverage gap, because the bytes past the cap were never scanned. A Grok
+prompt log prompt is cut at the same 8 MiB without a marker and counted the
+same way on its session. A value nested deeper than 64 levels inside a tool
+input, a tool result or another structured part of a session is not read,
+because the parser stops descending there so hostile nesting cannot exhaust
+its stack; the scan counts each such value in its JSON, SARIF, NDJSON and
+assess outputs, names each session file that holds one, and counts it as a
 coverage gap, so a session whose only credential sits past that depth is never
 reported clean, unless the text the parser builds from the tool input or
 result that holds the value has already reached its size limit. A detection
@@ -315,7 +347,9 @@ it, an org\-shared accepted set, and requires a Pro license. That union leaves
 out any fingerprint a member labelled a true positive, and every value such a
 true positive records its hash for. Without this flag skarn applies
 ~/.config/skarn/baseline.json when it exists, for suppression only; the
-\-\-baseline\-create and \-\-baseline\-merge targets stay explicit.
+\-\-baseline\-create and \-\-baseline\-merge targets stay explicit. With
+\-\-evidence\-home, Skarn skips the personal default baseline and applies only
+an explicit \-\-baseline.
 .TP
 \fB\-\-baseline\-create\fR
 Write the current findings to the \-\-baseline file as the accepted set, then
@@ -339,9 +373,11 @@ and an existing output file is left as it was. Requires a Pro license.
 Append a hash\-chained record of this scan (timestamp, policy, finding counts,
 verdict; no secrets) to this local log. The chain detects in\-place edits and
 reordering of recorded history. A new log is created readable by its owner
-only on macOS and Linux and an existing log keeps its mode; on those systems a
-symlink at the log path is refused with a warning naming AuditLogSymlink, and
-the scan result and exit code are unchanged. Requires a Pro license.
+only on macOS and Linux, and an existing log keeps its mode. On every platform
+the append to a symlink to a file at the log path is refused, and the refusal
+leaves the scan result and exit code unchanged. The warning names
+AuditLogSymlink, or WriteFailed on Windows when the link itself cannot be
+opened for writing, such as a read\-only link. Requires a Pro license.
 .TP
 \fB\-\-audit\-verify\fR \fIfile\fR
 Verify an audit log's hash chain, then exit without scanning. A broken chain
@@ -429,6 +465,42 @@ either, so on a machine without an export, or under a registered license below
 Enterprise, every \-\-user value matches nothing and the report is empty at
 exit 0. The drop artifact and the evidence pack do not record a user
 narrowing, so a narrowed run reads like a whole\-corpus one there.
+.TP
+\fB\-\-evidence\-home\fR \fIdir\fR
+Read a copied home's default session stores (Pro). For configuration
+discovery, Skarn reads the copied home's own assistant configuration. Skarn
+looks where this machine's operating system keeps each store, so a copy taken
+on another operating system can show fewer session or configuration rows. The
+Compliance API export root resolves under dir too, and reading it still needs
+Enterprise. Session discovery ignores store overrides, XDG_DATA_HOME,
+XDG_CONFIG_HOME and SKARN_COMPLIANCE_EXPORT_DIR. The license, EULA record,
+~/.skarn.json, caches and outputs stay with the examiner. Skarn ignores the
+copied .skarn.json. Skarn resolves ~/ in sessions_path under dir and reports
+skipped absolute paths. All history is in scope unless you specify \-\-hours,
+\-\-since or \-\-until. Only an explicit \-\-baseline applies. Assess reads
+the copied home's saved permission rules for saved_approvals when in scope.
+Vet reads only home\-layer configuration and refuses \-\-all\-projects and
+\-\-project\-only. Inventory reads sessions and home\-layer configuration. Its
+\-\-project filter applies only to sessions. Check writes the same
+skarn.inventory line with \-\-format ndjson and refuses \-\-drop,
+\-\-audit\-verify and \-\-baseline\-merge. Restore omits cd and names the
+evidence machine's unchecked directory on stderr. The session scan skips
+transcript path checks, reads derived metadata only under dir and follows no
+link below the evidence home: each refused link counts once as an unreadable
+store, and one stderr line per reason gives the count. Configuration discovery
+in vet and inventory follows no symbolic link below dir either. Both accept a
+plain UNC share as the evidence home and exit 6 for a refused network or
+device spelling or a control character. Skarn refuses outputs under dir and
+homes that contain the examiner's home or overlap Skarn's config or cache
+directories (exit 1). Missing, unreadable or non\-directory paths, paths
+containing *, and paths that pass through a link to a network path, a link
+Skarn cannot resolve or a component Skarn cannot check for links cause exit 6;
+the stderr line names the link. Licensing failures exit 7 (no usable license)
+or 5 (insufficient tier) before evidence access. Input files can reside
+anywhere. JSON, SARIF, NDJSON and the audit record have no dedicated
+evidence\-home field. Finding paths show the directory. The evidence pack
+names it on one line. For check, \-\-fail\-on\-scan\-error fails incomplete
+scans. Requires a Pro license.
 .SH "EXIT STATUS"
 .TP
 \fB0\fR
@@ -450,7 +522,16 @@ was refused or did not complete, for example because an argument was invalid,
 a license did not verify, a replacement was declined, there was no license to
 renew, the renewal endpoint was refused or could not be reached, or a file
 could not be read or written. A failure before the new license is written
-leaves the installed license as it was.
+leaves the installed license as it was. Skarn refuses an empty
+\-\-evidence\-home value. The evidence home cannot contain the examiner's own
+home or Skarn's config or cache directory, or lie inside either Skarn
+directory. Skarn refuses any named or default output under the evidence home
+and any existing output file with a second hard link. On Linux and macOS it
+also refuses an output path with .. in a part that does not yet exist; Windows
+resolves .. before the lookup, so there Skarn checks the resolved path. Vet
+refuses \-\-evidence\-home with \-\-all\-projects or \-\-project\-only. Guard,
+mcp and serve refuse \-\-evidence\-home. Check refuses it with \-\-drop,
+\-\-audit\-verify or \-\-baseline\-merge.
 .TP
 \fB2\fR
 The session risk score exceeded the \-\-fail\-on\-risk threshold. For setup:
@@ -475,6 +556,8 @@ loaded is never quietly replaced by the embedded default, which gates nothing.
 A requested paid feature is not covered by the active license (a Pro or
 Enterprise flag without a license that covers it). Refused before any scan.
 With no usable license at all, check exits 7 before this gate is consulted.
+With \-\-evidence\-home, check, assess, vet, inventory and the recall commands
+exit 5 if the installed license does not cover Pro.
 .TP
 \fB6\fR
 The scan could not complete: session discovery or the scan itself failed,
@@ -506,11 +589,27 @@ a valid empty chain and exits 0). For vet: the home directory could not be
 resolved outside \-\-project\-only (so the configuration was never located at
 all), or a config file that exists was not read \- it could not be read, or it
 was skipped because it is not that assistant's live configuration \- so the
-configuration was only partly seen. For doctor: the home directory could not
-be resolved, so every per\-assistant check would have read an empty machine \-
-a diagnostic that could not be produced is never reported as a healthy one.
-Fail\-closed \- the result is not trustworthy, so it is never reported as
-clean.
+configuration was only partly seen, or a file that was read was not fully
+scanned, because a detection rule stopped at its regex work limit or the
+command\-line password detector reached its 64\-value limit on one permission
+rule. For doctor: the home directory could not be resolved, so every
+per\-assistant check would have read an empty machine \- a diagnostic that
+could not be produced is never reported as a healthy one. Fail\-closed \- the
+result is not trustworthy, so it is never reported as clean. Skarn exits 6 if
+the \-\-evidence\-home path is missing, contains *, does not name a directory,
+names a directory Skarn cannot read, or names a directory whose real path
+Skarn cannot resolve. If a session scan finds a readable directory with no
+session store, Skarn names the evidence home in the zero\-session message and
+exits 0 by default. Vet and inventory exit 6 before opening an evidence home
+whose absolute path is a namespace or device path (\e\e?\e or \e\e.\e, with
+either separator), a server without a share, a pipe, mailslot or IPC$ share,
+or a . or .. component after the share. A value that starts with one separator
+on Windows, such as \e??\e or \eDevice\e, is first made a path on the working
+drive, and a relative value on macOS and Linux a path under the working
+directory; that local path is what Skarn judges and opens. They print `error:
+\-\-evidence\-home <path>: this spelling of a network or device path is not
+read`. For a control character, the message ends with `a path that holds a
+control character is not read`.
 .TP
 \fB7\fR
 No usable license is present \- none was found via SKARN_LICENSE,
@@ -518,10 +617,15 @@ SKARN_LICENSE_FILE, or the installed file \- so check, baseline audit, fleet
 aggregate or fleet readout refused before scanning or reading a file. The free
 license is issued at https://getskarn.com/free after a quick email
 confirmation and is verified offline. Also used when a license IS present but
-cannot be used at all (revoked, tampered, or signed by an untrusted key).
-assess, baseline accept, guard accept, the recall commands, guard, setup,
-doctor, vet, mcp, license, taxonomies and check \-\-audit\-verify never exit
-7.
+cannot be used at all (revoked, tampered, or signed by an untrusted key). With
+\-\-evidence\-home, assess, vet, inventory and the recall commands exit 7 only
+when no usable license is present. Skarn checks the license before accessing
+the evidence home. Without a usable license, check prints its usual refusal.
+For assess, vet, inventory and recall, the refusal names the verb and its Pro
+requirement, explains the license problem, gives the editions URL and says the
+verb runs without a license without the option. The commands baseline accept,
+guard accept, guard, setup, doctor, mcp, license, taxonomies and check
+\-\-audit\-verify never exit 7.
 .SH SECURITY
 Skarn scans locally and makes no network connection by default. Secrets are
 redacted in check's reports, in everything the recall commands print (search,
@@ -552,7 +656,8 @@ skarn vet reads the AI assistant configuration files listed under FILES
 read\-only: it opens each one for reading, never writes, rewrites, or removes
 one, and makes no network call. It reports what it finds and leaves every
 decision about the configuration to you. \-\-offline is accepted for parity
-and changes nothing.
+and changes nothing. skarn assess reads the same files the same way for its
+saved permission rules section.
 .PP
 skarn mcp reads the same session stores as assess and the same configuration
 files as vet, read\-only and with no network call, and answers only the AI

@@ -1,5 +1,5 @@
 '\" t
-.TH "SKARN-GUARD" "1" "2026-06-23" "skarn 0.37.0" "Skarn Manual"
+.TH "SKARN-GUARD" "1" "2026-06-23" "skarn 0.38.0" "Skarn Manual"
 .SH NAME
 skarn\-guard \- Pre\-execution hook: read an event on stdin, emit a verdict
 .SH SYNOPSIS
@@ -30,61 +30,90 @@ assistant (verdicts, top rules, latency, the most recent denies), states what
 enforcing that window would have cost in blocks per day and prompts per day,
 and prints the enforce flip once the window spans at least five days with zero
 denies; for a host wired by skarn setup, that flip is a skarn setup \-\-update
-\-\-mode enforce command, which leaves plugin\-installed hooks in audit. For
-Cline that command flips the user\-scope hooks only, so the text output adds
-the \-\-scope project run for a repository's .clinerules/hooks and the hand
-edit for ~/.cline/hooks. Run at a terminal it reads one thing more, your own
-per\-user hook configs, so it can name a hook that has fallen behind this
-build once per release; piped or as json it reads nothing but the log. The
-guard logs only flagged calls, so every count and every rate report prints is
-over flagged actions, never over all traffic. accept closes that loop. An
-audit record whose top finding carries a secret gets a fingerprint, the same
-secret\-scoped key check writes to SARIF partialFingerprints, and a value
-fingerprint that names the value alone. report prints the accept command with
-the value fingerprint under each such deny, and `skarn guard accept
-<fingerprint>` records the value as a false positive, so every rule that fires
-on that value stops flagging it on any call, check included. A PII finding
-gets no value fingerprint, so its accept line carries the rule fingerprint and
-covers that rule only. A secret\-less deny \- a structural egress detector, a
-typosquat, a chain \- carries no fingerprint and no accept line. Only the
-highest\-severity finding of a call carries the fingerprint, so a call hiding
-several distinct secrets peels one accept at a time. The structural egress
-detectors are built into the engine rather than the rule pack, and they tier
-themselves. An egress whose whole payload is visible in the command itself is
-held at the ask tier: a bare request, a literal body, or query parameters,
-with no file sent, no credential store named, no earlier secret read in the
-same call, and no payload bytes the command text does not show. A command
-substitution, an environment expansion, a shell redirect, a form read, or a
-pipe feeding the target all keep the deny, and so does a payload carrying a
-recognized credential file or upload form, a co\-detected secret, or recon
-earlier in the same call, with one exception. A dynamic payload is reported at
-high rather than critical when its command names at least one URL, every
-destination, proxy and connection override it names (\-x, \-\-proxy,
-\-\-socks*, \-\-connect\-to, \-\-resolve, \-\-dns\-*, \-\-interface, a *_proxy
-variable on the command line) is a loopback literal (localhost, 127.x.x.x in
-canonical octets, ::1, 0.0.0.0), every command substitution in it is a plain
-local read (printenv, env, cat and the like with no pipe or nested command),
-and every stage of the pipeline is a known network client or a known local
-filter with no config variable, unix socket, URL file or unknown command; it
-is reported at high because a proxy variable inherited from the environment,
-an HTTP redirect (\-L is not read as a reason to keep critical) or a local
-forwarder can still carry the payload off the machine with nothing in the
-command to show it. That finding never disappears, enforce mode asks on it as
-on any other high finding, and a formed chain still denies. A detection rule
-that stops at its regex work limit on a tool input has not read the rest of
-it, so the guard floors that call the way it floors input it cannot fully
-classify: ask, deny under \-\-strict, with a reason that names the work limit
-when the floor raised the verdict (the truncation reason wins when both
-apply), answered through each host's own ask channel or its documented
-degradation. Ask means a real approval prompt on the primary shell surfaces
-(Claude Code PreToolUse outside bypassPermissions and dontAsk, Copilot
-preToolUse on both the CLI and VS Code, Cursor shell and MCP hooks) and a
-block on the channels with no ask (Codex, Claude Code PermissionRequest,
-Copilot permissionRequest, Cursor file\-read events, Gemini, Grok Build, the
-Antigravity CLI, Kimi Code, Cline, the Kiro CLI). Both subverbs are ungated:
-report reads the log, plus your own hook configs at a terminal, and accept
-writes only a file. On a flagged call the guard consults the personal
-accepted\-findings baseline it shares with check
+\-\-mode enforce command, which leaves plugin\-installed hooks in audit. That
+command flips the user\-scope hooks only, which for Copilot in Code are the
+profile hook files, so for every host setup wires at project scope the text
+output adds the skarn setup \-\-update \-\-agent <agent> \-\-scope project
+\-\-mode enforce run for a project's hook file: under Copilot in Code it names
+\-\-agent copilot and a folder project's .github/hooks/skarn.json, the file
+Code on macOS was observed running, and for Cline it names a repository's
+\&.clinerules/hooks and adds the hand edit for ~/.cline/hooks. Run at a terminal
+it reads one thing more, your own per\-user hook configs, so it can name a
+hook that has fallen behind this build once per release; piped or as json it
+skips those configs, and reads the Copilot in Code hook configuration only to
+find the expected Code log, as described below. The guard logs only flagged
+calls, so every count and every rate report prints is over flagged actions,
+never over all traffic. accept closes that loop. An audit record whose top
+finding carries a secret gets a fingerprint, the same secret\-scoped key check
+writes to SARIF partialFingerprints, and a value fingerprint that names the
+value alone. report prints the accept command with the value fingerprint under
+each such deny, and `skarn guard accept <fingerprint>` records the value as a
+false positive, so every rule that fires on that value stops flagging it on
+any call, check included. A PII finding gets no value fingerprint, so its
+accept line carries the rule fingerprint and covers that rule only. A
+secret\-less deny \- a structural egress detector, a typosquat, a chain \-
+carries no fingerprint and no accept line. Only the highest\-severity finding
+of a call carries the fingerprint, so a call hiding several distinct secrets
+peels one accept at a time. In the log record, the tool name is screened
+first, as \-\-log describes, and a value found in the call is then masked
+wherever the record's working directory, session id or a kept tool name copies
+it. The command\-line password detector, which reports a password passed to a
+database, directory, file\-share or registry client in a shell tool call, and
+the structural egress detectors are built into the engine rather than the rule
+pack. The egress detectors tier themselves. An egress whose whole payload is
+visible in the command itself is held at the ask tier: a bare request, a
+literal body, or query parameters, with no file sent, no credential store
+named, no earlier secret read in the same call, and no payload bytes the
+command text does not show. A command substitution, an environment expansion,
+a shell redirect, a form read, or a pipe feeding the target all keep the deny,
+and so does a payload carrying a recognized credential file or upload form, a
+co\-detected secret, or recon earlier in the same call, with one exception. A
+dynamic payload is reported at high rather than critical when its command
+names at least one URL, every destination, proxy and connection override it
+names (\-x, \-\-proxy, \-\-socks*, \-\-connect\-to, \-\-resolve, \-\-dns\-*,
+\-\-interface, a *_proxy variable on the command line) is a loopback literal
+(localhost, 127.x.x.x in canonical octets, ::1, 0.0.0.0), every command
+substitution in it is a plain local read (printenv, env, cat and the like with
+no pipe or nested command), and every stage of the pipeline is a known network
+client or a known local filter with no config variable, unix socket, URL file
+or unknown command; it is reported at high because a proxy variable inherited
+from the environment, an HTTP redirect (\-L is not read as a reason to keep
+critical) or a local forwarder can still carry the payload off the machine
+with nothing in the command to show it. That finding never disappears, enforce
+mode asks on it as on any other high finding, and a formed chain still denies.
+A detection rule that stops at its regex work limit on a tool input has not
+read the rest of it, so the guard floors that call the way it floors input it
+cannot fully classify: ask, deny under \-\-strict, with a reason that names
+the work limit when the floor raised the verdict (the truncation reason wins
+when both apply), answered through each host's own ask channel or its
+documented degradation. A read of a dotenv file larger than the 4 MiB the
+guard reads before the call floors the same way on Claude Code, the Copilot
+CLI and Copilot in Code when the lines the read asks for are not all inside
+those bytes, and on VS Code Copilot Chat a read_file of such a file floors
+whatever lines it asks for, with a reason that says the file is larger than
+the guard reads; a read the guard loads nothing for (a missing, empty or
+binary file, or a path the guard declines to open) keeps its verdict. A call
+that removes, downgrades, silences or edits the skarn hook, on a hook file of
+any supported assistant, is reported as agent\-hook\-removal: a removal, a
+downgrade or a silencing is denied when the hook file the guard reads proves
+the effect, and every other such call floors the same way. A shell command
+that names a credential file and runs a program whose name is computed at run
+time is reported as unresolved\-program\-exfiltration and floors the same way.
+Ask means a real approval prompt on the primary shell surfaces (Claude Code
+PreToolUse outside bypassPermissions and dontAsk, Copilot preToolUse on both
+the CLI and VS Code, Cursor shell and MCP hooks) and a block on the channels
+with no ask (Codex, Claude Code PermissionRequest, Copilot permissionRequest,
+Cursor file\-read events, Gemini, Grok Build, the Antigravity CLI, Kimi Code,
+Cline, the Kiro CLI). Both subverbs are ungated: report reads the log, the
+Copilot in Code hook configuration, plus your own hook configs at a terminal,
+and accept writes only a file. With no \-\-log and no SKARN_GUARD_LOG, report
+lists guard\-copilot\-code\-audit.jsonl when that log exists, and before it
+exists when a Code profile hook logs there and the report covers copilot\-code
+(no \-\-agent, or \-\-agent copilot\-code), reading the profile hook files and
+the layers doctor reads with them to find out; when no expected log exists yet
+beside such a profile, the text output names skarn doctor and one flagged Code
+action as the next step, not skarn setup \-\-update. On a flagged call the
+guard consults the personal accepted\-findings baseline it shares with check
 (~/.config/skarn/baseline.json, the file form only, never the org\-union
 directory, so the guard can never hit a paid gate). A finding accepted as a
 false positive is dropped from the verdict. A finding a human confirmed as a
@@ -104,16 +133,22 @@ audit\-only. One of: audit, enforce. The default is audit.
 .TP
 \fB\-\-strict\fR
 Gate Read operations (credential\-file reconnaissance) on the hosts that do
-not gate them by default; Claude Code gates Read without this flag and scans
-the file a Read names before the read runs. On every host, turn the ask the
-guard gives an event it cannot fully classify (unparseable, oversized, a
-repeated key, or a tool input nested past the flatten bound) into a deny.
-Without it that event asks in enforce on every host, degraded to the host's
-deny where it has no ask channel; a scan\-infrastructure failure (unreadable
-rules) is unchanged by this flag on Claude and the sdk host, which ask, and
-fails closed only with it on every other host. On the sdk host the guard scans
-every tool kind, read included, without this flag, so \-\-strict changes only
-the verdict an unclassifiable call gets there.
+not gate them by default. Claude Code gates Read without this flag, and so do
+the Copilot CLI, Copilot in Code and VS Code Copilot Chat for every
+pre\-execution read; on those hosts the guard scans the file the read names
+before it runs; the exceptions are a VS Code Copilot Chat view or read, which
+names no path field the guard reads a file from and is judged on its arguments
+only, and a Copilot post\-tool view, which is still gated only with this flag.
+On every host, turn the ask the guard gives an event it cannot fully classify
+(unparseable, oversized, a repeated key, a tool input nested past the flatten
+bound, or a read of a dotenv file whose requested lines lie past the 4 MiB the
+guard reads) into a deny. Without it that event asks in enforce on every host,
+degraded to the host's deny where it has no ask channel; a
+scan\-infrastructure failure (unreadable rules) is unchanged by this flag on
+Claude and the sdk host, which ask, and fails closed only with it on every
+other host. On the sdk host the guard scans every tool kind, read included,
+without this flag, so \-\-strict changes only the verdict an unclassifiable
+call gets there.
 .TP
 \fB\-\-agent\fR \fIname\fR
 Hook host. By default, auto\-detect from the event shape. Pass codex for Codex
@@ -226,9 +261,19 @@ does not authenticate. A runtime label longer than 64 bytes or outside
 [A\-Za\-z0\-9._@+\-], and either one shaped like a credential, read as one by
 the detection rules, whose own scan stopped a detection rule at its regex work
 limit, or containing a value the call's own scan matched is recorded as
-withheld; an email address in identity is kept. With report and no \-\-log,
-the sdk log (guard\-sdk\-audit.jsonl under the same cache) is listed only when
-it exists or when \-\-agent sdk names it, because no laptop host writes it.
+withheld; an email address in identity is kept. On every host, a record's tool
+name that contains a value the call's own scan found, that carries a
+credential\-shaped piece (16 or more mixed letters and digits, read across
+underscores and hyphens up to an all\-lowercase word, or a long value after a
+credential word), or that is an MCP tool name on a call whose scan decoded a
+secret, is written as mcp__redacted; the sdk adapter writes sdk\-tool instead,
+and also for an empty name, a name over 64 bytes, one outside letters, digits,
+dot, underscore and hyphen, or one that reads as credential\-shaped as a
+whole. Any other tool name is written unchanged, so a credential under 16
+bytes, or one an all\-lowercase piece breaks up, can reach the log when the
+call's scan did not detect it. With report and no \-\-log, the sdk log
+(guard\-sdk\-audit.jsonl under the same cache) is listed only when it exists
+or when \-\-agent sdk names it, because no laptop host writes it.
 .TP
 \fB\-\-window\fR \fIspan\fR
 With report: how far back to summarize, as <N>d or all. The default is 7d.
@@ -294,7 +339,7 @@ Event	Fires on	Enforce	Shipped
 Audit mode is silent. beforeReadFile is gated only under \-\-strict, which the
 shipped config passes on that event alone. In enforce an unparseable event
 exits 2 and an input the guard cannot fully classify asks (denies under
-\-\-strict).
+\-\-strict), except on preToolUse, where it denies.
 .PP
 .TS
 lB lB lB lB
@@ -304,6 +349,7 @@ Event	Fires on	Enforce	Shipped
 \&beforeReadFile	\&file read	\&deny	\&yes
 \&beforeMCPExecution	\&MCP tool call	\&deny or ask	\&yes
 \&beforeSubmitPrompt	\&submitted prompt	\&deny	\&yes
+\&preToolUse	\&file write or delete	\&deny	\&yes
 .TE
 .SS "Codex CLI"
 Codex shares Claude's event names, so pass \-\-agent codex. Audit mode advises
@@ -433,7 +479,10 @@ Event	Fires on	Enforce	Shipped
 Copilot in Code runs the Copilot CLI's hooks from each profile's hooks folder
 and a folder project's .github/hooks. A preToolUse deny is honoured, a nonzero
 exit fails closed, and a timeout let the held tool run. A would\-be ask is
-answered with a deny on Code, where ask is unmeasured.
+answered with a deny on Code, where ask is unmeasured. These are Windows
+measurements, on Copilot app `156.0.4314.58`. On Copilot app `158.0.4370.33`,
+on Windows and macOS, a folder project's hook file fired in audit mode, and no
+matching guard event was observed from a profile's hook file.
 .PP
 .TS
 lB lB lB lB

@@ -1,4 +1,4 @@
-.TH "SKARN-DOCTOR" "1" "2026-06-23" "skarn 0.37.0" "Skarn Manual"
+.TH "SKARN-DOCTOR" "1" "2026-06-23" "skarn 0.38.0" "Skarn Manual"
 .SH NAME
 skarn\-doctor \- Check whether skarn is actually protecting this machine
 .SH SYNOPSIS
@@ -31,9 +31,32 @@ On Claude and Codex a managed lockdown key (allowManagedHooksOnly /
 allow_managed_hooks_only) makes every lower layer inert, and doctor reports an
 inert user or project hook instead of counting it as protection; Cursor and
 Copilot layer additively, so every present layer runs. Copilot in Code is read
-per profile: each profile's hooks\eskarn.json is its own user layer, and the
-agent_config_copilot_code check warns until every profile is wired. The
-Copilot policy directory, a repository project's .github/hooks and a
+per profile: each profile's hooks\eskarn.json is its own user layer. A coding
+home or profile folder skarn cannot open, a link where it looks for profiles,
+and a coding home reached through a link to a network path are a coverage
+failure on the Copilot in Code host only: agent_config_copilot_code warns that
+whether a profile there carries a guard hook is unknown, names each folder in
+its notes and inspects the first one without following a link, the other
+hosts' checks still run, and an absent coding home stays silent. On macOS and
+Windows no matching guard event was observed from a profile's hook file on
+Copilot app `158.0.4370.33`, while Copilot app `156.0.4314.58` on Windows ran
+it, so doctor reports a wired profile file as unverified on every system,
+never counts it as protection, and names skarn setup \-\-agent copilot
+\-\-scope project, the folder project file that was observed running the hook.
+A profile whose settings.json sets disableAllHooks gets both fixes, the switch
+first. Once doctor can confirm the hooks run, the guard_scope_<agent> check
+names the enforce flip by where the audit hooks sit: skarn setup \-\-update
+\-\-agent <agent> \-\-mode enforce for user\-scope hooks; skarn setup
+\-\-update \-\-agent <agent> \-\-scope project \-\-mode enforce for the
+project hook file setup writes, with \-\-agent copilot for a Copilot in Code
+folder project; both, the user\-scope flip first, when both scopes hold audit
+hooks; and a hand edit for a project file setup does not write, such as
+\&.claude/settings.local.json, or one reached through a symlink, which
+project\-scope setup refuses. A managed layer adds no flip, so audit hooks
+that sit only in a managed layer get none. The guard_scope_copilot_code check
+leaves profile hook files out of its reading once any other hook file is
+wired, so a profile hook file does not hide the folder project's mode or flip.
+The Copilot policy directory, a repository project's .github/hooks and a
 disableAllHooks switch were not measured on Code, so doctor reports those
 layers unverified there, never inert and never as protection. Claude Code
 reads exactly ONE managed source and ignores the rest rather than merging
@@ -61,98 +84,108 @@ committed project hook gets its own guard\-command verdicts. An absolute
 machine\-local path or an unrendered __SKARN_PATH__ placeholder FAILs, because
 that file protects nobody but its author. A PATH\-resolved command that does
 not resolve on this machine FAILs with the install command as the fix, since
-the hook exits 0 here and the repo is not protecting this machine. Doctor
-never probes a UNC path (\e\eserver\eshare or //server/share) or a local link
-that reaches one; a mapped drive letter is not recognized as one. When such an
-entry comes on PATH before the first local entry holding skarn, or a hook
-names a skarn on such a path, the check WARNs that it cannot confirm the
-binary, and a guard log on such a path WARNs without being opened. Cursor at
-project scope WARNs naming the GUI\-PATH gap, the documented cost of a
-portable committed config. A committed log destination other than the portable
-per\-user default FAILs whichever arm of the hook carries it, including the
-arm this machine does not run, because that arm runs on a teammate's machine.
-An arm that does not run skarn is not read. The license check WARNs when there
-is no license at all (check does not run, exit 7; assess, the guard, and the
-recall commands still work) and FAILs only when a license is present but
-broken. The eula check PASSes when an EULA acceptance is recorded, showing the
-accepted version, timestamp, and method, and WARNs when none is, with fix
-`skarn eula accept`; doctor itself never asks, so a diagnostic is never
-blocked by the acceptance gate. The guard\-scope check WARNs when a hook wired
-with \-\-guard\-mode enforce runs on an unlicensed binary or on the free tier,
-where the guard silently runs audit: it records the would\-be verdict and
-blocks nothing. The guard\-conformance check appears only when a managed layer
-declares a skarn hook, and answers whether this machine runs what the org
-declared. It WARNs when the managed layer declares enforce on an unlicensed
-binary or on the free tier (the fleet is observing, not blocking), when the
-declared command does not resolve to an executable or names a UNC path doctor
-does not probe (the managed config alone deploys nothing, so the binary must
-ride the same MDM payload), when a declared event is not gated, or when a hook
-disagrees with the declared mode. Every branch is a WARN, never a FAIL,
-because a policy divergence is a fleet fact rather than a broken install, and
-every branch but the free\-tier one carries an exact fix. The grokbot check
-appears only where Grok Bot is installed, xAI's always\-on desktop agents app
-and a different product from the Grok Build CLI. It is a warning that carries
-no fix, because no skarn command changes what it reports: skarn states the
-posture and leaves what to do about it to you. When the daemon\-connection
-state is present the warning names the always\-on local\-exec daemon that lets
-a cloud agent execute here, and its egress tunnel when that is on; when only
-the app root is found it reports plain presence and claims no channel.
-Detection is stat\-only over ~/.grokbot/ and the macOS app root. The one file
-skarn opens there is ~/.grokbot/settings.json, for its two posture flags, and
-it is read only once skarn has proved that path is that file and nothing else
-\- not a link, not a hard link to a credential file, not a pipe \- so no
-daemon or OAuth credential value can reach the report. On Windows doctor reads
-the arm that machine runs: a $env:SKARN_GUARD_LOG assignment that opens a
-PowerShell arm, or opens its leading if block, is the hook's log, a
-double\-quoted $env:USERPROFILE path in it resolves against USERPROFILE, and
-guard_log_<agent> checks that file; a hook with no such assignment and no
-\-\-log flag reports logging disabled. A hook with no Windows arm is read
-under the same rules, where a POSIX VAR=x cmd prefix does not parse, so doctor
-reports no hook wired for it. config_drift_<agent> takes the executable and
-the log of each arm from that arm and compares everything else, on every OS,
-so a flag, a wrapper or a missing event on either arm still warns, and so does
-a log the guard would refuse. On Windows an entry an earlier setup wrote with
-a backslash path on its POSIX arm warns until setup \-\-update replaces it. A
-POSIX\-only entry that an earlier re\-run left behind reads as foreign, and
-doctor does not name it. Check ids (binary, license, eula,
-agent_config_<agent>, guard_command_<agent>, guard_scope_<agent>,
-config_drift_<agent>, guard_log_<agent>, self_test_<agent>,
-guard_conformance_<agent>, grokbot, session_stores, cache_dir, rule_age) are a
-stable, greppable contract for fleet scripts. A failure exits 1; a warning
-never does; \-\-json is a data mode that always exits 0 once a report is
-rendered, with two refusals that precede any check: an unknown option exits 1,
-and a home directory that cannot be resolved exits 6. Doctor is hermetic: it
-makes no network call, shells out to nothing, and enumerates the session
-stores without reading a session's content. Set SKARN_MANAGED_ROOT to validate
-a staged managed payload before pushing it; the active root is echoed in the
-report header and in \-\-json, so a staged report can never pass as a live
-one. A hook config layer that repeats a JSON key is reported unverified with
-the key named, never as malformed: a reader that keeps the first value may run
-different hooks from one that keeps the last, so the hooks either reading
-carries are shown but never counted as protection, and a lockdown or kill
-switch whose two readings disagree leaves the layers it would silence
-unverified instead of inert. With no skarn hook in either reading the ordinary
-unwired warning stands. A skarn hook in Codex's user or project hooks.json is
-reported unverified, never as protection, because Codex runs it only after it
-is trusted in /hooks and skarn cannot read that trust state; a hook in Codex's
-managed requirements.toml or managed plist is unaffected. For Cline, doctor
-reads ~/Documents/Cline/Hooks/, <CLINE_DIR or ~/.cline>/hooks/,
-<workspace>/.clinerules/hooks/, and <workspace>/.cline/hooks/ as four peer
-directories: every directory runs and any cancel wins. It reports per file,
-catches a non\-executable hook on POSIX, and names duplicates that would
-double one runtime's audit record. A hook directory doctor cannot list is a
-coverage gap, and the PATH lookups for cline and a hook's interpreter skip
-network paths. It reads hooksEnabled in <data dir>/globalState.json as a
-partial kill switch: false silences the extension, but the CLI still runs
-hooks. CLINE_DATA_DIR selects that data directory, otherwise CLINE_DIR/data or
-~/.cline/data. Doctor never counts a file no runtime reads as protection, and
-it checks coverage per runtime: for the extension and for the CLI, whichever
-it finds, each default event needs a guard hook that runtime runs. On Windows
-it counts a .ps1 hook for the extension only, because the CLI starts it with
-powershell \-File, which a Restricted execution policy refuses, and doctor
-cannot read the policy. Cline has no managed policy layer, so there is no
-guard_conformance_cline check. Doctor cannot see the CLI's invocation\-time
-\-\-hooks\-dir or \-\-yolo, or a CLI run only through npx cline.
+the hook exits 0 here and the repo is not protecting this machine. Outside the
+session_stores check, doctor never probes a UNC path (\e\eserver\eshare or
+//server/share) or a local link that reaches one; a mapped drive letter is not
+recognized as one. The session_stores check runs session discovery, which
+reads a home or a store root spelled as a network path. When such an entry
+comes on PATH before the first local entry holding skarn, or a hook names a
+skarn on such a path, the check WARNs that it cannot confirm the binary, and a
+guard log on such a path WARNs without being opened. Cursor at project scope
+WARNs naming the GUI\-PATH gap, the documented cost of a portable committed
+config. A committed log destination other than the portable per\-user default
+FAILs whichever arm of the hook carries it, including the arm this machine
+does not run, because that arm runs on a teammate's machine. An arm that does
+not run skarn is not read. The license check WARNs when there is no license at
+all (check does not run, exit 7; the guard still works, as do assess and the
+recall commands without \-\-evidence\-home, which requires Pro) and FAILs only
+when a license is present but broken. The eula check PASSes when an EULA
+acceptance is recorded, showing the accepted version, timestamp, and method,
+and WARNs when none is, with fix `skarn eula accept`; doctor itself never
+asks, so a diagnostic is never blocked by the acceptance gate. The
+guard\-scope check WARNs when a hook wired with \-\-guard\-mode enforce runs
+on an unlicensed binary or on the free tier, where the guard silently runs
+audit: it records the would\-be verdict and blocks nothing. The
+guard\-conformance check appears only when a managed layer declares a skarn
+hook, and answers whether this machine runs what the org declared. It WARNs
+when the managed layer declares enforce on an unlicensed binary or on the free
+tier (the fleet is observing, not blocking), when the declared command does
+not resolve to an executable or names a UNC path doctor does not probe (the
+managed config alone deploys nothing, so the binary must ride the same MDM
+payload), when a declared event is not gated, or when a hook disagrees with
+the declared mode. Every branch is a WARN, never a FAIL, because a policy
+divergence is a fleet fact rather than a broken install, and every branch but
+the free\-tier one carries an exact fix. The grokbot check appears only where
+Grok Bot is installed, xAI's always\-on desktop agents app and a different
+product from the Grok Build CLI. It is a warning that carries no fix, because
+no skarn command changes what it reports: skarn states the posture and leaves
+what to do about it to you. When the daemon\-connection state is present the
+warning names the always\-on local\-exec daemon that lets a cloud agent
+execute here, and its egress tunnel when that is on; when only the app root is
+found it reports plain presence and claims no channel. Detection is stat\-only
+over ~/.grokbot/ and the macOS app root. The one file skarn opens there is
+~/.grokbot/settings.json, for its two posture flags, and it is read only once
+skarn has proved that path is that file and nothing else \- not a link, not a
+hard link to a credential file, not a pipe \- so no daemon or OAuth credential
+value can reach the report. On Windows doctor reads the arm that machine runs:
+a $env:SKARN_GUARD_LOG assignment that opens a PowerShell arm, or opens its
+leading if block, is the hook's log, a double\-quoted $env:USERPROFILE path in
+it resolves against USERPROFILE, and guard_log_<agent> checks that file; a
+hook with no such assignment and no \-\-log flag reports logging disabled. A
+hook with no Windows arm is read under the same rules, where a POSIX VAR=x cmd
+prefix does not parse, so doctor reports no hook wired for it.
+config_drift_<agent> takes the executable and the log of each arm from that
+arm and compares everything else, on every OS, so a flag, a wrapper or a
+missing event on either arm still warns, and so does a log the guard would
+refuse. On Windows an entry an earlier setup wrote with a backslash path on
+its POSIX arm warns until setup \-\-update replaces it. A POSIX\-only entry
+that an earlier re\-run left behind reads as foreign, and doctor does not name
+it. Check ids (binary, license, eula, agent_config_<agent>,
+guard_command_<agent>, guard_scope_<agent>, config_drift_<agent>,
+guard_log_<agent>, self_test_<agent>, guard_conformance_<agent>, grokbot,
+session_stores, cache_dir, rule_age) are a stable, greppable contract for
+fleet scripts. A failure exits 1; a warning never does; \-\-json is a data
+mode that always exits 0 once a report is rendered, with two refusals that
+precede any check: an unknown option exits 1, and a home directory that cannot
+be resolved exits 6. Doctor is hermetic: it opens no network connection of its
+own, shells out to nothing, and enumerates the session stores without reading
+a session's content. The session_stores check notes how many Copilot in Code
+session folders hold no transcript and are listed by no session index, so no
+session is listed for them; that note leaves its status unchanged. Set
+SKARN_MANAGED_ROOT to validate a staged managed payload before pushing it; the
+active root is echoed in the report header and in \-\-json, so a staged report
+can never pass as a live one. A hook config layer that repeats a JSON key is
+reported unverified with the key named, never as malformed: a reader that
+keeps the first value may run different hooks from one that keeps the last, so
+the hooks either reading carries are shown but never counted as protection,
+and a lockdown or kill switch whose two readings disagree leaves the layers it
+would silence unverified instead of inert. With no skarn hook in either
+reading the ordinary unwired warning stands. A skarn hook in Codex's user or
+project hooks.json is reported unverified, never as protection, because Codex
+runs it only after it is trusted in /hooks and skarn cannot read that trust
+state; a hook in Codex's managed requirements.toml or managed plist is
+unaffected. For Cline, doctor reads ~/Documents/Cline/Hooks/, <CLINE_DIR or
+~/.cline>/hooks/, <workspace>/.clinerules/hooks/, and
+<workspace>/.cline/hooks/ as four peer directories: every directory runs and
+any cancel wins. It reports per file, catches a non\-executable hook on POSIX,
+and names duplicates that would double one runtime's audit record. A hook
+directory doctor cannot list is a coverage gap, and the PATH lookups for cline
+and a hook's interpreter skip network paths. It reads hooksEnabled in <data
+dir>/globalState.json as a partial kill switch: false silences the extension,
+but the CLI still runs hooks. CLINE_DATA_DIR selects that data directory,
+otherwise CLINE_DIR/data or ~/.cline/data. Doctor never counts a file no
+runtime reads as protection, and it checks coverage per runtime: for the
+extension and for the CLI, whichever it finds, each default event needs a
+guard hook that runtime runs. On Windows it counts a .ps1 hook for the
+extension only, because the CLI starts it with powershell \-File, which a
+Restricted execution policy refuses, and doctor cannot read the policy. Cline
+has no managed policy layer, so there is no guard_conformance_cline check.
+Doctor cannot see the CLI's invocation\-time \-\-hooks\-dir or \-\-yolo, or a
+CLI run only through npx cline. The session_stores check warns when a session
+store could not be read in full, which includes a link on a session store path
+that the scan does not follow because its target is a network path; on macOS
+the hook check, setup and vet still refuse a Copilot in Code home spelled as a
+network path, which the session scan reads.
 .SH OPTIONS
 .TP
 \fB\-v\fR, \fB\-\-verbose\fR
@@ -353,7 +386,10 @@ platform. Read\-only; never written.
 \fB~/.gemini/settings.json\fR
 Gemini CLI's user settings: MCP server definitions read by vet, and the hooks
 object skarn setup \-\-agent gemini merges the guard into and doctor reads as
-the user precedence layer.
+the user precedence layer. When GEMINI_CLI_HOME is nonempty, vet, assess,
+inventory, and the MCP vet_configs tool read
+$GEMINI_CLI_HOME/.gemini/settings.json instead. Setup and doctor still use
+~/.gemini/settings.json.
 .TP
 \fB~/.grok/hooks/skarn.json\fR
 Grok Build's user hook file for skarn, written whole by skarn setup \-\-agent
@@ -412,20 +448,33 @@ data.db, plus a $COPILOT_HOME that names one, with the usual backup, atomic
 write and verify. Discovery does not count or open a marker or a profile
 folder that is a link, a junction included, and data.db counts only as a file;
 a $COPILOT_HOME that names a Code profile can still name a linked folder
-unless the link points at a network path. A profile's hooks folder may be a
-link to a local folder, and setup writes through it and doctor reads through
-it; when the hooks folder, or a folder on the way to the hook file, is a link
-whose target is a network path, setup refuses that profile before anything is
-read or created (refused network\-target in the JSON result) and doctor reads
-nothing through it and warns that the hook file is reached through a link to a
-network path. The profile's settings.json is read through a link of either
-kind. Its content is the shipped copilot hook file with the guard log moved to
+unless the link points at a network path. Setup prints a line and doctor's
+agent_config_copilot_code names each such link, each coding home or profile
+folder skarn cannot open, and a coding home or named profile reached through a
+link to a network path; the check then warns that whether a profile there
+carries a guard hook is unknown, and appears even when no profile was found. A
+profile's hooks folder may be a link to a local folder, and setup writes
+through it and doctor reads through it; when the hooks folder, or a folder on
+the way to the hook file, is a link whose target is a network path, setup
+refuses that profile before anything is read or created (refused
+network\-target in the JSON result) and doctor reads nothing through it and
+warns that the hook file is reached through a link to a network path. The
+profile's settings.json is read through a link to a local file or folder; when
+it, or a folder on the way to it, is a link whose target is a network path,
+doctor reads nothing through it, reports whether its disableAllHooks silences
+the hooks as unknown, and names a command that inspects the link itself. Its
+content is the shipped copilot hook file with the guard log moved to
 guard\-copilot\-code\-audit.jsonl; the command still pins \-\-agent copilot.
-Code reads every *.json in the profile's hooks folder, so doctor warns when a
-second skarn hook file sits beside it, and reads each profile's settings.json
-for disableAllHooks. On macOS and Linux setup and doctor reach a profile only
-through a $COPILOT_HOME that names it. Verified against Copilot app
-`156.0.4314.58`.
+Doctor reads each profile's settings.json for disableAllHooks. Copilot app
+`156.0.4314.58` on Windows ran this file; on Windows and macOS no matching
+guard event was observed from it on Copilot app `158.0.4370.33`, while the
+\&.github/hooks/skarn.json of a folder project ran the hook, so doctor reports a
+wired profile file as unverified on every system, never as protection, and
+names skarn setup \-\-agent copilot \-\-scope project. On macOS setup and
+doctor also find every profile under ~/Library/Application
+Support/Microsoft/CopilotAppHost/CopilotCodingHome/. On Linux setup and doctor
+reach a profile only through a $COPILOT_HOME that names it. Verified against
+Copilot app `156.0.4314.58`.
 .TP
 \fB~/Documents/Cline/Hooks/\fR
 Cline's shared user hook directory, read by the extension and the CLI.
@@ -491,6 +540,17 @@ The legacy Amazon Q agent directory of a workspace. Doctor reads it as a
 V2\-only layer, and only in a workspace with no .kiro directory, the one case
 the V2 harness was measured loading it; the V3 harness does not read it. Setup
 never writes here.
+.TP
+\fB~/Library/Application Support/Microsoft/CopilotAppHost/CopilotCodingHome/<profile>/hooks/skarn.json (macOS)\fR
+The skarn\-owned hook file of one Copilot in Code profile on macOS. skarn
+setup \-\-agent copilot\-code writes it for every profile under this
+CopilotCodingHome directory, and doctor reads it, by the rules the Windows
+entry for this file states. On the verified install no profile held a hooks
+folder. With the file written there, no matching guard event was observed from
+it, while the .github/hooks/skarn.json of a folder project ran the hook, so
+doctor on macOS reports a wired profile file as unverified, never as
+protection, and names skarn setup \-\-agent copilot \-\-scope project.
+Verified against Copilot app `158.0.4370.33`.
 .SH "SEE ALSO"
 skarn(1)
 .SH COPYRIGHT

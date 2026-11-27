@@ -1,4 +1,4 @@
-.TH "SKARN-SERVE" "1" "2026-06-23" "skarn 0.37.0" "Skarn Manual"
+.TH "SKARN-SERVE" "1" "2026-06-23" "skarn 0.38.0" "Skarn Manual"
 .SH NAME
 skarn\-serve \- Local web UI on 127.0.0.1, with every detected secret masked
 .SH SYNOPSIS
@@ -26,8 +26,8 @@ rows. A session whose file changes on disk while it is being read is left out
 of that answer rather than served unmasked, because the scan indexed the older
 bytes. The search stream, the recent page, the meta response and the by\-date
 trend each report how many they left out in a skipped field, and reloading
-picks the session up again; search appends its count as one final line after
-its rows, only when a session was left out. The recall views (search, recent,
+picks the session up again; search appends its count as one line after its
+rows, only when a session was left out. The recall views (search, recent,
 stats) need no license. The security view (/api/scan) is the same engine as
 check and requires one the same way: without it the endpoint answers 403 and
 the Security tab shows how to register free. Opening a finding in the Security
@@ -38,7 +38,31 @@ context, and from there you can accept the finding into your baseline as a
 false positive. That is the same write path as skarn baseline accept, and it
 records only the finding's fingerprint, never its secret. The license is
 resolved once at startup, so installing one while the server is running needs
-a restart.
+a restart. The four index routes (/api/recent, /api/meta, /api/stats and
+/api/stats/by\-date) carry tools_dropped, stores_unreadable,
+sessions_truncated and session_folders_without_transcript after
+compliance_withheld. The counts come from the walk that built the cached index
+for the request's hours, over every assistant; cli, project and user filter
+rows only and never narrow them. /api/search appends one line per non\-zero
+count, such as {"tools_dropped":2}, after its rows and after the skipped and
+compliance_withheld lines; these counts cover every assistant over the
+request's hours, and cli, project and user do not narrow them. /api/session
+sends the counts as x\-skarn\-tools\-dropped, x\-skarn\-stores\-unreadable,
+x\-skarn\-sessions\-truncated and
+x\-skarn\-session\-folders\-without\-transcript, which is always 0 for one
+session, beside x\-skarn\-compliance\-withheld, where
+x\-skarn\-sessions\-truncated is 1 only when the returned session's own
+transcript content was truncated or compacted, and sends
+x\-skarn\-coverage\-hours for the window the counts cover: the hours of the
+unexpired cached index that found the session, or 0 for a walk over all
+history. A 404 for a session id that is not found carries the same headers,
+with x\-skarn\-coverage\-hours set to 0, and the same counts in its body as
+compliance_withheld, tools_dropped, stores_unreadable, sessions_truncated and
+session_folders_without_transcript. /api/scan takes its coverage counts from
+the one walk its cache stamps and revalidates against. A cached scan whose
+refused session store links still refuse is reused within its freshness
+window; a session sidecar that becomes a link after a cached scan, while no
+transcript changed, is counted at the next full scan.
 .SH OPTIONS
 .TP
 \fB\-\-port\fR \fIn\fR

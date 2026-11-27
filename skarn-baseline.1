@@ -1,4 +1,4 @@
-.TH "SKARN-BASELINE" "1" "2026-06-23" "skarn 0.37.0" "Skarn Manual"
+.TH "SKARN-BASELINE" "1" "2026-06-23" "skarn 0.38.0" "Skarn Manual"
 .SH NAME
 skarn\-baseline \- Triage into a baseline (audit); accept a false positive
 (accept)
@@ -48,7 +48,9 @@ sibling .lock file cannot be opened or created is refused with nothing
 written. When a detection rule stopped at its regex work limit during the
 audit scan, audit says so: with nothing to triage it reports the scan as
 incomplete instead of saying there is nothing to triage, and with findings it
-says they are a floor.
+says they are a floor. baseline audit prints the lines for links on a session
+store path that Skarn did not follow on stderr before the first finding, so
+they are seen before any triage.
 .SH OPTIONS
 .TP
 \fB\-\-reason\fR \fItext\fR

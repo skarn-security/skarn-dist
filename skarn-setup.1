@@ -1,4 +1,4 @@
-.TH "SKARN-SETUP" "1" "2026-06-23" "skarn 0.37.0" "Skarn Manual"
+.TH "SKARN-SETUP" "1" "2026-06-23" "skarn 0.38.0" "Skarn Manual"
 .SH NAME
 skarn\-setup \- Wire the guard hook into detected assistants, then self\-test
 it
@@ -21,7 +21,11 @@ Codex CLI, Copilot CLI, Gemini CLI, Grok Build, Copilot in Code, Cline, the
 Kiro CLI), merge the skarn guard hook into each one's native config in audit
 mode, and prove the wiring with the guard self\-test. Copilot in Code gets one
 hook file per profile, <profile>\ehooks\eskarn.json, for every profile under
-the CopilotCodingHome directories of %LOCALAPPDATA%; its folder projects read
+the CopilotCodingHome directories of %LOCALAPPDATA% on Windows and under
+~/Library/Application Support/Microsoft/CopilotAppHost/CopilotCodingHome/ on
+macOS; on either system no matching guard event was observed from the profile
+file on Copilot app `158.0.4370.33`, while Copilot app `156.0.4314.58` on
+Windows ran it; its folder projects, measured on Windows and on macOS, read
 the .github/hooks/skarn.json that \-\-agent copilot \-\-scope project writes,
 so \-\-agent copilot\-code refuses \-\-scope project. \-\-scope project writes
 committed, shareable configs whose commands are portable by construction: a
@@ -60,21 +64,25 @@ refuses a link whose file is missing or whose directory it cannot write,
 \-\-remove reports a link whose file is missing as unchanged, and a rewrite
 that fails or is rolled back after its verify read leaves no backup behind. A
 Copilot in Code hook file reached through a link whose target is a network
-path is refused before anything is read or created. A JSON config file setup
-creates is readable by its owner only on macOS and Linux, while an existing
-file keeps its mode; on Windows a new file takes the permissions of the
-directory it is created in. On a terminal setup runs an interactive wizard:
-the mode prompt accepts audit, enforce, or an empty line for audit, each
-install prompt accepts y, yes, n, no, or an empty line for yes, and any other
-answer is asked again. \-\-yes accepts everything and \-\-print writes
-nothing. The result names the mode it wired, and whether an enforce request
-runs audit because the machine is unlicensed or its license is on the free
-tier. Cline gets executable PreToolUse and UserPromptSubmit files with mode
-0755 on POSIX, or PreToolUse.ps1 and UserPromptSubmit.ps1 on Windows. At user
-scope setup writes only ~/Documents/Cline/Hooks/, which both runtimes read.
-Documents is the literal folder joined to HOME, and CLINE_DIR does not move
-it. Setup never writes ~/.cline/hooks/, because installing in both directories
-would make the CLI run two skarn hooks per call. At project scope it writes
+path is refused before anything is read or created. When setup cannot open a
+Copilot in Code coding home or profile folder, or finds a link where it looks
+for profiles, it prints one stderr line per folder, at most eight and then a
+count, and goes on with the profiles it found and the other agents; an absent
+coding home prints nothing. A JSON config file setup creates is readable by
+its owner only on macOS and Linux, while an existing file keeps its mode; on
+Windows a new file takes the permissions of the directory it is created in. On
+a terminal setup runs an interactive wizard: the mode prompt accepts audit,
+enforce, or an empty line for audit, each install prompt accepts y, yes, n,
+no, or an empty line for yes, and any other answer is asked again. \-\-yes
+accepts everything and \-\-print writes nothing. The result names the mode it
+wired, and whether an enforce request runs audit because the machine is
+unlicensed or its license is on the free tier. Cline gets executable
+PreToolUse and UserPromptSubmit files with mode 0755 on POSIX, or
+PreToolUse.ps1 and UserPromptSubmit.ps1 on Windows. At user scope setup writes
+only ~/Documents/Cline/Hooks/, which both runtimes read. Documents is the
+literal folder joined to HOME, and CLINE_DIR does not move it. Setup never
+writes ~/.cline/hooks/, because installing in both directories would make the
+CLI run two skarn hooks per call. At project scope it writes
 \&.clinerules/hooks/. Setup never creates PostToolUse, but \-\-update and
 \-\-remove include a recognized PostToolUse file already there. Those
 operations accept only a file setup recognizes as its current render or the
@@ -257,7 +265,10 @@ runs hooks from a project file only once that folder is trusted.
 \fB~/.gemini/settings.json\fR
 Gemini CLI's user settings: MCP server definitions read by vet, and the hooks
 object skarn setup \-\-agent gemini merges the guard into and doctor reads as
-the user precedence layer.
+the user precedence layer. When GEMINI_CLI_HOME is nonempty, vet, assess,
+inventory, and the MCP vet_configs tool read
+$GEMINI_CLI_HOME/.gemini/settings.json instead. Setup and doctor still use
+~/.gemini/settings.json.
 .TP
 \fB~/.grok/hooks/skarn.json\fR
 Grok Build's user hook file for skarn, written whole by skarn setup \-\-agent
@@ -282,20 +293,33 @@ data.db, plus a $COPILOT_HOME that names one, with the usual backup, atomic
 write and verify. Discovery does not count or open a marker or a profile
 folder that is a link, a junction included, and data.db counts only as a file;
 a $COPILOT_HOME that names a Code profile can still name a linked folder
-unless the link points at a network path. A profile's hooks folder may be a
-link to a local folder, and setup writes through it and doctor reads through
-it; when the hooks folder, or a folder on the way to the hook file, is a link
-whose target is a network path, setup refuses that profile before anything is
-read or created (refused network\-target in the JSON result) and doctor reads
-nothing through it and warns that the hook file is reached through a link to a
-network path. The profile's settings.json is read through a link of either
-kind. Its content is the shipped copilot hook file with the guard log moved to
+unless the link points at a network path. Setup prints a line and doctor's
+agent_config_copilot_code names each such link, each coding home or profile
+folder skarn cannot open, and a coding home or named profile reached through a
+link to a network path; the check then warns that whether a profile there
+carries a guard hook is unknown, and appears even when no profile was found. A
+profile's hooks folder may be a link to a local folder, and setup writes
+through it and doctor reads through it; when the hooks folder, or a folder on
+the way to the hook file, is a link whose target is a network path, setup
+refuses that profile before anything is read or created (refused
+network\-target in the JSON result) and doctor reads nothing through it and
+warns that the hook file is reached through a link to a network path. The
+profile's settings.json is read through a link to a local file or folder; when
+it, or a folder on the way to it, is a link whose target is a network path,
+doctor reads nothing through it, reports whether its disableAllHooks silences
+the hooks as unknown, and names a command that inspects the link itself. Its
+content is the shipped copilot hook file with the guard log moved to
 guard\-copilot\-code\-audit.jsonl; the command still pins \-\-agent copilot.
-Code reads every *.json in the profile's hooks folder, so doctor warns when a
-second skarn hook file sits beside it, and reads each profile's settings.json
-for disableAllHooks. On macOS and Linux setup and doctor reach a profile only
-through a $COPILOT_HOME that names it. Verified against Copilot app
-`156.0.4314.58`.
+Doctor reads each profile's settings.json for disableAllHooks. Copilot app
+`156.0.4314.58` on Windows ran this file; on Windows and macOS no matching
+guard event was observed from it on Copilot app `158.0.4370.33`, while the
+\&.github/hooks/skarn.json of a folder project ran the hook, so doctor reports a
+wired profile file as unverified on every system, never as protection, and
+names skarn setup \-\-agent copilot \-\-scope project. On macOS setup and
+doctor also find every profile under ~/Library/Application
+Support/Microsoft/CopilotAppHost/CopilotCodingHome/. On Linux setup and doctor
+reach a profile only through a $COPILOT_HOME that names it. Verified against
+Copilot app `156.0.4314.58`.
 .TP
 \fB~/Documents/Cline/Hooks/\fR
 Cline's shared user hook directory, read by the extension and the CLI.
@@ -355,6 +379,17 @@ directory, and doctor then reports it as unverified for the V2 harness.
 The Kiro CLI's workspace agent configs, which skarn setup \-\-agent kiro
 \-\-scope project merges into with a PATH\-guarded command and doctor reads as
 a project layer, under the same rules as ~/.kiro/agents/.
+.TP
+\fB~/Library/Application Support/Microsoft/CopilotAppHost/CopilotCodingHome/<profile>/hooks/skarn.json (macOS)\fR
+The skarn\-owned hook file of one Copilot in Code profile on macOS. skarn
+setup \-\-agent copilot\-code writes it for every profile under this
+CopilotCodingHome directory, and doctor reads it, by the rules the Windows
+entry for this file states. On the verified install no profile held a hooks
+folder. With the file written there, no matching guard event was observed from
+it, while the .github/hooks/skarn.json of a folder project ran the hook, so
+doctor on macOS reports a wired profile file as unverified, never as
+protection, and names skarn setup \-\-agent copilot \-\-scope project.
+Verified against Copilot app `158.0.4370.33`.
 .SH "SEE ALSO"
 skarn(1)
 .SH COPYRIGHT

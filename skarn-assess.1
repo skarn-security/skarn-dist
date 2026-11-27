@@ -1,4 +1,4 @@
-.TH "SKARN-ASSESS" "1" "2026-06-23" "skarn 0.37.0" "Skarn Manual"
+.TH "SKARN-ASSESS" "1" "2026-06-23" "skarn 0.38.0" "Skarn Manual"
 .SH NAME
 skarn\-assess \- Scan every AI session, print a redacted summary. Free, no
 license
@@ -6,25 +6,82 @@ license
 \fBskarn\fR \fBassess\fR [options]
 .SH DESCRIPTION
 Scan every AI session on this machine and print a friendly risk summary, with
-an optional shareable redacted report and a scoped incident dossier. Free, no
-config, no license. Run at a terminal it also names, once per release, a hook
+an optional shareable redacted report and a scoped incident dossier. Outside a
+dossier it also lists any credential saved in an assistant's permission rules,
+which it reads on this machine from the configuration files that skarn vet
+\-\-all\-projects reads. Free, no config, no license on this machine. Reading
+a copied home with \-\-evidence\-home requires Pro, and assess then reads
+saved permission rules from the copied home's own configuration files. Run at
+a terminal without \-\-evidence\-home it also names, once per release, a hook
 in your own per\-user assistant config that has fallen behind this build, so
 an event a newer template gates does not go unscanned unnoticed; it looks at
 that config only, never at a repo's committed hooks and never at a
 fleet\-managed one.
 .PP
 The zero\-config machine\-scan wedge: scan every AI coding session on the
-machine and print a friendly risk summary, no flags and no license. \-o writes
-a shareable redacted report (HTML or Markdown); \-\-json emits the redacted
-scan for scripting. The scan is scoped by the same filters as check. The
-Findings line says how many critical findings are attack chains or behaviors
-with no secret value, so a reader knows why the exposures list below can hold
-fewer rows than the critical count. The summary, the Markdown report and the
-HTML report show one row per distinct secret value per session file, naming
-the other rules that matched it after also matched; \-\-json keeps every
-incident and marks the primary with also_matched, a member with grouped_under,
-and stats.distinct_secret_values with the number of primaries, one per
-distinct value per session file.
+machine and print a friendly risk summary, no flags and no license. Reading a
+copied home with \-\-evidence\-home requires Pro. \-o writes a shareable
+redacted report (HTML or Markdown); \-\-json emits the redacted scan for
+scripting. The scan is scoped by the same filters as check. The Findings line
+says how many critical findings are attack chains or behaviors with no secret
+value, so a reader knows why the exposures list below can hold fewer rows than
+the critical count. The summary, the Markdown report and the HTML report show
+one row per distinct secret value per session file, naming the other rules
+that matched it after also matched; \-\-json keeps every incident and marks
+the primary with also_matched, a member with grouped_under, and
+stats.distinct_secret_values with the number of primaries, one per distinct
+value per session file. Assess also lists the credentials it detects in saved
+assistant permission rules, including Gemini CLI's user policy files and Codex
+CLI's rules files, and in VS Code Copilot Chat's terminal auto\-approve rules,
+the finding skarn vet reports as vet\-permission\-plaintext\-credential, for
+every assistant that rule covers, under the heading Credentials in saved
+permission rules. Without \-\-evidence\-home, it reads the configuration files
+skarn vet \-\-all\-projects reads: the home layer, the system managed layer,
+VS Code's user directory (its rows carry the anchor vscode_user in \-\-json
+and the location VS Code user followed by the file in the reports), the
+project at the working directory, and every project Claude Code records in
+~/.claude.json and in the .claude.json of each directory named by
+CLAUDE_CONFIG_DIR or SKARN_CLAUDE_DIRS, under the same root variables vet
+follows. Gemini CLI's user settings row carries the anchor gemini_home and the
+relative path settings.json in \-\-json. The reports show gemini home
+settings.json for that row and gemini home policies/ followed by the file name
+for a user policy. A credential from Codex CLI's user rules files carries the
+anchor codex_home and a path relative to that directory, such as
+rules/default.rules, in \-\-json, and the reports show codex home followed by
+that path. A project Claude Code never recorded is read only when assess
+starts in it, so the section can differ by start directory. The section stays
+outside the risk score, the severity and finding counts, the risk band and the
+exit code: a configuration file that could not be read or was not fully
+scanned is a gap named inside the section, never an exit 6, and never part of
+the session coverage sentence. On a live home, the terminal summary gives the
+section one line, after the next\-step lines and before the share line, and
+only when the section lists a credential or did not complete; the line counts
+the rules and the files that carry them and names skarn assess \-o report.html
+as the place that lists every one. \-\-cli keeps the rows of the assistants
+that map to that tool, and every row is high, so \-\-severity low, medium or
+high keeps them all. \-\-project, \-\-session, \-\-user and \-\-severity
+critical leave the section out of scope, and assess reads no assistant
+configuration file for it; \-\-hours and \-\-baseline do not change it. With
+\-\-evidence\-home, the same filters apply. When the section is in scope,
+assess checks the copied home's own configuration. An existing directory typed
+in a refused home spelling produces one gap at the home, and assess reads no
+configuration there. Even when the section lists no credential, the terminal
+summary and the Markdown and HTML reports include the sentence `Read from the
+evidence home's own configuration files; project files and the system layer
+were not read.` Each half of the output is masked with what the other half
+detected: the section with every value the session scan detected, including
+values below the requested severity, and the session fields, such as contexts
+and project names, with every value vet detected in configuration. For a VS
+Code terminal auto\-approve key, the session fields are also masked with the
+regular\-expression\-escaped spelling VS Code saves the value in and with the
+whole key as JSON decodes it, slashes and anchors included; a transcript that
+quotes a settings file's own bytes in another spelling, such as a JSON escape,
+is not matched. A detected value shorter than 16 bytes, or its escaped
+spelling, that a session field writes directly between letters or digits is
+not masked there. Assess counts a link on a session store path that Skarn does
+not follow as check does, prints its lines on stderr after the summary or the
+\-\-json output, and lists them in the Markdown and HTML reports, the
+\-\-dossier ones included.
 .SH OPTIONS
 .TP
 \fB\-o\fR, \fB\-\-out\fR \fIfile\fR
@@ -36,34 +93,60 @@ exposure line with the finding's confidence and adds likely test value when
 that flag is set, then the reach as the number of sessions and assistants when
 the value appeared in more than one session, and the execution when the
 transcript records the content written or executed; the HTML report shows all
-of them in the finding drawer. Both reports open with the Act on this first
+of them in the finding drawer. Both reports carry the Act on this first
 section that the check text format prints, and its line of deprioritized
 values; in the HTML report each row opens its finding drawer, and selecting a
-tool, a project or a user hides the section. The file is written atomically as
-a new owner\-only file on macOS and Linux (on Windows it takes the permissions
-of its directory): a regular file at the path, or a symlink to one, is
-replaced by the new file; a device or FIFO at the path is written in place and
-keeps its own permissions, and so is a symlink to one of those or to a process
-stream such as /dev/stdout; a directory at the path is refused.
+tool, a project or a user hides the section. When the Credentials in saved
+permission rules section prints, it comes before every other section: in the
+Markdown report right after the header lines, and in the HTML report as a
+static block above the Security view; otherwise both reports open with the Act
+on this first section. That section names no absolute path. It shows a file in
+the home directory as ~/ followed by its path relative to the home directory,
+a project file as the project's display name, which is the last component of
+its root, followed by its relative path, a system managed file by its system
+path, never a staged root, and a file in another assistant home as the
+assistant, the word home and the relative path. A locator in ~/.claude.json
+that names a project shows only the last component of the project key, and is
+withheld when a detected value reaches into that component; any other locator
+that names a path or carries a masked value is withheld. When that section
+prints anything, a report with no session finding says No leaked credentials
+or attack patterns were found in AI coding sessions, without the word Clean.
+The file is written atomically as a new owner\-only file on macOS and Linux
+(on Windows it takes the permissions of its directory): a regular file at the
+path, or a symlink to one, is replaced by the new file; a device or FIFO at
+the path is written in place and keeps its own permissions, and so is a
+symlink to one of those or to a process stream such as /dev/stdout; a
+directory at the path is refused.
 .TP
 \fB\-\-json\fR
-Emit the redacted scan as JSON (the same shape as the serve /api/scan view)
-for scripting, instead of the friendly summary. Each incident carries
-confidence and likely_test_value, the same values `skarn check \-\-format
-json` reports as confidence and likelyTestValue, and a reach object with
-sessions, assistants, assistant_names, projects, chains, findings,
-suppressed_findings and execution, the counts `skarn check \-\-format json`
-reports as reach, never with project names. A ranked incident carries
-triage_rank (1 to 5), triage_reasons (its confidence, active use, issuer class
-and attack chain labels) and triage_seen (the YYYY\-MM\-DD date its recency
-was ranked on), and stats carries triage_more and the three deprioritized
-counts deprioritized_likely_test_value, deprioritized_low_confidence and
+Emit the redacted scan as JSON for scripting, instead of the friendly summary:
+the shape of the serve /api/scan view followed by a saved_approvals key, which
+/api/scan never carries. Each incident carries confidence and
+likely_test_value, the same values `skarn check \-\-format json` reports as
+confidence and likelyTestValue, and a reach object with sessions, assistants,
+assistant_names, projects, chains, findings, suppressed_findings and
+execution, the counts `skarn check \-\-format json` reports as reach, never
+with project names. A ranked incident carries triage_rank (1 to 5),
+triage_reasons (its confidence, active use, issuer class and attack chain
+labels) and triage_seen (the YYYY\-MM\-DD date its recency was ranked on), and
+stats carries triage_more and the three deprioritized counts
+deprioritized_likely_test_value, deprioritized_low_confidence and
 deprioritized_suppressed. Every other incident carries triage_rank null, an
 empty triage_reasons array and an empty triage_seen. A dossier, and an
 /api/scan response filtered by cli, project or user, carries every incident at
 those defaults and the four counts at 0, so no section renders there. With
 \-\-dossier the body is the dossier envelope that wraps this scan, not the
-bare scan shape.
+bare scan shape, and it carries no saved_approvals key. Outside a dossier,
+saved_approvals is the last key and always carries six keys: state (checked,
+failed, or out_of_scope), reason (a string when state is failed, null
+otherwise), projects_checked, projects_missing, findings and unreadable. With
+\-\-evidence\-home, an in\-scope check of saved permission rules reads the
+copied home's own configuration, sets state to checked and projects_checked to
+0. Each finding carries rule, severity, assistant, anchor, config_path,
+relative_path, project_root, project, locator and detail, where config_path
+and project_root keep the masked absolute paths that skarn vet \-\-format json
+reports; each unreadable entry carries path and reason. The scan fields are
+masked with the values vet detected in configuration, as the reports are.
 .TP
 \fB\-\-offline\fR
 Disable all network access. Assess is already egress\-free; this is the
@@ -99,13 +182,20 @@ Assess a single session by id.
 Load a custom TOML rules file in addition to the bundled rules. A rule pattern
 whose compiled form exceeds 16 KiB is refused like any pattern that fails to
 compile, so skarn exits 6 without scanning; an allowlist pattern over that
-bound is skipped, so its suppression does not apply.
+bound is skipped, so its suppression does not apply. The Credentials in saved
+permission rules section uses the same rules as the session scan: the custom
+file in place of the bundled community rules that skarn vet runs, plus the
+AI\-specific bundled rules, so assess \-\-rules can list a credential that
+skarn vet does not and can miss one that skarn vet lists.
 .TP
 \fB\-\-baseline\fR \fIpath\fR
 Suppress findings recorded in this accepted\-findings baseline. Without this
 flag, ~/.config/skarn/baseline.json is applied automatically when it exists. A
-directory of baselines requires a Pro license; assess never gates, so an
-unlicensed directory degrades to a warning and an unsuppressed scan.
+directory of baselines requires a Pro license. Without \-\-evidence\-home,
+assess warns about an unlicensed directory and scans without suppression.
+Reading a copied home with \-\-evidence\-home requires Pro. With
+\-\-evidence\-home, Skarn skips the personal default baseline and applies only
+an explicit \-\-baseline.
 .TP
 \fB\-\-no\-color\fR
 Disable colored output.
@@ -124,7 +214,9 @@ dossier prints none of those fields except the basename of a selected session
 file that held a record the scan could not parse, and it states the coverage
 counters of the whole scan the dossier was drawn from. The HTML dossier shows
 the coverage warning of the HTML report whenever that scan was incomplete, and
-its compliance export notice whenever that scan withheld export sessions.
+its compliance export notice whenever that scan withheld export sessions. A
+dossier carries no Credentials in saved permission rules section and no
+saved_approvals key: assess collects nothing for it.
 .TP
 \fB\-\-user\fR \fIname\fR
 Restrict the scan to matching users: a comma\-separated list of user ids or
@@ -132,6 +224,1006 @@ email addresses, where an id matches exactly and an email address matches
 case\-insensitively. Only a session read from a Compliance API export carries
 either, so on a machine without an export, or without the Enterprise license
 that reading one needs, every \-\-user value matches nothing.
+.TP
+\fB\-\-evidence\-home\fR \fIdir\fR
+Read a copied home's default session stores (Pro). For configuration
+discovery, Skarn reads the copied home's own assistant configuration. Skarn
+looks where this machine's operating system keeps each store, so a copy taken
+on another operating system can show fewer session or configuration rows. The
+Compliance API export root resolves under dir too, and reading it still needs
+Enterprise. Session discovery ignores store overrides, XDG_DATA_HOME,
+XDG_CONFIG_HOME and SKARN_COMPLIANCE_EXPORT_DIR. The license, EULA record,
+~/.skarn.json, caches and outputs stay with the examiner. Skarn ignores the
+copied .skarn.json. Skarn resolves ~/ in sessions_path under dir and reports
+skipped absolute paths. All history is in scope unless you specify \-\-hours,
+\-\-since or \-\-until. Only an explicit \-\-baseline applies. Assess reads
+the copied home's saved permission rules for saved_approvals when in scope.
+Vet reads only home\-layer configuration and refuses \-\-all\-projects and
+\-\-project\-only. Inventory reads sessions and home\-layer configuration. Its
+\-\-project filter applies only to sessions. Check writes the same
+skarn.inventory line with \-\-format ndjson and refuses \-\-drop,
+\-\-audit\-verify and \-\-baseline\-merge. Restore omits cd and names the
+evidence machine's unchecked directory on stderr. The session scan skips
+transcript path checks, reads derived metadata only under dir and follows no
+link below the evidence home: each refused link counts once as an unreadable
+store, and one stderr line per reason gives the count. Configuration discovery
+in vet and inventory follows no symbolic link below dir either. Both accept a
+plain UNC share as the evidence home and exit 6 for a refused network or
+device spelling or a control character. Skarn refuses outputs under dir and
+homes that contain the examiner's home or overlap Skarn's config or cache
+directories (exit 1). Missing, unreadable or non\-directory paths, paths
+containing *, and paths that pass through a link to a network path, a link
+Skarn cannot resolve or a component Skarn cannot check for links cause exit 6;
+the stderr line names the link. Licensing failures exit 7 (no usable license)
+or 5 (insufficient tier) before evidence access. Input files can reside
+anywhere. JSON, SARIF, NDJSON and the audit record have no dedicated
+evidence\-home field. Finding paths show the directory. The evidence pack
+names it on one line. For check, \-\-fail\-on\-scan\-error fails incomplete
+scans. Requires a Pro license.
+.SH FILES
+.TP
+\fB~/.claude/settings.json, ~/.claude/settings.local.json, ./.claude/settings.json, ./.claude/settings.local.json\fR
+Claude Code hooks and permission rules (allow, ask, deny). Read, never
+written. Vet reads the project\-local pair at the working directory, the git
+top and, in a linked worktree, the main checkout. Assess reads the
+project\-local pair in the working directory's project and in every project
+Claude Code records.
+.TP
+\fB~/.claude.json, ~/.mcp.json, ./.mcp.json\fR
+Claude Code MCP server definitions and the legacy per\-project allowedTools
+lists in ~/.claude.json. Read, never written. Vet reads the project\-local
+file at the working directory, the git top and, in a linked worktree, the main
+checkout. Assess reads the project\-local file in the working directory's
+project and in every project Claude Code records. The Copilot CLI also loads a
+project .mcp.json, so vet reads its bare entries as Copilot CLI servers under
+the Copilot CLI's own source row: each top\-level key other than mcpServers
+whose value is an object, and mcpServers itself when that object holds a
+command, url, httpUrl, serverUrl or endpoint string directly; the servers
+inside mcpServers stay Claude Code's. ~/.mcp.json has no Copilot CLI row of
+its own, but when the home directory is itself a visited project, vet reads
+the .mcp.json there as that project's file under both rows, as the Copilot CLI
+loads a .mcp.json from the working directory. A container server's locator
+starts mcpServers.<name> and a bare server's starts <name>, so the two can
+coincide (a container server a and a bare server named mcpServers.a), and a
+finding does not say which reading produced it. \-\-all\-projects reads the
+projects keys in ~/.claude.json and also in $CLAUDE_CONFIG_DIR/.claude.json
+and each $SKARN_CLAUDE_DIRS entry's .claude.json; Skarn does not vet those
+declared directories' other content.
+.TP
+\fB~/.claude/plugins/, ~/.claude/skills/\fR
+Installed Claude Code plugins and skills. Vet reads each plugin.json and
+skill.json manifest for its install source and integrity marker.
+.TP
+\fB~/.codex/config.toml, ~/.codex/hooks.json\fR
+Codex CLI MCP server definitions and hooks. Read by vet through a scoped
+reader that keeps only the launcher command, its arguments, and the endpoint
+url. When CODEX_HOME is nonempty, vet, assess, inventory and the MCP
+vet_configs tool read $CODEX_HOME/config.toml and $CODEX_HOME/hooks.json
+instead, with no fallback to ~/.codex; setup and doctor still read ~/.codex.
+.TP
+\fB~/.cursor/mcp.json, ~/.cursor/hooks.json\fR
+Cursor MCP server definitions and hooks. Read by vet.
+.TP
+\fB~/.copilot/mcp\-config.json, ~/.copilot/config.json, ~/.copilot/settings.json\fR
+Copilot CLI MCP server definitions, application state, and user settings, all
+resolved under $COPILOT_HOME when it is set, which replaces the default root
+rather than layering over it. A declared root holding no Copilot store reads
+exactly as an absent default one does: installation is decided by a config
+file that was actually read, or by the session\-state and hooks markers under
+whichever root is in force, never by the root's own existence. Read by vet.
+From settings.json vet resolves whether CLI sessions are exported to GitHub.
+remoteExport: false is the opt\-out GitHub documents as the way to stop
+session syncing, remoteSessions: true forces export back on regardless of it,
+and the documented default with neither set is sync on. remote is recorded as
+a contributing key but never decides, because GitHub documents it two ways
+that do not agree: the settings table says off keeps session data local only,
+while the page on session syncing names remoteExport as the opt\-out and does
+not mention remote at all. A config carrying only remote: off is therefore
+reported as exporting, and the finding lists every key that was set, so a
+reader who has decided the settings table is authoritative can see exactly
+what skarn read and dismiss it. Where no settings.json exists at all, which is
+the state a fresh install is in since neither the CLI nor its
+\-\-no\-remote\-export flag writes one, the documented default is reported
+against the path the file would occupy, so an untouched machine is not
+mistaken for an opted\-out one. Comments are tolerated, since GitHub documents
+JSONC for this file and the CLI writes a comment header into config.json
+beside it. Read\-only; never written.
+.TP
+\fB~/.scout/m\-settings.json\fR
+Microsoft Scout's permission grants, auto\-approve settings, and experiment
+flags. Read by vet. The path has no platform branch. Scout resolves its config
+root to ~/.scout on macOS and Windows alike.
+.TP
+\fB~/.scout/m\-mcp\-servers.json\fR
+Microsoft Scout MCP server definitions. Read by vet. A user\-added server
+nests its launcher or endpoint under a config object; a built\-in server has
+none, because Scout generates its command at run time.
+.TP
+\fB~/.copilot/data.db\fR
+The Copilot CLI's SQLite state store, which holds the signed\-in GitHub
+account's access token and any bring\-your\-own\-key provider headers
+alongside projects, workflows and review comments. Vet reads this file's POSIX
+mode by a non\-following stat and never opens it: no byte of its contents is
+read, the database is never opened as a database, so no token and no header
+value can reach a finding and the only thing reported is whether the mode
+grants group or other read; a symlinked store is reported as a coverage gap
+rather than measured through its target, and a store whose owner\-read bit is
+off is still measured. Its presence marks ~/.copilot as a live Copilot CLI
+install for the Microsoft Scout residue rule, the same way session\-state/ and
+hooks/ do, so the row is never skipped as residue. Never a scan source: the
+session commands do not read it.
+.TP
+\fB~/Library/Application Support/Grok Bot/sand\-secrets.json\fR
+Grok Bot's plaintext third\-party credential store, on macOS. Grok Bot is
+xAI's always\-on desktop agents app, a different product from the Grok Build
+CLI. Vet reads this file's POSIX mode by a non\-following stat and never opens
+it: not one byte of its contents is read and the store is never parsed, so no
+key name and no value from it can reach a finding and the only thing reported
+is whether the mode grants group or other read; a symlinked store is reported
+as a coverage gap rather than measured through its target. The path carries no
+platform branch, so the store is vetted on macOS only; the Linux and Windows
+locations are not read.
+.TP
+\fB~/.grokbot/settings.json\fR
+Grok Bot's local\-exec daemon settings. Vet reads two declared posture flags
+from this file, egressTunnelEnabled and webauthnProxyEnabled, and records only
+whether each is present and true. A flag that is absent or false raises
+nothing, so a default install stays silent.
+.TP
+\fB~/.grokbot/local\-exec\-daemon\-connection.json\fR
+Grok Bot's local\-exec daemon connection state: the gateway base URL and the
+bearer, network and VNC proxy tokens the cloud side uses to execute on this
+machine. Vet treats the file as a presence signal and never parses it, so the
+gateway URL and every token stay out of the process as well as out of every
+output format. Its presence declares that the channel is configured, not that
+a daemon is running.
+.TP
+\fB~/.gemini/settings.json\fR
+Gemini CLI's user settings: MCP server definitions read by vet, and the hooks
+object skarn setup \-\-agent gemini merges the guard into and doctor reads as
+the user precedence layer. When GEMINI_CLI_HOME is nonempty, vet, assess,
+inventory, and the MCP vet_configs tool read
+$GEMINI_CLI_HOME/.gemini/settings.json instead. Setup and doctor still use
+~/.gemini/settings.json.
+.TP
+\fB~/.grok/config.toml, ~/.grok/managed_config.toml, ~/.grok/requirements.toml\fR
+Grok Build's user, managed, and requirements configuration layers. Read by vet
+through a scoped TOML reader that collects MCP server launchers and endpoints,
+the variable NAMES (never the values) of an MCP env table, the [ui]
+permission_mode and yolo settings, allow\-action [permission] rules in both
+the compact string\-array and the structured rules forms, hook handlers in
+both TOML notations, and [[ui.notifications.hooks]] commands. Relocate the
+whole directory with $GROK_HOME. Syntax the reader does not model, such as a
+multiline string, is reported as a coverage gap naming the file and line
+rather than skipped silently.
+.TP
+\fB/etc/grok/managed_config.toml, /etc/grok/requirements.toml\fR
+Grok Build's system\-wide managed and requirements layers, deployed by an
+organization. Read by vet exactly as the user layers are; SKARN_MANAGED_ROOT
+prefixes both paths, so a staged payload can be vetted before it reaches a
+machine.
+.TP
+\fB~/.grok/hooks/, ~/.grok/hooks\-paths\fR
+Grok Build's global JSON hook directory and the registry file naming extra
+hook sources. Vet reads the .json files one level down in the directory,
+regular files only, and loads each ABSOLUTE line of the registry as a further
+hook source; relative lines are ignored the way Grok ignores them, and a UNC
+or //host/share target is recorded as a coverage gap and never opened. Both
+are bounded per directory and per registry, and exceeding a bound is reported
+rather than silently truncated.
+.TP
+\fB./.grok/config.toml, ./.grok/hooks/\fR
+Grok Build's project\-scoped configuration and hook directory, contributing
+MCP servers, plugins, and permission rules. Vet reads them at the working
+directory, the git top and, in a linked worktree, the main checkout, while
+Grok itself discovers a .grok/config.toml at every level from the repository
+root down. Project hooks are collected whatever the folder\-trust state,
+because a declared hook becomes live the moment the folder is trusted, with no
+configuration change. Assess reads them in the working directory's project and
+in every project Claude Code records.
+.TP
+\fB%LOCALAPPDATA%\eMicrosoft\eCopilot\eUser Data\eCopilotCodingHome\e<profile>\emcp\-config.json, %LOCALAPPDATA%\eMicrosoft\eCopilot\eUser Data\eCopilotCodingHome\e<profile>\econfig.json, %LOCALAPPDATA%\eMicrosoft\eCopilot\eUser Data\eCopilotCodingHome\e<profile>\esettings.json (Windows)\fR
+The configuration files of one Copilot in Code profile, read by vet. A profile
+is a directory inside either CopilotCodingHome directory of %LOCALAPPDATA%,
+the MSIX twin included, or on macOS inside ~/Library/Application
+Support/Microsoft/CopilotAppHost/CopilotCodingHome/, that holds
+session\-state, hooks or data.db, plus a $COPILOT_HOME that names a directory
+inside a CopilotCodingHome directory. On Linux only that $COPILOT_HOME reaches
+a profile. Such a $COPILOT_HOME is never the Copilot CLI root, so the Copilot
+CLI rows read ~/.copilot instead. mcp\-config.json is the file the Copilot CLI
+documents under $COPILOT_HOME, and a profile is Code's $COPILOT_HOME; the file
+was absent on the verified install and the survey did not establish whether
+Code reads it, so vet reports it as declared configuration only when it
+exists. config.json is read with the comment header the app writes. From
+settings.json vet reports only an export the file declares, remoteSessions:
+true. The sync default GitHub documents is the Copilot CLI's, so a profile
+with no settings.json, or one that sets neither remoteSessions nor
+remoteExport, raises no finding. Vet does not read a profile's
+installed\-plugins or extensions folder, a repository's .github\eextensions
+folder, the Copilot app's own MCP configuration or the project folders under
+the Copilot projects root, because neither their layout nor their file names
+were measured. A profile folder that exists but cannot be opened is a coverage
+gap. A CopilotCodingHome directory, or a $COPILOT_HOME profile, reached
+through a link whose target is a network path is not opened and is a coverage
+gap named NetworkPathRefused. Read\-only; never written. Verified against
+Copilot app `156.0.4314.58` with GitHub Copilot CLI `1.0.93`.
+.TP
+\fB%LOCALAPPDATA%\eMicrosoft\eCopilot\eUser Data\eCopilotCodingHome\e<profile>\edata.db (Windows)\fR
+The SQLite app database of one Copilot in Code profile; its accounts table has
+an access_token column. Vet reads this file's POSIX mode by a non\-following
+stat and never opens it: no byte of its contents is read, and the only thing
+reported is whether the mode grants group or other read. A symlinked store is
+reported as a coverage gap rather than measured through its target. Windows
+has no POSIX mode, so on Windows vet counts the file as examined and reports
+no mode finding. On macOS the finding applies to the data.db of every profile
+under ~/Library/Application
+Support/Microsoft/CopilotAppHost/CopilotCodingHome/, and on macOS and Linux to
+a profile that a $COPILOT_HOME names. Vet reads none of its rows. Verified
+against Copilot app `156.0.4314.58`.
+.TP
+\fB%LOCALAPPDATA%\eMicrosoft\eCopilot\eUser Data\eCopilotCodingHome\e<profile>\ehooks\e (Windows)\fR
+The hook folder of one Copilot in Code profile, where skarn setup \-\-agent
+copilot\-code writes skarn.json. Vet reads the .json files one level down,
+regular files only, under the same bounds as the other hook directories, and
+reports each command, bash and powershell field of a hook entry, flat or
+nested, at its own locator, for example hooks.preToolUse[0].powershell.
+Copilot in Code loaded a hook file from this folder under any file name. When
+the folder, or a folder on the way to it, is a link whose target is a network
+path, vet opens nothing through it and reports a coverage gap named
+NetworkPathRefused on the folder. Verified against Copilot app `156.0.4314.58`
+with GitHub Copilot CLI `1.0.93`.
+.TP
+\fB~/.copilot/hooks/\fR
+The Copilot CLI's personal hook folder, under $COPILOT_HOME when it is set and
+does not name a Copilot in Code profile. Vet reads the .json files one level
+down, regular files only, and reports each command, bash and powershell field
+of a hook entry. On a Microsoft Scout machine whose ~/.copilot is only residue
+the row is skipped, as the other ~/.copilot rows are.
+.TP
+\fB./.github/hooks/\fR
+The working directory's Copilot hook folder, which the Copilot CLI and the
+Copilot cloud agent read, and which Copilot in Code read in a folder project.
+Vet reads the .json files one level down, regular files only, at the working
+directory, the git top and, in a linked worktree, the main checkout, and
+reports each command, bash and powershell field of a hook entry. Vet reads it
+whatever the project type; Copilot in Code reading it in a repository project
+was not measured. Assess reads it in the working directory's project and in
+every project Claude Code records.
+.TP
+\fB~/.kiro/settings/mcp.json\fR
+The Kiro CLI's user MCP configuration. Vet reads MCP server launchers,
+endpoints, environment entries, and headers. Relocate with $KIRO_HOME.
+.TP
+\fB~/.kiro/mcp.json\fR
+The home MCP configuration that Kiro CLI 2.x reads. Vet reads MCP server
+launchers, endpoints, environment entries, and headers. A probe with Kiro CLI
+3.4.0 on macOS found that neither harness read $KIRO_HOME/mcp.json, so vet
+reads this file for 2.x installs. Relocate with $KIRO_HOME.
+.TP
+\fB./.kiro/settings/mcp.json\fR
+The Kiro CLI's project MCP configuration. Vet reads MCP server launchers,
+endpoints, environment entries, and headers. Assess reads it in the working
+directory's project and in every project Claude Code records.
+.TP
+\fB~/.kiro/hooks/\fR
+The Kiro CLI's user standalone JSON hook files. Vet reads hook commands,
+including command actions and confirmation commands, directly in this
+directory. Relocate with $KIRO_HOME.
+.TP
+\fB./.kiro/hooks/\fR
+The Kiro CLI's project standalone JSON hook files. Vet reads hook commands,
+including command actions and confirmation commands, directly in this
+directory. Assess reads them in the working directory's project and in every
+project Claude Code records.
+.TP
+\fB~/.kiro/settings/permissions.yaml\fR
+The Kiro CLI's user permissions file. Vet reads permission rules and policies,
+reports only a blanket shell allow as overbroad, and checks every rule pattern
+for a saved credential. Relocate with $KIRO_HOME.
+.TP
+\fB~/.kiro/workspace\-roots/<key>/permissions.yaml\fR
+The Kiro CLI's workspace permissions files, one per workspace key. Vet reads
+permission rules and policies, reports only a blanket shell allow as
+overbroad, and checks every rule pattern for a saved credential. A
+permissions.yaml that is a symlink is not followed and is reported as a
+coverage gap. Relocate workspace\-roots/ with $KIRO_HOME.
+.TP
+\fB~/.aws/amazonq/settings/mcp.json\fR
+A legacy Amazon Q Developer CLI MCP configuration location that machines
+migrated to Kiro CLI 2.x can carry. Vet reads MCP server launchers, endpoints,
+environment entries, and headers, and findings name the legacy file itself.
+.TP
+\fB~/.aws/amazonq/agents/\fR
+Legacy Amazon Q Developer CLI agent configs from the fallback that the Kiro
+CLI's agent upgrade reads when the user .kiro/agents directory does not exist.
+Vet reads JSON files directly in this directory for hooks, MCP servers, and
+blanket shell grants, and findings name the legacy file itself.
+.TP
+\fB~/.aws/amazonq/cli\-agents/\fR
+Legacy Amazon Q Developer CLI agent configs from the fallback that the Kiro
+CLI's agent upgrade reads when the user .kiro/agents directory does not exist.
+Vet reads JSON files directly in this directory for hooks, MCP servers, and
+blanket shell grants, and findings name the legacy file itself.
+.TP
+\fB~/.kiro/agents/\fR
+The Kiro CLI's user agent configs. Vet reads JSON agent configs and parses
+only the front matter of Markdown profiles, including nested agent directories
+up to the walk depth, for hooks, MCP servers, and blanket shell grants.
+.TP
+\fB./.kiro/agents/\fR
+The Kiro CLI's workspace agent configs. Vet reads JSON agent configs and
+parses only the front matter of Markdown profiles, including nested agent
+directories up to the walk depth, for hooks, MCP servers, and blanket shell
+grants. Assess reads them in the working directory's project and in every
+project Claude Code records.
+.TP
+\fB./.amazonq/cli\-agents/\fR
+The legacy Amazon Q agent directory of a workspace. Vet reads JSON agent
+configs for hooks, MCP servers, and blanket shell grants from this fallback
+that the Kiro CLI's agent upgrade reads when the workspace's .kiro/agents
+directory does not exist, and findings name the legacy file itself. Assess
+reads them in the working directory's project and in every project Claude Code
+records.
+.TP
+\fB./.amazonq/mcp.json\fR
+The legacy Amazon Q MCP configuration of a workspace. Kiro's Amazon Q
+migration guide says the Kiro CLI keeps reading a project's .amazonq folder
+when the project has no .kiro folder. Vet reads MCP server launchers,
+endpoints, environment entries, and headers, and findings name the legacy file
+itself. Assess reads it in the working directory's project and in every
+project Claude Code records.
+.TP
+\fB~/.cline/data/settings/cline_mcp_settings.json\fR
+Cline MCP server definitions. Vet reads flat servers and nested transport
+objects, including nested env and headers. ClineStateShape reports a root or
+an mcpServers value that is not an object; an empty mcpServers object is
+valid. CLINE_MCP_SETTINGS_PATH replaces this file path. Relocate the data
+directory with CLINE_DATA_DIR, otherwise CLINE_DIR/data (default
+~/.cline/data). Vet inspects each path component before opening it, follows
+local links, and refuses links to network shares; it reports SymlinkLoop after
+eight links, NotARegularFile for a non\-regular file, and NetworkPathRefused
+for a network target. ClineOverrideAlias reports a Cline row vet skips because
+it is the same file as another vetted row: an overridden row that names any
+other row's file, a content row that is a credential store at its default
+location, or the later of two Cline files linked to each other. The other row
+is read as usual unless it is also an override naming the same file, in which
+case both rows are skipped. A credential store is never opened through any
+Cline row.
+.TP
+\fB~/.cline/data/globalState.json\fR
+Cline extension state. Vet reads only the eight autoApprovalSettings.actions
+booleans: executeSafeCommands is HIGH because the extension's reader applies
+it to every command tool; editFiles, useMcp, and useBrowser are MEDIUM;
+readFiles is LOW. The legacy keys executeAllCommands, readFilesExternally, and
+editFilesExternally have no shipped runtime reader and produce no finding.
+False values produce no finding. Vet reports what the file declares: a default
+install that persists its true defaults reports three MEDIUM findings and one
+LOW finding. ClineStateShape reports a root, autoApprovalSettings, or actions
+value that is not an object, or a known action that is not a boolean; vet
+still reads the remaining known actions. Relocate the data directory with
+CLINE_DATA_DIR, otherwise CLINE_DIR/data (default ~/.cline/data). Vet inspects
+each path component before opening it, follows local links, and refuses links
+to network shares; it reports SymlinkLoop after eight links, NotARegularFile
+for a non\-regular file, and NetworkPathRefused for a network target.
+ClineOverrideAlias reports a Cline row vet skips because it is the same file
+as another vetted row: an overridden row that names any other row's file, a
+content row that is a credential store at its default location, or the later
+of two Cline files linked to each other. The other row is read as usual unless
+it is also an override naming the same file, in which case both rows are
+skipped. A credential store is never opened through any Cline row.
+.TP
+\fB~/.cline/data/settings/global\-settings.json\fR
+Cline CLI settings. Vet reads only toolAutoApprove; true is HIGH and false
+produces no finding. A CLI with no persisted value auto\-approves every tool
+by default but declares nothing on disk, so vet reports nothing there.
+ClineStateShape reports a root that is not an object or a toolAutoApprove
+value that is not a boolean. CLINE_GLOBAL_SETTINGS_PATH replaces this file
+path. Relocate the data directory with CLINE_DATA_DIR, otherwise
+CLINE_DIR/data (default ~/.cline/data). Vet inspects each path component
+before opening it, follows local links, and refuses links to network shares;
+it reports SymlinkLoop after eight links, NotARegularFile for a non\-regular
+file, and NetworkPathRefused for a network target. ClineOverrideAlias reports
+a Cline row vet skips because it is the same file as another vetted row: an
+overridden row that names any other row's file, a content row that is a
+credential store at its default location, or the later of two Cline files
+linked to each other. The other row is read as usual unless it is also an
+override naming the same file, in which case both rows are skipped. A
+credential store is never opened through any Cline row.
+.TP
+\fB~/.cline/data/secrets.json\fR
+Cline credential store. Vet uses stat\-only permission metadata: mode only,
+with no byte read. Cline creates this file at 0600. Group or other read
+permission produces a HIGH finding; Windows has no POSIX mode and produces no
+mode finding. Relocate the data directory with CLINE_DATA_DIR, otherwise
+CLINE_DIR/data (default ~/.cline/data). Vet inspects each path component
+before opening it, follows local links, and refuses links to network shares;
+it reports SymlinkLoop after eight links, NotARegularFile for a non\-regular
+file, and NetworkPathRefused for a network target. ClineOverrideAlias reports
+a Cline row vet skips because it is the same file as another vetted row: an
+overridden row that names any other row's file, a content row that is a
+credential store at its default location, or the later of two Cline files
+linked to each other. The other row is read as usual unless it is also an
+override naming the same file, in which case both rows are skipped. A
+credential store is never opened through any Cline row.
+.TP
+\fB~/.cline/data/settings/providers.json\fR
+Cline provider credential store. Vet uses stat\-only permission metadata: mode
+only, with no byte read. Cline creates this file at 0600. Group or other read
+permission produces a HIGH finding; Windows has no POSIX mode and produces no
+mode finding. CLINE_PROVIDER_SETTINGS_PATH replaces this file path. Relocate
+the data directory with CLINE_DATA_DIR, otherwise CLINE_DIR/data (default
+~/.cline/data). Vet inspects each path component before opening it, follows
+local links, and refuses links to network shares; it reports SymlinkLoop after
+eight links, NotARegularFile for a non\-regular file, and NetworkPathRefused
+for a network target. ClineOverrideAlias reports a Cline row vet skips because
+it is the same file as another vetted row: an overridden row that names any
+other row's file, a content row that is a credential store at its default
+location, or the later of two Cline files linked to each other. The other row
+is read as usual unless it is also an override naming the same file, in which
+case both rows are skipped. A credential store is never opened through any
+Cline row.
+.TP
+\fB./.clinerules/hooks/\fR
+Cline project hook scripts. Vet reads this directory at the working directory,
+the top of its git repository, and, in a linked worktree, the main checkout.
+Vet reads each file whose name a loader for this directory accepts, whether or
+not it is executable: the extension accepts the exact names TaskStart,
+TaskResume, TaskCancel, TaskComplete, PreToolUse, PostToolUse,
+UserPromptSubmit, Notification, and PreCompact, extensionless on macOS and
+Linux and with .ps1 on Windows, and the SDK accepts TaskStart, TaskResume,
+TaskCancel, TaskComplete, TaskError, PreToolUse, PostToolUse,
+UserPromptSubmit, PreCompact, and SessionShutdown, case\-insensitively, with
+no extension or one of .sh, .bash, .zsh, .js, .mjs, .cjs, .ts, .mts, .cts,
+\&.py, and .ps1; vet rates each logical line, joining physical lines through a
+backslash, backtick, or open\-quote continuation, an unclosed Python bracket,
+or a trailing pipe, |&, or &&, and reports <file>:L<n> using the first
+physical line number; it inspects each path component, follows local links,
+and refuses network targets with NetworkPathRefused, reporting SymlinkLoop
+after eight links along the whole path, the links that reach the hook
+directory included, and NotARegularFile for a non\-regular file; it rates the
+first 16 KiB and reports HookScriptTruncated for a longer file, counts
+physical lines only in that prefix, including comments and blanks, and rates
+the first 256 physical lines with HookScriptLineBudgetExceeded for further
+lines; it rates an unfinished logical line at either limit, but does not rate
+Python or JavaScript exfiltration through its own standard library with no
+shell\-shaped string, or a command assembled from string literals split across
+lines or joined with +. A JavaScript line whose code starts with // is a
+comment; a trailing or block comment is still rated. A hook file that is the
+same file as a credential store at its default location, which vet reads
+stat\-only, is never read and is reported as ClineOverrideAlias, and so is
+every hook while a credential store exists that vet cannot identify; a store
+relocated by an override never stops a hook from being rated. Assess reads
+this directory in the working directory's project and in every project Claude
+Code records.
+.TP
+\fB./.cline/hooks/\fR
+Cline project hook scripts. Vet reads this directory at the working directory,
+the top of its git repository, and, in a linked worktree, the main checkout.
+Vet reads each file whose name a loader for this directory accepts, whether or
+not it is executable: the SDK accepts TaskStart, TaskResume, TaskCancel,
+TaskComplete, TaskError, PreToolUse, PostToolUse, UserPromptSubmit,
+PreCompact, and SessionShutdown, case\-insensitively, with no extension or one
+of .sh, .bash, .zsh, .js, .mjs, .cjs, .ts, .mts, .cts, .py, and .ps1; vet
+rates each logical line, joining physical lines through a backslash, backtick,
+or open\-quote continuation, an unclosed Python bracket, or a trailing pipe,
+|&, or &&, and reports <file>:L<n> using the first physical line number; it
+inspects each path component, follows local links, and refuses network targets
+with NetworkPathRefused, reporting SymlinkLoop after eight links along the
+whole path, the links that reach the hook directory included, and
+NotARegularFile for a non\-regular file; it rates the first 16 KiB and reports
+HookScriptTruncated for a longer file, counts physical lines only in that
+prefix, including comments and blanks, and rates the first 256 physical lines
+with HookScriptLineBudgetExceeded for further lines; it rates an unfinished
+logical line at either limit, but does not rate Python or JavaScript
+exfiltration through its own standard library with no shell\-shaped string, or
+a command assembled from string literals split across lines or joined with +.
+A JavaScript line whose code starts with // is a comment; a trailing or block
+comment is still rated. A hook file that is the same file as a credential
+store at its default location, which vet reads stat\-only, is never read and
+is reported as ClineOverrideAlias, and so is every hook while a credential
+store exists that vet cannot identify; a store relocated by an override never
+stops a hook from being rated. Assess reads this directory in the working
+directory's project and in every project Claude Code records.
+.TP
+\fB~/Documents/Cline/Hooks/\fR
+Cline user hook scripts read by the extension and the CLI. Documents is the
+literal folder joined to HOME; CLINE_DIR does not move it. Vet reads each file
+whose name a loader for this directory accepts, whether or not it is
+executable: the extension accepts the exact names TaskStart, TaskResume,
+TaskCancel, TaskComplete, PreToolUse, PostToolUse, UserPromptSubmit,
+Notification, and PreCompact, extensionless on macOS and Linux and with .ps1
+on Windows, and the SDK accepts TaskStart, TaskResume, TaskCancel,
+TaskComplete, TaskError, PreToolUse, PostToolUse, UserPromptSubmit,
+PreCompact, and SessionShutdown, case\-insensitively, with no extension or one
+of .sh, .bash, .zsh, .js, .mjs, .cjs, .ts, .mts, .cts, .py, and .ps1; vet
+rates each logical line, joining physical lines through a backslash, backtick,
+or open\-quote continuation, an unclosed Python bracket, or a trailing pipe,
+|&, or &&, and reports <file>:L<n> using the first physical line number; it
+inspects each path component, follows local links, and refuses network targets
+with NetworkPathRefused, reporting SymlinkLoop after eight links along the
+whole path, the links that reach the hook directory included, and
+NotARegularFile for a non\-regular file; it rates the first 16 KiB and reports
+HookScriptTruncated for a longer file, counts physical lines only in that
+prefix, including comments and blanks, and rates the first 256 physical lines
+with HookScriptLineBudgetExceeded for further lines; it rates an unfinished
+logical line at either limit, but does not rate Python or JavaScript
+exfiltration through its own standard library with no shell\-shaped string, or
+a command assembled from string literals split across lines or joined with +.
+A JavaScript line whose code starts with // is a comment; a trailing or block
+comment is still rated. A hook file that is the same file as a credential
+store at its default location, which vet reads stat\-only, is never read and
+is reported as ClineOverrideAlias, and so is every hook while a credential
+store exists that vet cannot identify; a store relocated by an override never
+stops a hook from being rated. The Cline extension resolves Documents through
+the operating system (the Windows Documents folder, the Linux XDG documents
+directory), so when that folder is redirected or localized, vet reads this
+literal path and not the folder the extension loads.
+.TP
+\fB~/.cline/hooks/\fR
+Cline CLI user hook scripts, relocated to <CLINE_DIR>/hooks when CLINE_DIR is
+set. Vet reads each file whose name a loader for this directory accepts,
+whether or not it is executable: the SDK accepts TaskStart, TaskResume,
+TaskCancel, TaskComplete, TaskError, PreToolUse, PostToolUse,
+UserPromptSubmit, PreCompact, and SessionShutdown, case\-insensitively, with
+no extension or one of .sh, .bash, .zsh, .js, .mjs, .cjs, .ts, .mts, .cts,
+\&.py, and .ps1; vet rates each logical line, joining physical lines through a
+backslash, backtick, or open\-quote continuation, an unclosed Python bracket,
+or a trailing pipe, |&, or &&, and reports <file>:L<n> using the first
+physical line number; it inspects each path component, follows local links,
+and refuses network targets with NetworkPathRefused, reporting SymlinkLoop
+after eight links along the whole path, the links that reach the hook
+directory included, and NotARegularFile for a non\-regular file; it rates the
+first 16 KiB and reports HookScriptTruncated for a longer file, counts
+physical lines only in that prefix, including comments and blanks, and rates
+the first 256 physical lines with HookScriptLineBudgetExceeded for further
+lines; it rates an unfinished logical line at either limit, but does not rate
+Python or JavaScript exfiltration through its own standard library with no
+shell\-shaped string, or a command assembled from string literals split across
+lines or joined with +. A JavaScript line whose code starts with // is a
+comment; a trailing or block comment is still rated. A hook file that is the
+same file as a credential store at its default location, which vet reads
+stat\-only, is never read and is reported as ClineOverrideAlias, and so is
+every hook while a credential store exists that vet cannot identify; a store
+relocated by an override never stops a hook from being rated.
+.TP
+\fB./.codex/config.toml, ./.codex/hooks.json\fR
+Codex CLI project MCP server definitions and hooks, read by vet at the working
+directory, the git top and, in a linked worktree, the main checkout through
+the same readers as ~/.codex/config.toml and ~/.codex/hooks.json, whether or
+not Codex trusts the project, and reported apart from the home files. Assess
+reads them in the working directory's project and in every project Claude Code
+records.
+.TP
+\fB./.cursor/mcp.json, ./.cursor/hooks.json\fR
+Cursor project MCP server definitions and hooks, read by vet at the working
+directory, the git top and, in a linked worktree, the main checkout, whether
+or not the workspace is trusted, and reported apart from ~/.cursor/mcp.json
+and ~/.cursor/hooks.json. Assess reads them in the working directory's project
+and in every project Claude Code records.
+.TP
+\fB./.github/mcp.json\fR
+The Copilot CLI's project MCP server definitions, read by vet at the working
+directory, the git top and, in a linked worktree, the main checkout and
+reported apart from ~/.copilot/mcp\-config.json. Both shapes the Copilot CLI
+documents for a project file are read: servers under a top\-level mcpServers
+object, at locators that start mcpServers.<name>, and the bare form, where
+each top\-level key whose value is an object is a server name, at locators
+that start <name>. An mcpServers object that itself holds a command, url,
+httpUrl, serverUrl or endpoint string is also read as a bare server named
+mcpServers, and an mcpServers value that is not an object is a coverage gap
+named UnsupportedCopilotMcpShape. Permission grants anywhere in the file
+(autoApprove, alwaysAllow and the other grant keys) are read as they are in
+~/.copilot/mcp\-config.json. Assess reads it in the working directory's
+project and in every project Claude Code records.
+.TP
+\fB./.gemini/settings.json\fR
+Gemini CLI's project settings: MCP server definitions and hooks, read by vet
+at the working directory, the git top and, in a linked worktree, the main
+checkout whatever the folder\-trust state, because the file is on disk before
+the developer decides whether to trust the folder. Reported apart from
+~/.gemini/settings.json. Assess reads it in the working directory's project
+and in every project Claude Code records.
+.TP
+\fB~/Library/Application Support/Code/User/settings.json (macOS), ~/.config/Code/User/settings.json (Linux), %APPDATA%\eCode\eUser\esettings.json (Windows), ~/Library/Application Support/Code/User/profiles/<key>/settings.json (macOS), ~/.config/Code/User/profiles/<key>/settings.json (Linux), %APPDATA%\eCode\eUser\eprofiles\e<key>\esettings.json (Windows)\fR
+VS Code's user settings and the settings of each VS Code profile, read by vet
+and by assess for VS Code Copilot Chat's terminal auto\-approve rules. The
+directory follows VS Code's own rule: $VSCODE_APPDATA/Code/User when
+VSCODE_APPDATA is set and not empty, on every platform; otherwise
+%APPDATA%\eCode\eUser on Windows (falling back to
+%USERPROFILE%\eAppData\eRoaming\eCode\eUser), ~/Library/Application
+Support/Code/User on macOS, and $XDG_CONFIG_HOME/Code/User on Linux (falling
+back to ~/.config/Code/User). A directory that is relative, spelled as a
+network or device path, or holds a control character is one coverage gap, and
+nothing under it is read; the CLI verbs admit a plain UNC directory and follow
+no link below it, while the MCP vet_configs tool refuses it. Under
+\-\-evidence\-home the directory is the copied home's own, located by the
+layout of the operating system Skarn runs on, and VSCODE_APPDATA is ignored.
+\-\-project\-only reads none of these files. VS Code Insiders, VSCodium and
+the other forks, the \-\-user\-data\-dir switch, portable mode, remote and
+agent\-host settings are not read. Vet reads two settings and nothing else:
+chat.tools.terminal.autoApprove and the deprecated
+chat.agent.terminal.autoApprove, which VS Code still merges over it. The four
+deprecated list settings beside them (chat.agent.terminal.allowList,
+chat.agent.terminal.denyList and their github.copilot.chat.agent.terminal
+twins) are read by nothing in VS Code and not by vet, and no other setting can
+produce a finding. Comments, a byte\-order mark and a trailing comma after a
+complete value are tolerated as VS Code tolerates them; a file that still does
+not parse is a coverage gap. Every spelling VS Code honors is read: the dotted
+key, nested objects, a mix of both, and a top\-level key that extends the
+setting id, whose rest VS Code splits on every dot; a dotted key inside a
+nested object is not a setting path, as in VS Code. Every occurrence of a
+repeated setting is read. An entry's locator is the setting id with the
+entry's ordinal in document order, which is not VS Code's last\-wins merge,
+and the key text never enters a locator; a repeated setting, a repeated
+ancestor object that holds the setting, a repeated rule key and a repeated
+property inside a rule value are each reported as vet\-config\-duplicate\-key
+with the setting id as its locator, and, unlike the other JSON files, a
+repeated key anywhere else in the file is not reported. An empty or
+comment\-only file is an empty configuration. Each key is un\-escaped from the
+regular\-expression form in which VS Code saves an exact command line, and the
+rule pack and the command\-line password detector check the command text
+whatever the key's value: an approving entry, a deny (false), a null and
+{approve: false} alike, each reported at most once as
+vet\-permission\-plaintext\-credential at high. An approving key is reported
+as vet\-permission\-overbroad at high only when it is a regular expression
+whose pattern is on a closed list that matches every non\-empty single\-line
+command (.*, ^, $, ., .+, ^., ^.+, ^.+$, .+$, [\es\eS], [\es\eS]+, [\eS\es],
+[\ew\eW], [\ed\eD], [^], \eS, \eS+) with flags VS Code accepts, the sticky y
+flag only on ^, whose empty match never advances the rule, and the detail is
+the canonical pattern, such as /.*/. Any other pattern that matches the empty
+string, such as /^.*$/, approves nothing in VS Code, which exempts only .*, ^,
+$, ^$ and ^\es*$, and is not reported; a plain key is literal command text and
+is never overbroad; a universal pattern outside the closed list is not
+reported. Each profile directory's settings.json is read by the
+walked\-directory rules: a symlinked profile directory is a coverage gap named
+SymlinkNotFollowed, the walk stops at 64 files or 4 MiB, and a profile with no
+settings file of its own, such as the built\-in agents profile, is skipped.
+Stated limits: the command\-line password detector reads POSIX shell syntax,
+so a PowerShell\-only quoting form can be missed. A settings file reached
+under another reader's name (a symlinked or hard\-linked file, a Cline
+override, a hook directory that resolves to a profile) is also read by that
+generic reader, whose locator can carry a rule key in which nothing was
+detected. On Windows vet masks a detected value in a path before it converts
+forward slashes to backslashes for display, so a detected value that holds a
+backslash can show in a path that spelled it with forward slashes. The user
+settings file is opened before its type is checked, so a FIFO at that path can
+block the read, and a network\-linked file is refused only where vet refuses
+network links, as for every fixed\-path file.
+.TP
+\fB./.vscode/settings.json\fR
+A workspace's VS Code settings, read by vet and by assess for the same two
+terminal auto\-approve settings and by the same rules as the user settings
+file above. Vet reads the file directly under each project directory it
+visits: the working directory, the top of its git repository and, in a linked
+worktree, the main checkout, and under \-\-all\-projects each recorded project
+with its own git top and main checkout; \-\-project\-only reads it too. Vet
+does not search folders below a visited directory, so a subfolder's file is
+read only when vet starts in that subfolder, and the folder VS Code has open
+is not known to vet. In a multi\-root workspace VS Code keeps workspace
+settings in the .code\-workspace file, which vet does not read.
+.TP
+\fB~/Library/Application Support/Microsoft/CopilotAppHost/CopilotCodingHome/<profile>/mcp\-config.json, ~/Library/Application Support/Microsoft/CopilotAppHost/CopilotCodingHome/<profile>/config.json, ~/Library/Application Support/Microsoft/CopilotAppHost/CopilotCodingHome/<profile>/settings.json (macOS)\fR
+The configuration files of one Copilot in Code profile on macOS, read by vet
+when present, by the rules the Windows entry for these files states. On the
+verified install a profile held config.json and held no mcp\-config.json or
+settings.json. A home directory that is spelled as a network path or holds a
+control character is a coverage gap, and vet opens nothing under it.
+Read\-only; never written. Verified against Copilot app `158.0.4370.33`.
+.TP
+\fB~/Library/Application Support/Microsoft/CopilotAppHost/CopilotCodingHome/<profile>/data.db (macOS)\fR
+The SQLite app database of one Copilot in Code profile on macOS; its settings
+table has a github_access_token column. Vet reads this file's mode by a
+non\-following stat and never opens it, as the Windows entry for this file
+states, and reports a mode that grants group or other read. On the verified
+install the mode was 0600. Verified against Copilot app `158.0.4370.33`.
+.TP
+\fB~/Library/Application Support/Microsoft/CopilotAppHost/CopilotCodingHome/<profile>/hooks/ (macOS)\fR
+The hook folder of one Copilot in Code profile on macOS, read by vet when
+present, as the Windows entry for this folder states. On the verified install
+no profile held one. Verified against Copilot app `158.0.4370.33`.
+.TP
+\fB~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude\-dev/settings/cline_mcp_settings.json (macOS), ~/.config/Code/User/globalStorage/saoudrizwan.claude\-dev/settings/cline_mcp_settings.json (Linux), %APPDATA%\eCode\eUser\eglobalStorage\esaoudrizwan.claude\-dev\esettings\ecline_mcp_settings.json (Windows)\fR
+The copy of Cline's MCP server definitions that the Cline extension wrote in
+VS Code's user directory before it moved them to ~/.cline/data. The
+extension's migration reads this copy and leaves it in place, so a server it
+lists stays on disk after the move. Vet reads it as it reads
+~/.cline/data/settings/cline_mcp_settings.json: flat servers and nested
+transport objects, including nested env and headers, and each server's
+autoApprove list; assess lists a credential in an autoApprove entry in its
+saved permission rules section. ClineStateShape reports a root or an
+mcpServers value that is not an object, and a file that does not parse is a
+coverage gap. Vet inspects each path component before opening it, follows
+local links, and refuses links to network shares; it reports SymlinkLoop after
+eight links, NotARegularFile for a non\-regular file, and NetworkPathRefused
+for a network target. ClineOverrideAlias reports a copy vet skips because it
+is the same file as a credential store at its default location or as an
+earlier Cline file, such as ~/.cline/data/settings/cline_mcp_settings.json; a
+Cline override variable that names a copy's file is skipped instead, and the
+copy is read. When this copy and the current file hold the same server, each
+file reports its own findings. The directory follows VS Code's own rule:
+$VSCODE_APPDATA/Code/User when VSCODE_APPDATA is set and not empty, on every
+platform; otherwise %APPDATA%\eCode\eUser on Windows (falling back to
+%USERPROFILE%\eAppData\eRoaming\eCode\eUser), ~/Library/Application
+Support/Code/User on macOS, and $XDG_CONFIG_HOME/Code/User on Linux (falling
+back to ~/.config/Code/User). A directory that is relative, spelled as a
+network or device path, or holds a control character is one coverage gap, and
+nothing under it is read; the CLI verbs admit a plain UNC directory and follow
+no link below it, while the MCP vet_configs tool refuses it. Under
+\-\-evidence\-home the directory is the copied home's own, located by the
+layout of the operating system Skarn runs on, and VSCODE_APPDATA is ignored.
+On Windows, when VSCODE_APPDATA, APPDATA and USERPROFILE are all unset or
+empty, vet reads neither legacy copy and reports no gap. \-\-project\-only
+reads neither legacy copy. VS Code Insiders, VSCodium, Windsurf and the other
+forks are not read.
+.TP
+\fB~/Library/Application Support/Cursor/User/globalStorage/saoudrizwan.claude\-dev/settings/cline_mcp_settings.json (macOS), ~/.config/Cursor/User/globalStorage/saoudrizwan.claude\-dev/settings/cline_mcp_settings.json (Linux), %APPDATA%\eCursor\eUser\eglobalStorage\esaoudrizwan.claude\-dev\esettings\ecline_mcp_settings.json (Windows)\fR
+The copy of Cline's MCP server definitions that the Cline extension wrote in
+Cursor's user directory when it ran in Cursor, before it moved them to
+~/.cline/data. The extension's migration reads this copy and leaves it in
+place. Vet reads it as it reads
+~/.cline/data/settings/cline_mcp_settings.json: flat servers and nested
+transport objects, including nested env and headers, and each server's
+autoApprove list; assess lists a credential in an autoApprove entry in its
+saved permission rules section. ClineStateShape reports a root or an
+mcpServers value that is not an object, and a file that does not parse is a
+coverage gap. Vet inspects each path component before opening it, follows
+local links, and refuses links to network shares; it reports SymlinkLoop after
+eight links, NotARegularFile for a non\-regular file, and NetworkPathRefused
+for a network target. ClineOverrideAlias reports a copy vet skips because it
+is the same file as a credential store at its default location or as an
+earlier Cline file, such as ~/.cline/data/settings/cline_mcp_settings.json; a
+Cline override variable that names a copy's file is skipped instead, and the
+copy is read. When this copy and the current file hold the same server, each
+file reports its own findings. Cursor is built from VS Code, so the directory
+follows VS Code's rule with Cursor in place of Code:
+$VSCODE_APPDATA/Cursor/User when VSCODE_APPDATA is set and not empty, on every
+platform; otherwise %APPDATA%\eCursor\eUser on Windows (falling back to
+%USERPROFILE%\eAppData\eRoaming\eCursor\eUser), ~/Library/Application
+Support/Cursor/User on macOS, and $XDG_CONFIG_HOME/Cursor/User on Linux
+(falling back to ~/.config/Cursor/User). The VSCODE_APPDATA handling is
+inherited from VS Code's source and has not been measured on a Cursor install.
+A directory that is relative, spelled as a network or device path, or holds a
+control character is one coverage gap, and nothing under it is read; the CLI
+verbs admit a plain UNC directory and follow no link below it, while the MCP
+vet_configs tool refuses it. Under \-\-evidence\-home the directory is the
+copied home's own, located by the layout of the operating system Skarn runs
+on, and VSCODE_APPDATA is ignored. On Windows, when VSCODE_APPDATA, APPDATA
+and USERPROFILE are all unset or empty, vet reads neither legacy copy and
+reports no gap. \-\-project\-only reads neither legacy copy.
+.TP
+\fB~/.cursor/cli\-config.json\fR
+Cursor CLI permissions. Vet reads only permissions.allow, as grants, and
+permissions.deny, as rules, and nothing else in the file, which also holds
+account and cache fields. The CLI parses this file and the project file as
+strict JSON, so vet reports a file with a comment, which the CLI rejects, as a
+coverage gap. The Cursor CLI documents five entry forms, Shell(command),
+Read(path), Write(path), WebFetch(domain) and Mcp(server:tool), and vet reads
+each of them, and Bash(command) as the Shell alias the CLI also accepts,
+trimming whitespace around the entry, before the opening parenthesis and
+inside the parentheses as the CLI does, where whitespace is what JavaScript
+counts as whitespace, the no\-break space included; an entry with a line break
+or a Unicode line or paragraph separator inside its parentheses is not one the
+CLI reads. In a Shell entry, the CLI splits the pattern at its first colon and
+approves a command whose name or whole text matches the part before the colon
+and whose arguments match the part after it, as well as a command that matches
+the pattern as written. Vet runs the rule pack and the command\-line password
+detector over two readings, each on its own: the command name, a space and the
+arguments, as in mysql \-p<value> shop, and the stored text, as in
+smbclient://host/share or a Basic authorization header, so a password one
+reading would hide is still found. Vet takes the command name from the text
+before the colon, up to its first star or whitespace, when only stars and
+whitespace follow it there, so Shell(mysql *:\-p<value> shop) and
+Shell(mysql*:\-p<value> shop) are both read as mysql \-p<value> shop; a star
+inside the name, as in m*sql, leaves only the stored text. The command name
+must not be empty, must have arguments after the colon, must not be a Windows
+drive letter and must have no =, quote, parenthesis, $, backslash or shell
+operator in it; any other entry is read only as stored, such as one with an
+Authorization header after a command name, a URL argument or an environment
+assignment. These allowed entries approve a whole class of actions and are
+reported as vet\-permission\-overbroad, never when they are denied: a Shell
+entry whose pattern starts with a star and holds only stars, whitespace and
+colons, such as Shell(*), Shell(**) or Shell(*:*), with the detail Shell(*),
+which includes the near\-blankets Shell(* *), which the CLI applies to every
+command with an argument, and Shell(*:), which it applies to every command
+without one; an Mcp entry whose server and tool parts are each only stars,
+with the detail Mcp(*:*); WebFetch(*) and WebFetch([*]), whose brackets the
+CLI removes; and a Read or Write entry whose path, after an optional leading
+/, is star segments separated by single slashes, such as *, **, /** or */*,
+with the detail Read(**) or Write(**), which includes a path such as /*/*/*
+that the CLI applies to every file at that depth or deeper. A Read or Write
+path that the CLI applies only to some paths, such as *:* to a path with a
+colon, */ to a path that ends in a slash and *//* to a path with a double
+slash, or to none, such as .* and ./**, which no absolute path matches, is not
+a blanket. A Shell blanket is high and the other blankets medium, so the
+pre\-commit hook's default \-\-fail\-on\-severity high fails only on a Shell
+blanket. Any other string, such as a token the Cursor CLI may add later, an
+undocumented wildcard form such as Mcp(*), or a bare *, ** or *:* entry, which
+the CLI ignores because it has no wrapper, is still checked for a credential,
+as a rule that is never reported as overbroad, and raises no coverage gap, so
+a new Cursor entry form does not stop the pre\-commit hook or the GitHub
+Action. A value that is not a string, a list that is not an array and a
+permissions value that is not an object are coverage gaps named by the entry's
+index or the list, never by its content, and the entries beside them are still
+read; one gap budget covers both readings of a file that repeats a key. A
+repeated key is read both ways and reported as vet\-config\-duplicate\-key at
+the file, never by the key's name. In the one case measured, a curl command
+with an Authorization header on cursor\-agent 2026.11.22, the CLI's
+always\-allow choice saved only Shell(curl), without the header; other
+commands can be saved with their arguments. CURSOR_CONFIG_DIR and
+XDG_CONFIG_HOME are not followed.
+.TP
+\fB./.cursor/cli.json\fR
+Cursor CLI project permissions, read by vet at the working directory, the git
+top and, in a linked worktree, the main checkout with the same reader and the
+same rules as ~/.cursor/cli\-config.json, whether or not the workspace is
+trusted, and reported apart from the home file. The CLI also reads and merges
+a .cursor/cli.json in each directory between the git root and the working
+directory; vet reads neither those directories nor a .cursor/cli.json in a
+subdirectory below the working directory. When the file is committed with the
+repository, an entry that carries a credential reaches every clone; the
+pre\-commit hook, and the GitHub Action when its vet input is true, read it
+through \-\-project\-only. Assess reads it in the working directory's project
+and in every project Claude Code records.
+.TP
+\fB~/.gemini/policies/\fR
+Gemini CLI's user policy files. When GEMINI_CLI_HOME is nonempty, vet reads
+$GEMINI_CLI_HOME/.gemini/policies/ instead. Vet skips a missing directory
+silently. If vet cannot open an existing directory, it reports the error as a
+coverage gap. Vet lists only direct children. If the directory has more than
+4096 entries, vet reports RuleDirEntryBudgetExceeded before reading any file.
+It sorts names ending in .toml in byte order and checks the first 64,
+reporting RuleFileCountBudgetExceeded if there are more. A matching symbolic
+link or other entry that is not a regular file produces NotARegularFile, also
+below an evidence home or a network root. Gemini CLI itself skips linked
+files. Vet skips a file that aliases a protected credential store, or that vet
+cannot distinguish from such a store, and reports ProtectedStoreAlias. Vet
+reads up to 4 MiB of policy content in total. A file over 4 MiB is reported as
+StreamTooLong and the walk continues. A smaller file that exceeds the bytes
+left in the budget stops the scan of the directory with
+RuleDirByteBudgetExceeded. Vet also parses at most 65,536 values in the
+directory, counting every table header, every Codex CLI call, and every
+string, number, boolean, date, list and inline table: the file in which the
+count passes that limit reports RuleDirValueBudgetExceeded, keeps the findings
+of what vet read before that point, and vet reads no later file in the
+directory. A file that holds fewer bytes when read than its size when opened,
+because it shrank during the read, produces FileShrankDuringRead and
+contributes nothing. Vet checks a file against the protected credential stores
+before it applies the budget. Vet reads [[rule]] and [[safety_checker]]
+tables, and a [safety_checker.checker] table that follows its safety checker,
+the form Gemini CLI's own policies use. An allow decision creates a grant. An
+ask_user or deny decision creates a rule and can still produce a high
+vet\-permission\-plaintext\-credential finding. Vet checks each commandPrefix
+string as run_shell_command(prefix). For commandRegex and argsPattern, vet
+removes a leading caret, an unescaped trailing dollar sign, and backslashes
+before punctuation. It checks the commandRegex text as
+run_shell_command(text). Gemini matches argsPattern against a tool's JSON
+arguments, so vet checks that text as written, without the run_shell_command
+wrapper; the command\-line password detector sees it only when the pattern
+itself spells a shell tool call such as Shell(command). A safety checker
+approves nothing. Vet checks its command fields and the strings inside its
+checker and toolAnnotations tables for credentials. Vet reports a high
+vet\-permission\-overbroad finding with the detail run_shell_command(*) when a
+valid allow rule names run_shell_command or * in toolName, either directly or
+in an array, supplies no mcpName or toolAnnotations, and either supplies no
+commandPrefix, commandRegex or argsPattern or has a commandRegex or
+argsPattern that, after vet removes a leading caret and an unescaped trailing
+dollar sign, is one of .*, .+, .*?, .+?, [\es\eS]*, [\es\eS]+, [\eS\es]*,
+[\eS\es]+, [^]*, [^]+, (.*), (.+), (?:.*) or (?:.+). An empty string in any of
+the three command fields imposes no restriction, and an empty element of a
+commandPrefix array matches every command that starts with whitespace, so vet
+reports either as the blanket. Gemini treats a prefix of *, ** or *:* as
+literal text, so vet never reports that prefix as a blanket grant. Gemini CLI
+offers "Allow this command for all future sessions" only when
+security.enablePermanentToolApproval is true. In Gemini CLI 0.71.1, that
+choice saved only the command name. A credential in a command argument reaches
+the policy file through a manually written entry. Vet reports unsupported
+syntax at line N for a value of the wrong type, an empty toolName or
+commandPrefix array, a repeated or dotted key, a key before the first table,
+or a table header other than [[rule]] or [[safety_checker]], and then
+continues with the next table. When vet cannot parse the TOML text at a line,
+for example an unclosed value, a malformed header line, a malformed number,
+date or line ending, a control character or an escape outside the TOML escapes
+in a string, an array that mixes value types, or a repeated or conflicting
+inline table member, it reports that line and reads nothing after it, because
+Gemini CLI loads nothing from a file that fails to parse. The tables above
+that line keep their findings. A rule requires toolName, decision, and
+priority. A safety checker requires toolName and checker. A missing required
+field produces the same gap. A rule with commandPrefix or commandRegex
+requires toolName to be the single string run_shell_command. Either field
+alongside argsPattern, both fields together, or either with another toolName
+form produces a gap. Vet still checks the command fields in these conflicting
+combinations for credentials. Vet reports up to 16 syntax gaps per file, then
+one overflow gap, unsupported syntax on more than 16 lines. Vet checks up to
+4096 entries per file and reports artifact budget exceeded at the next entry.
+A coverage gap makes vet exit 6 under \-\-fail\-on\-scan\-error. An otherwise
+valid rule with an unknown decision or mode, a numeric priority outside 0 to
+999 or with a fractional part, or an empty toolName, mcpName, or subagent
+string produces no gap. Vet checks its command fields for credentials and
+skips overbroad scoring. In a toolName array, an empty string leaves the other
+names in effect. Gemini ignores unknown keys. Vet checks every string under an
+unknown key or under toolAnnotations for credentials and omits the key name
+from the report. When masking cannot settle on a safe spelling of a policy
+file's path, vet prints [path withheld] in its place and assess withholds the
+location. Gemini CLI disables workspace policies. Vet skips workspace
+\&.gemini/policies/, system policy directories, and paths in
+settings.policyPaths. Assess lists a credential from a user policy under
+Credentials in saved permission rules at gemini home policies/ followed by the
+file name.
+.TP
+\fB~/.codex/rules/\fR
+Codex CLI's user rules files. When CODEX_HOME is nonempty, vet reads
+$CODEX_HOME/rules/ instead. Codex CLI writes a command the user approves with
+Yes, and don't ask again for commands that start with a prefix to
+default.rules here, as a prefix_rule call holding the command's tokens.
+Measured on codex\-cli 0.172.0 with two such approvals, a curl command
+carrying a bearer header and a command that starts with a PGPASSWORD=
+assignment: each stored call held every token of the command, the credential
+included, and the command that starts with the assignment was stored as the
+shell argv that ran it, /bin/zsh \-lc followed by the whole command line. Vet
+walks the directory as it walks Gemini CLI's policies/ directory, with the
+same budgets and the same coverage gaps, reading names that end in .rules;
+Codex CLI itself skips a linked file, which vet reports as NotARegularFile.
+Codex CLI evaluates these files as Starlark. Vet evaluates nothing: it reads
+top\-level calls whose arguments are literal strings, numbers in the spellings
+Codex CLI accepts, True, False, None and lists of them nested at most 64 deep,
+given by keyword or by position in Codex CLI's order. A prefix_rule call with
+decision allow, or with no decision, creates a grant. A prompt or forbidden
+call creates a rule and can still produce a high
+vet\-permission\-plaintext\-credential finding. Vet joins the pattern's tokens
+with single spaces, quotes a token that is empty or holds whitespace, a quote,
+a shell metacharacter or a glob character, and checks the result as
+exec_command(command line), so the rule pack and the command\-line password
+detector see the command line the user approved. Codex CLI treats every token
+as literal text, so a * token never makes a grant overbroad. A list of
+alternatives inside the pattern expands to one entry per combination, up to 16
+per call, reported as prefix_rule[n].pattern[k]; a prefix_rule call with no
+alternatives is reported as prefix_rule[n]. n counts every prefix_rule call in
+file order, including one vet rejects, so a rejected call never shifts the
+index of a later one. Vet checks the type of the match, not_match,
+justification and canonical_matching values and then skips them, and does the
+same for host_executable and network_rule calls, which approve no command
+line. A call that Codex CLI rejects but vet can read raises no coverage gap:
+an unknown decision, an unknown keyword with a literal value, or an empty or
+whitespace\-only justification makes vet check the call's patterns as rules
+that are never overbroad. So does a string escape that vet does not decode,
+such as \ea, \e0 or \eU: Codex CLI accepts those, and vet keeps the escape as
+written. A backslash before a line break inside a string continues the string,
+as Starlark reads it. Vet also checks every string under an unknown keyword,
+and every string in a top\-level call of another name, reported at call[n],
+and prints neither the keyword nor the call's name. Vet reports unsupported
+syntax at line N, and reads nothing from that call, for a value of the wrong
+type, a missing or empty pattern, an empty or nested alternatives list, more
+than 16 combinations, a repeated keyword, a positional argument after a
+keyword, more positional arguments than the call takes, a number Codex CLI
+rejects such as 007 or 1e+, a list nested more than 64 deep, a variable, an
+expression, a raw, byte, f\- or triple\-quoted string, or a statement that is
+not a call; it then reads the next statement. An unclosed string, call or
+list, a line break inside a single\-quoted string, a closing bracket that does
+not match, or brackets nested more than 256 deep is one gap at the statement's
+first line, and vet reads nothing after it. Codex CLI applies no user or
+project rule at all when any rules file fails to load, so a gap or an unknown
+form in one file can mean that none of the rules is in force. Vet reports up
+to 16 syntax gaps per file, then unsupported syntax on more than 16 lines, and
+checks up to 4096 entries per file, reporting artifact budget exceeded at the
+next entry. It also builds at most 16 MiB of command text per file, so a call
+whose alternatives would repeat a long literal past that reports artifact
+budget exceeded too. Assess lists a credential from a user rules file at codex
+home rules/ followed by the file name.
+.TP
+\fB./.codex/rules/\fR
+Codex CLI project rules files, read by vet at the working directory, the git
+top and, in a linked worktree, the main checkout with the same reader and the
+same rules as ~/.codex/rules/, and reported apart from the home files. Codex
+CLI loads them only in a project the user marked trusted; vet reads them
+whenever they are present. A directory reached through both this row and the
+home row, such as ~/.codex/rules/ when vet runs in the home directory or a
+project's .codex/rules/ when CODEX_HOME names that project's .codex, is read
+once, under the home row; with \-\-project\-only there is no home row and it
+is read under this one. When the files are committed with the repository, an
+entry that carries a credential reaches every clone; the pre\-commit hook, and
+the GitHub Action when its vet input is true, read them through
+\-\-project\-only. Assess reads them in the working directory's project and in
+every project Claude Code records.
 .SH "SEE ALSO"
 skarn(1)
 .SH COPYRIGHT

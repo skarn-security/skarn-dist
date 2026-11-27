@@ -1,4 +1,4 @@
-.TH "SKARN" "1" "2026-06-23" "skarn 0.37.0" "Skarn Manual"
+.TH "SKARN" "1" "2026-06-23" "skarn 0.38.0" "Skarn Manual"
 .SH NAME
 skarn \- AI coding session security scanner with built\-in session search
 .SH SYNOPSIS
@@ -49,9 +49,11 @@ recent, stats, and friends) are the daily use surface. They match and filter
 on the raw session text, then mask every detected secret in what they print,
 which runs the detector over the sessions a command emits: a value the
 detector matches in any session of that output is masked in every session of
-it, while a value it matches nowhere in that set prints as recorded. A session
-that is still being written when a command reads it is stamped, scanned and
-read again, up to three times, so what prints always comes from bytes the scan
+it, while a value it matches nowhere in that set prints as recorded. A
+credential\-shaped piece of a recorded tool name is masked the same way,
+wherever the output prints it, even when no rule matched it. A session that is
+still being written when a command reads it is stamped, scanned and read
+again, up to three times, so what prints always comes from bytes the scan
 covered; one that keeps changing is left out of that run with a count on
 stderr, and a single\-session view of it asks you to re\-run once it is quiet.
 The check command is the security scanner: it runs the detection rules,
@@ -59,6 +61,49 @@ correlates attack chains, and computes a session risk score for CI/CD gating.
 Every finding is mapped to MITRE ATLAS, the OWASP Top 10 for LLM Applications
 2025, and CWE; run skarn taxonomies to print the crosswalk and the pinned
 framework versions.
+.PP
+Every recall command (search, recent, stats, cmds, tools, mcps, messages,
+export and restore) says what it could not read. Once per run, after anything
+it writes to stdout, it prints one stderr line for each kind of gap whose
+count is not zero: how many session sources failed discovery, how many session
+stores could not be read in full, how many sessions hold truncated or
+compacted transcript content, and how many Copilot in Code session folders
+hold no transcript, so no session is listed for them; the first two lines also
+say that sessions or content those sources and stores hold may be missing from
+the output. A Copilot in Code session folder counts when it holds no
+events.jsonl and the profile's session\-store.db does not list its id, which
+would list it as a session from the index. The JSON objects that describe a
+whole output carry the same counts as tools_dropped, stores_unreadable,
+sessions_truncated and session_folders_without_transcript: right after
+compliance_withheld in recent, stats without \-\-by and export in json, and
+right after total_failed in the tools and mcps aggregates. Output that is a
+JSON array, one object per line, or one object for one session keeps its shape
+and gets the stderr lines only. A link on a session store path whose target is
+a network path, a link Skarn cannot resolve or a component it cannot check for
+links, and under \-\-evidence\-home any link below the evidence home, is not
+followed: each such link counts once in stores_unreadable, except a Copilot in
+Code session\-state link inside a profile or a linked profile candidate
+folder, which is skipped without a count, and one more stderr line per reason
+(network target, a link that could not be resolved, a path that could not be
+checked for links, below the evidence home) gives its count after the gap
+lines; a recorded working directory that passes through a link Skarn does not
+follow gets its own line and is not counted. A dropped source and an
+unreadable store are reported whenever they occur; sessions_truncated counts
+the sessions in the command's window, and on a lookup by session id only the
+session found; session_folders_without_transcript counts the folders whose own
+modification time falls in the command's window, and none on a lookup by
+session id. \-\-cli narrows the counts, except on a lookup by session id,
+which covers every assistant over all history; \-\-project, \-\-user and
+\-\-until never narrow them. These counts change no recall exit status.
+.PP
+macOS writes an AppleDouble companion named ._<name> beside a file that
+carries an extended attribute when it copies that file onto a volume that
+cannot store the attribute itself, such as exFAT, FAT or some SMB shares. In
+every session store, Skarn skips a regular file whose name starts with ._ and
+whose first four bytes are the AppleDouble header 00 05 16 07: it is not read
+as a session, a record or a member of one, and no count or notice includes it.
+A ._ file that is a link, has a second hard link, cannot be opened or lacks
+the header is handled like any other file in the store.
 .SH COMMANDS
 .TP
 \fBcheck\fR [options]
@@ -299,7 +344,12 @@ the json top\-level counters sensitivityLabelToolResults and
 sensitivityLabelSessions, and one text line count the tool results that
 carried a label shape and the sessions that held them. No label name or label
 id is written, and the observation changes neither the verdict nor the exit
-code. One of: text, json, sarif, ndjson, evidence. The default is text.
+code. json carries, as top\-level fields, the thirteen coverage counts the
+sarif invocation properties carry: toolsDropped, storesUnreadable,
+sessionsIncomplete, sessionsTruncated, turnsUnavailable, turnsUnverified,
+complianceWithheld, recordsSkipped, recordsTruncated, recordsShortened,
+recordsDepthCut, matchLimitHits and recordsUncaptured. One of: text, json,
+sarif, ndjson, evidence. The default is text.
 .TP
 \fB\-v\fR, \fB\-\-verbose\fR
 Verbose output.
@@ -327,45 +377,51 @@ Exit 2 if the session risk score exceeds this threshold.
 .TP
 \fB\-\-fail\-on\-scan\-error\fR
 Fail closed with exit 6 when the scan was incomplete: a tool source failed
-discovery, a session store that exists could not be read, a session failed to
-parse, a session held a record that could not be parsed (a malformed line, or
-a line cut at the line limit, 64 MiB of bytes or 8 Mi structural tokens
-outside strings, which then never parses, and in a Gemini CLI chat after such
-a line also a patch record whose message or tool call the lost line held; the
-first 1 MiB of its bytes is scanned as raw text, labelled raw record, so the
-detectors still run over those bytes, and the record stays a coverage gap
-because its role, tool and the rest of its content are unknown; a session
-keeps at most 256 such records or 16 MiB of them, and a refused record past
-that budget is counted and not scanned), a session had truncated or compacted
-transcript content so it no longer holds the whole conversation (the assistant
-compacted it before the scan, or a compliance transcript export carried a
-truncated tool block, a truncated text block, or a compaction marker), a
-compliance transcript export withheld a turn as unavailable or carried a
-client\-asserted turn the feed did not verify, or the scan read no sessions.
-Truncated or compacted content counts sessions, because a cut block is a
-partial turn and nobody can count what a compaction removed; withheld and
-unverified content counts turns, because the export names each one. Every
-truncated tool block counts its session, including a block returned as a
-placeholder instead of cut text, so a coverage gap is over\-reported rather
-than missed. A record that could not be parsed counts itself, and the JSON and
-NDJSON output name each session file that dropped one. An unterminated last
-line that does not parse but begins a JSON object (its first character after
-leading whitespace is an opening brace), in an uncompressed session file
-modified within the last 5 minutes, is a write in progress and is not counted;
-the same line in an older or compressed file is counted, and so is an
-unterminated last line that does not parse and does not begin a JSON object. A
-string value longer than 8 MiB inside a record (a pasted image stored inline,
-a huge tool result) is shortened to a marker before the record is parsed, so
-the record and every other value in it are scanned as usual; the scan counts
-such records as shortened in its JSON, SARIF, NDJSON and assess outputs, names
-each session file that holds one beside the files that dropped a record, and
-counts them as a coverage gap, because the bytes past the cap were never
-scanned. A Grok prompt log prompt is cut at the same 8 MiB without a marker
-and counted the same way on its session. A value nested deeper than 64 levels
-inside a tool input, a tool result or another structured part of a session is
-not read, because the parser stops descending there so hostile nesting cannot
-exhaust its stack; the scan counts each such value in its JSON, SARIF, NDJSON
-and assess outputs, names each session file that holds one, and counts it as a
+discovery, a session store that exists could not be read (a link on a session
+store path that Skarn did not follow, because its target is a network path, it
+cannot be resolved, a component on it cannot be checked for links or, under
+\-\-evidence\-home, it lies below the evidence home, counts here, and one
+stderr line per reason gives the count after the report; a Copilot in Code
+session\-state link inside a profile and a linked profile candidate folder are
+skipped without a count), a session failed to parse, a session held a record
+that could not be parsed (a malformed line, or a line cut at the line limit,
+64 MiB of bytes or 8 Mi structural tokens outside strings, which then never
+parses, and in a Gemini CLI chat after such a line also a patch record whose
+message or tool call the lost line held; the first 1 MiB of its bytes is
+scanned as raw text, labelled raw record, so the detectors still run over
+those bytes, and the record stays a coverage gap because its role, tool and
+the rest of its content are unknown; a session keeps at most 256 such records
+or 16 MiB of them, and a refused record past that budget is counted and not
+scanned), a session had truncated or compacted transcript content so it no
+longer holds the whole conversation (the assistant compacted it before the
+scan, or a compliance transcript export carried a truncated tool block, a
+truncated text block, or a compaction marker), a compliance transcript export
+withheld a turn as unavailable or carried a client\-asserted turn the feed did
+not verify, or the scan read no sessions. Truncated or compacted content
+counts sessions, because a cut block is a partial turn and nobody can count
+what a compaction removed; withheld and unverified content counts turns,
+because the export names each one. Every truncated tool block counts its
+session, including a block returned as a placeholder instead of cut text, so a
+coverage gap is over\-reported rather than missed. A record that could not be
+parsed counts itself, and the JSON and NDJSON output name each session file
+that dropped one. An unterminated last line that does not parse but begins a
+JSON object (its first character after leading whitespace is an opening
+brace), in an uncompressed session file modified within the last 5 minutes, is
+a write in progress and is not counted; the same line in an older or
+compressed file is counted, and so is an unterminated last line that does not
+parse and does not begin a JSON object. A string value longer than 8 MiB
+inside a record (a pasted image stored inline, a huge tool result) is
+shortened to a marker before the record is parsed, so the record and every
+other value in it are scanned as usual; the scan counts such records as
+shortened in its JSON, SARIF, NDJSON and assess outputs, names each session
+file that holds one beside the files that dropped a record, and counts them as
+a coverage gap, because the bytes past the cap were never scanned. A Grok
+prompt log prompt is cut at the same 8 MiB without a marker and counted the
+same way on its session. A value nested deeper than 64 levels inside a tool
+input, a tool result or another structured part of a session is not read,
+because the parser stops descending there so hostile nesting cannot exhaust
+its stack; the scan counts each such value in its JSON, SARIF, NDJSON and
+assess outputs, names each session file that holds one, and counts it as a
 coverage gap, so a session whose only credential sits past that depth is never
 reported clean, unless the text the parser builds from the tool input or
 result that holds the value has already reached its size limit. A detection
@@ -393,7 +449,9 @@ it, an org\-shared accepted set, and requires a Pro license. That union leaves
 out any fingerprint a member labelled a true positive, and every value such a
 true positive records its hash for. Without this flag skarn applies
 ~/.config/skarn/baseline.json when it exists, for suppression only; the
-\-\-baseline\-create and \-\-baseline\-merge targets stay explicit.
+\-\-baseline\-create and \-\-baseline\-merge targets stay explicit. With
+\-\-evidence\-home, Skarn skips the personal default baseline and applies only
+an explicit \-\-baseline.
 .TP
 \fB\-\-baseline\-create\fR
 Write the current findings to the \-\-baseline file as the accepted set, then
@@ -417,9 +475,11 @@ and an existing output file is left as it was. Requires a Pro license.
 Append a hash\-chained record of this scan (timestamp, policy, finding counts,
 verdict; no secrets) to this local log. The chain detects in\-place edits and
 reordering of recorded history. A new log is created readable by its owner
-only on macOS and Linux and an existing log keeps its mode; on those systems a
-symlink at the log path is refused with a warning naming AuditLogSymlink, and
-the scan result and exit code are unchanged. Requires a Pro license.
+only on macOS and Linux, and an existing log keeps its mode. On every platform
+the append to a symlink to a file at the log path is refused, and the refusal
+leaves the scan result and exit code unchanged. The warning names
+AuditLogSymlink, or WriteFailed on Windows when the link itself cannot be
+opened for writing, such as a read\-only link. Requires a Pro license.
 .TP
 \fB\-\-audit\-verify\fR \fIfile\fR
 Verify an audit log's hash chain, then exit without scanning. A broken chain
@@ -507,6 +567,42 @@ either, so on a machine without an export, or under a registered license below
 Enterprise, every \-\-user value matches nothing and the report is empty at
 exit 0. The drop artifact and the evidence pack do not record a user
 narrowing, so a narrowed run reads like a whole\-corpus one there.
+.TP
+\fB\-\-evidence\-home\fR \fIdir\fR
+Read a copied home's default session stores (Pro). For configuration
+discovery, Skarn reads the copied home's own assistant configuration. Skarn
+looks where this machine's operating system keeps each store, so a copy taken
+on another operating system can show fewer session or configuration rows. The
+Compliance API export root resolves under dir too, and reading it still needs
+Enterprise. Session discovery ignores store overrides, XDG_DATA_HOME,
+XDG_CONFIG_HOME and SKARN_COMPLIANCE_EXPORT_DIR. The license, EULA record,
+~/.skarn.json, caches and outputs stay with the examiner. Skarn ignores the
+copied .skarn.json. Skarn resolves ~/ in sessions_path under dir and reports
+skipped absolute paths. All history is in scope unless you specify \-\-hours,
+\-\-since or \-\-until. Only an explicit \-\-baseline applies. Assess reads
+the copied home's saved permission rules for saved_approvals when in scope.
+Vet reads only home\-layer configuration and refuses \-\-all\-projects and
+\-\-project\-only. Inventory reads sessions and home\-layer configuration. Its
+\-\-project filter applies only to sessions. Check writes the same
+skarn.inventory line with \-\-format ndjson and refuses \-\-drop,
+\-\-audit\-verify and \-\-baseline\-merge. Restore omits cd and names the
+evidence machine's unchecked directory on stderr. The session scan skips
+transcript path checks, reads derived metadata only under dir and follows no
+link below the evidence home: each refused link counts once as an unreadable
+store, and one stderr line per reason gives the count. Configuration discovery
+in vet and inventory follows no symbolic link below dir either. Both accept a
+plain UNC share as the evidence home and exit 6 for a refused network or
+device spelling or a control character. Skarn refuses outputs under dir and
+homes that contain the examiner's home or overlap Skarn's config or cache
+directories (exit 1). Missing, unreadable or non\-directory paths, paths
+containing *, and paths that pass through a link to a network path, a link
+Skarn cannot resolve or a component Skarn cannot check for links cause exit 6;
+the stderr line names the link. Licensing failures exit 7 (no usable license)
+or 5 (insufficient tier) before evidence access. Input files can reside
+anywhere. JSON, SARIF, NDJSON and the audit record have no dedicated
+evidence\-home field. Finding paths show the directory. The evidence pack
+names it on one line. For check, \-\-fail\-on\-scan\-error fails incomplete
+scans. Requires a Pro license.
 .SS "Assess options"
 See \fBskarn\-assess\fR(1).
 .TP
@@ -519,34 +615,60 @@ exposure line with the finding's confidence and adds likely test value when
 that flag is set, then the reach as the number of sessions and assistants when
 the value appeared in more than one session, and the execution when the
 transcript records the content written or executed; the HTML report shows all
-of them in the finding drawer. Both reports open with the Act on this first
+of them in the finding drawer. Both reports carry the Act on this first
 section that the check text format prints, and its line of deprioritized
 values; in the HTML report each row opens its finding drawer, and selecting a
-tool, a project or a user hides the section. The file is written atomically as
-a new owner\-only file on macOS and Linux (on Windows it takes the permissions
-of its directory): a regular file at the path, or a symlink to one, is
-replaced by the new file; a device or FIFO at the path is written in place and
-keeps its own permissions, and so is a symlink to one of those or to a process
-stream such as /dev/stdout; a directory at the path is refused.
+tool, a project or a user hides the section. When the Credentials in saved
+permission rules section prints, it comes before every other section: in the
+Markdown report right after the header lines, and in the HTML report as a
+static block above the Security view; otherwise both reports open with the Act
+on this first section. That section names no absolute path. It shows a file in
+the home directory as ~/ followed by its path relative to the home directory,
+a project file as the project's display name, which is the last component of
+its root, followed by its relative path, a system managed file by its system
+path, never a staged root, and a file in another assistant home as the
+assistant, the word home and the relative path. A locator in ~/.claude.json
+that names a project shows only the last component of the project key, and is
+withheld when a detected value reaches into that component; any other locator
+that names a path or carries a masked value is withheld. When that section
+prints anything, a report with no session finding says No leaked credentials
+or attack patterns were found in AI coding sessions, without the word Clean.
+The file is written atomically as a new owner\-only file on macOS and Linux
+(on Windows it takes the permissions of its directory): a regular file at the
+path, or a symlink to one, is replaced by the new file; a device or FIFO at
+the path is written in place and keeps its own permissions, and so is a
+symlink to one of those or to a process stream such as /dev/stdout; a
+directory at the path is refused.
 .TP
 \fB\-\-json\fR
-Emit the redacted scan as JSON (the same shape as the serve /api/scan view)
-for scripting, instead of the friendly summary. Each incident carries
-confidence and likely_test_value, the same values `skarn check \-\-format
-json` reports as confidence and likelyTestValue, and a reach object with
-sessions, assistants, assistant_names, projects, chains, findings,
-suppressed_findings and execution, the counts `skarn check \-\-format json`
-reports as reach, never with project names. A ranked incident carries
-triage_rank (1 to 5), triage_reasons (its confidence, active use, issuer class
-and attack chain labels) and triage_seen (the YYYY\-MM\-DD date its recency
-was ranked on), and stats carries triage_more and the three deprioritized
-counts deprioritized_likely_test_value, deprioritized_low_confidence and
+Emit the redacted scan as JSON for scripting, instead of the friendly summary:
+the shape of the serve /api/scan view followed by a saved_approvals key, which
+/api/scan never carries. Each incident carries confidence and
+likely_test_value, the same values `skarn check \-\-format json` reports as
+confidence and likelyTestValue, and a reach object with sessions, assistants,
+assistant_names, projects, chains, findings, suppressed_findings and
+execution, the counts `skarn check \-\-format json` reports as reach, never
+with project names. A ranked incident carries triage_rank (1 to 5),
+triage_reasons (its confidence, active use, issuer class and attack chain
+labels) and triage_seen (the YYYY\-MM\-DD date its recency was ranked on), and
+stats carries triage_more and the three deprioritized counts
+deprioritized_likely_test_value, deprioritized_low_confidence and
 deprioritized_suppressed. Every other incident carries triage_rank null, an
 empty triage_reasons array and an empty triage_seen. A dossier, and an
 /api/scan response filtered by cli, project or user, carries every incident at
 those defaults and the four counts at 0, so no section renders there. With
 \-\-dossier the body is the dossier envelope that wraps this scan, not the
-bare scan shape.
+bare scan shape, and it carries no saved_approvals key. Outside a dossier,
+saved_approvals is the last key and always carries six keys: state (checked,
+failed, or out_of_scope), reason (a string when state is failed, null
+otherwise), projects_checked, projects_missing, findings and unreadable. With
+\-\-evidence\-home, an in\-scope check of saved permission rules reads the
+copied home's own configuration, sets state to checked and projects_checked to
+0. Each finding carries rule, severity, assistant, anchor, config_path,
+relative_path, project_root, project, locator and detail, where config_path
+and project_root keep the masked absolute paths that skarn vet \-\-format json
+reports; each unreadable entry carries path and reason. The scan fields are
+masked with the values vet detected in configuration, as the reports are.
 .TP
 \fB\-\-offline\fR
 Disable all network access. Assess is already egress\-free; this is the
@@ -582,13 +704,20 @@ Assess a single session by id.
 Load a custom TOML rules file in addition to the bundled rules. A rule pattern
 whose compiled form exceeds 16 KiB is refused like any pattern that fails to
 compile, so skarn exits 6 without scanning; an allowlist pattern over that
-bound is skipped, so its suppression does not apply.
+bound is skipped, so its suppression does not apply. The Credentials in saved
+permission rules section uses the same rules as the session scan: the custom
+file in place of the bundled community rules that skarn vet runs, plus the
+AI\-specific bundled rules, so assess \-\-rules can list a credential that
+skarn vet does not and can miss one that skarn vet lists.
 .TP
 \fB\-\-baseline\fR \fIpath\fR
 Suppress findings recorded in this accepted\-findings baseline. Without this
 flag, ~/.config/skarn/baseline.json is applied automatically when it exists. A
-directory of baselines requires a Pro license; assess never gates, so an
-unlicensed directory degrades to a warning and an unsuppressed scan.
+directory of baselines requires a Pro license. Without \-\-evidence\-home,
+assess warns about an unlicensed directory and scans without suppression.
+Reading a copied home with \-\-evidence\-home requires Pro. With
+\-\-evidence\-home, Skarn skips the personal default baseline and applies only
+an explicit \-\-baseline.
 .TP
 \fB\-\-no\-color\fR
 Disable colored output.
@@ -607,7 +736,9 @@ dossier prints none of those fields except the basename of a selected session
 file that held a record the scan could not parse, and it states the coverage
 counters of the whole scan the dossier was drawn from. The HTML dossier shows
 the coverage warning of the HTML report whenever that scan was incomplete, and
-its compliance export notice whenever that scan withheld export sessions.
+its compliance export notice whenever that scan withheld export sessions. A
+dossier carries no Credentials in saved permission rules section and no
+saved_approvals key: assess collects nothing for it.
 .TP
 \fB\-\-user\fR \fIname\fR
 Restrict the scan to matching users: a comma\-separated list of user ids or
@@ -615,6 +746,42 @@ email addresses, where an id matches exactly and an email address matches
 case\-insensitively. Only a session read from a Compliance API export carries
 either, so on a machine without an export, or without the Enterprise license
 that reading one needs, every \-\-user value matches nothing.
+.TP
+\fB\-\-evidence\-home\fR \fIdir\fR
+Read a copied home's default session stores (Pro). For configuration
+discovery, Skarn reads the copied home's own assistant configuration. Skarn
+looks where this machine's operating system keeps each store, so a copy taken
+on another operating system can show fewer session or configuration rows. The
+Compliance API export root resolves under dir too, and reading it still needs
+Enterprise. Session discovery ignores store overrides, XDG_DATA_HOME,
+XDG_CONFIG_HOME and SKARN_COMPLIANCE_EXPORT_DIR. The license, EULA record,
+~/.skarn.json, caches and outputs stay with the examiner. Skarn ignores the
+copied .skarn.json. Skarn resolves ~/ in sessions_path under dir and reports
+skipped absolute paths. All history is in scope unless you specify \-\-hours,
+\-\-since or \-\-until. Only an explicit \-\-baseline applies. Assess reads
+the copied home's saved permission rules for saved_approvals when in scope.
+Vet reads only home\-layer configuration and refuses \-\-all\-projects and
+\-\-project\-only. Inventory reads sessions and home\-layer configuration. Its
+\-\-project filter applies only to sessions. Check writes the same
+skarn.inventory line with \-\-format ndjson and refuses \-\-drop,
+\-\-audit\-verify and \-\-baseline\-merge. Restore omits cd and names the
+evidence machine's unchecked directory on stderr. The session scan skips
+transcript path checks, reads derived metadata only under dir and follows no
+link below the evidence home: each refused link counts once as an unreadable
+store, and one stderr line per reason gives the count. Configuration discovery
+in vet and inventory follows no symbolic link below dir either. Both accept a
+plain UNC share as the evidence home and exit 6 for a refused network or
+device spelling or a control character. Skarn refuses outputs under dir and
+homes that contain the examiner's home or overlap Skarn's config or cache
+directories (exit 1). Missing, unreadable or non\-directory paths, paths
+containing *, and paths that pass through a link to a network path, a link
+Skarn cannot resolve or a component Skarn cannot check for links cause exit 6;
+the stderr line names the link. Licensing failures exit 7 (no usable license)
+or 5 (insufficient tier) before evidence access. Input files can reside
+anywhere. JSON, SARIF, NDJSON and the audit record have no dedicated
+evidence\-home field. Finding paths show the directory. The evidence pack
+names it on one line. For check, \-\-fail\-on\-scan\-error fails incomplete
+scans. Requires a Pro license.
 .SS "Vet options"
 See \fBskarn\-vet\fR(1).
 .TP
@@ -641,10 +808,15 @@ exits 0: it surfaces, it does not gate. One of: low, medium, high, critical.
 \fB\-\-fail\-on\-scan\-error\fR
 Fail closed with exit 6 when a config file that exists was not read: it could
 not be read, or it was skipped because it is not that assistant's live
-configuration. A partial view of the configuration is never reported as clean.
-Implied by \-\-fail\-on\-severity. A home directory that cannot be resolved at
-all exits 6 regardless of this flag, except under \-\-project\-only, which
-reads no home file.
+configuration. A file that was read but not fully scanned, because a detection
+rule stopped at its regex work limit, the command\-line password detector
+reached its 64\-value limit on one permission rule, or the search for the
+escaped spellings of detected values reached one of its limits, fails closed
+the same way. A partial view of the configuration is never reported as clean.
+Implied by \-\-fail\-on\-severity; when a finding also reaches that threshold,
+the run exits 1, which takes precedence over 6. A home directory that cannot
+be resolved at all exits 6 regardless of this flag, except under
+\-\-project\-only, which reads no home file.
 .TP
 \fB\-\-offline\fR
 Disable all network access. Vet never makes a network call; this is the
@@ -660,17 +832,55 @@ SKARN_CLAUDE_DIRS. Vet reads only the projects keys from those declared
 directories' state files and vets none of their other content. Skarn always
 vets the working directory's own project too, so projectsVetted is at least 1.
 Each project includes its starting directory, git top and main checkout when
-present. A recorded path that is not an existing absolute directory counts as
-skipped; a refused key is a coverage gap. Vet resolves at most 1024 distinct
-keys in sorted order across all state files; keys past that budget produce one
+present, and the .vscode/settings.json directly at each of them. A recorded
+path that is not an existing absolute directory counts as skipped; a refused
+key is a coverage gap. Vet resolves at most 1024 distinct keys in sorted order
+across all state files; keys past that budget produce one
 ProjectBudgetExceeded coverage gap. You cannot combine \-\-all\-projects with
 \-\-project\-only.
 .TP
 \fB\-\-project\-only\fR
-Read project files only, with no home, system, host\-home or Copilot in Code
-profile file. Vet needs no home directory in this scope and still resolves the
+Read project files only, with no home, system, host\-home, VS Code user or
+profile, or Copilot in Code profile file; a project's .vscode/settings.json is
+still read. Vet needs no home directory in this scope and still resolves the
 git top and main checkout from the working directory. You cannot combine
 \-\-project\-only with \-\-all\-projects.
+.TP
+\fB\-\-evidence\-home\fR \fIdir\fR
+Read a copied home's default session stores (Pro). For configuration
+discovery, Skarn reads the copied home's own assistant configuration. Skarn
+looks where this machine's operating system keeps each store, so a copy taken
+on another operating system can show fewer session or configuration rows. The
+Compliance API export root resolves under dir too, and reading it still needs
+Enterprise. Session discovery ignores store overrides, XDG_DATA_HOME,
+XDG_CONFIG_HOME and SKARN_COMPLIANCE_EXPORT_DIR. The license, EULA record,
+~/.skarn.json, caches and outputs stay with the examiner. Skarn ignores the
+copied .skarn.json. Skarn resolves ~/ in sessions_path under dir and reports
+skipped absolute paths. All history is in scope unless you specify \-\-hours,
+\-\-since or \-\-until. Only an explicit \-\-baseline applies. Assess reads
+the copied home's saved permission rules for saved_approvals when in scope.
+Vet reads only home\-layer configuration and refuses \-\-all\-projects and
+\-\-project\-only. Inventory reads sessions and home\-layer configuration. Its
+\-\-project filter applies only to sessions. Check writes the same
+skarn.inventory line with \-\-format ndjson and refuses \-\-drop,
+\-\-audit\-verify and \-\-baseline\-merge. Restore omits cd and names the
+evidence machine's unchecked directory on stderr. The session scan skips
+transcript path checks, reads derived metadata only under dir and follows no
+link below the evidence home: each refused link counts once as an unreadable
+store, and one stderr line per reason gives the count. Configuration discovery
+in vet and inventory follows no symbolic link below dir either. Both accept a
+plain UNC share as the evidence home and exit 6 for a refused network or
+device spelling or a control character. Skarn refuses outputs under dir and
+homes that contain the examiner's home or overlap Skarn's config or cache
+directories (exit 1). Missing, unreadable or non\-directory paths, paths
+containing *, and paths that pass through a link to a network path, a link
+Skarn cannot resolve or a component Skarn cannot check for links cause exit 6;
+the stderr line names the link. Licensing failures exit 7 (no usable license)
+or 5 (insufficient tier) before evidence access. Input files can reside
+anywhere. JSON, SARIF, NDJSON and the audit record have no dedicated
+evidence\-home field. Finding paths show the directory. The evidence pack
+names it on one line. For check, \-\-fail\-on\-scan\-error fails incomplete
+scans. Requires a Pro license.
 .SS "Mcp options"
 See \fBskarn\-mcp\fR(1).
 .TP
@@ -743,16 +953,22 @@ audit\-only. One of: audit, enforce. The default is audit.
 .TP
 \fB\-\-strict\fR
 Gate Read operations (credential\-file reconnaissance) on the hosts that do
-not gate them by default; Claude Code gates Read without this flag and scans
-the file a Read names before the read runs. On every host, turn the ask the
-guard gives an event it cannot fully classify (unparseable, oversized, a
-repeated key, or a tool input nested past the flatten bound) into a deny.
-Without it that event asks in enforce on every host, degraded to the host's
-deny where it has no ask channel; a scan\-infrastructure failure (unreadable
-rules) is unchanged by this flag on Claude and the sdk host, which ask, and
-fails closed only with it on every other host. On the sdk host the guard scans
-every tool kind, read included, without this flag, so \-\-strict changes only
-the verdict an unclassifiable call gets there.
+not gate them by default. Claude Code gates Read without this flag, and so do
+the Copilot CLI, Copilot in Code and VS Code Copilot Chat for every
+pre\-execution read; on those hosts the guard scans the file the read names
+before it runs; the exceptions are a VS Code Copilot Chat view or read, which
+names no path field the guard reads a file from and is judged on its arguments
+only, and a Copilot post\-tool view, which is still gated only with this flag.
+On every host, turn the ask the guard gives an event it cannot fully classify
+(unparseable, oversized, a repeated key, a tool input nested past the flatten
+bound, or a read of a dotenv file whose requested lines lie past the 4 MiB the
+guard reads) into a deny. Without it that event asks in enforce on every host,
+degraded to the host's deny where it has no ask channel; a
+scan\-infrastructure failure (unreadable rules) is unchanged by this flag on
+Claude and the sdk host, which ask, and fails closed only with it on every
+other host. On the sdk host the guard scans every tool kind, read included,
+without this flag, so \-\-strict changes only the verdict an unclassifiable
+call gets there.
 .TP
 \fB\-\-agent\fR \fIname\fR
 Hook host. By default, auto\-detect from the event shape. Pass codex for Codex
@@ -865,9 +1081,19 @@ does not authenticate. A runtime label longer than 64 bytes or outside
 [A\-Za\-z0\-9._@+\-], and either one shaped like a credential, read as one by
 the detection rules, whose own scan stopped a detection rule at its regex work
 limit, or containing a value the call's own scan matched is recorded as
-withheld; an email address in identity is kept. With report and no \-\-log,
-the sdk log (guard\-sdk\-audit.jsonl under the same cache) is listed only when
-it exists or when \-\-agent sdk names it, because no laptop host writes it.
+withheld; an email address in identity is kept. On every host, a record's tool
+name that contains a value the call's own scan found, that carries a
+credential\-shaped piece (16 or more mixed letters and digits, read across
+underscores and hyphens up to an all\-lowercase word, or a long value after a
+credential word), or that is an MCP tool name on a call whose scan decoded a
+secret, is written as mcp__redacted; the sdk adapter writes sdk\-tool instead,
+and also for an empty name, a name over 64 bytes, one outside letters, digits,
+dot, underscore and hyphen, or one that reads as credential\-shaped as a
+whole. Any other tool name is written unchanged, so a credential under 16
+bytes, or one an all\-lowercase piece breaks up, can reach the log when the
+call's scan did not detect it. With report and no \-\-log, the sdk log
+(guard\-sdk\-audit.jsonl under the same cache) is listed only when it exists
+or when \-\-agent sdk names it, because no laptop host writes it.
 .TP
 \fB\-\-window\fR \fIspan\fR
 With report: how far back to summarize, as <N>d or all. The default is 7d.
@@ -1170,7 +1396,17 @@ empty_hidden beside session_count; a discovered session whose file could not
 be parsed is counted the same way, on stderr and as unreadable, so a listing
 never drops a discovered session silently; the Antigravity IDE side\-channel
 bundle, which carries scanned values rather than a conversation, is one such
-session.
+session. unreadable counts session files; stores_unreadable, beside it, counts
+the session stores that were not read in full, and such a store may still have
+contributed rows; a Cursor, VS Code Copilot Chat or Antigravity IDE store that
+was read without its newest changes counts there, and its rows may be
+incomplete or inconsistent. A session store over 192 MiB is read in place with
+its newest changes. A Kiro, Amazon Q, OpenCode or Copilot in Code store counts
+there when that read keeps changing, is refused or would track more than
+524,288 pages; a Cursor, VS Code Copilot Chat or Antigravity IDE store is then
+read from its database file alone and counts there when its write\-ahead log
+holds changes or it kept changing. An OpenCode store that is not a database
+adds 1 to each.
 .TP
 \fB\-\-user\fR \fIname\fR
 Restrict to matching users: a comma\-separated list of user ids or email
@@ -1178,6 +1414,42 @@ addresses, where an id matches exactly and an email address matches
 case\-insensitively. Only a session read from a Compliance API export carries
 either, so on a machine without an export, or without the Enterprise license
 that reading one needs, every \-\-user value matches nothing.
+.TP
+\fB\-\-evidence\-home\fR \fIdir\fR
+Read a copied home's default session stores (Pro). For configuration
+discovery, Skarn reads the copied home's own assistant configuration. Skarn
+looks where this machine's operating system keeps each store, so a copy taken
+on another operating system can show fewer session or configuration rows. The
+Compliance API export root resolves under dir too, and reading it still needs
+Enterprise. Session discovery ignores store overrides, XDG_DATA_HOME,
+XDG_CONFIG_HOME and SKARN_COMPLIANCE_EXPORT_DIR. The license, EULA record,
+~/.skarn.json, caches and outputs stay with the examiner. Skarn ignores the
+copied .skarn.json. Skarn resolves ~/ in sessions_path under dir and reports
+skipped absolute paths. All history is in scope unless you specify \-\-hours,
+\-\-since or \-\-until. Only an explicit \-\-baseline applies. Assess reads
+the copied home's saved permission rules for saved_approvals when in scope.
+Vet reads only home\-layer configuration and refuses \-\-all\-projects and
+\-\-project\-only. Inventory reads sessions and home\-layer configuration. Its
+\-\-project filter applies only to sessions. Check writes the same
+skarn.inventory line with \-\-format ndjson and refuses \-\-drop,
+\-\-audit\-verify and \-\-baseline\-merge. Restore omits cd and names the
+evidence machine's unchecked directory on stderr. The session scan skips
+transcript path checks, reads derived metadata only under dir and follows no
+link below the evidence home: each refused link counts once as an unreadable
+store, and one stderr line per reason gives the count. Configuration discovery
+in vet and inventory follows no symbolic link below dir either. Both accept a
+plain UNC share as the evidence home and exit 6 for a refused network or
+device spelling or a control character. Skarn refuses outputs under dir and
+homes that contain the examiner's home or overlap Skarn's config or cache
+directories (exit 1). Missing, unreadable or non\-directory paths, paths
+containing *, and paths that pass through a link to a network path, a link
+Skarn cannot resolve or a component Skarn cannot check for links cause exit 6;
+the stderr line names the link. Licensing failures exit 7 (no usable license)
+or 5 (insufficient tier) before evidence access. Input files can reside
+anywhere. JSON, SARIF, NDJSON and the audit record have no dedicated
+evidence\-home field. Finding paths show the directory. The evidence pack
+names it on one line. For check, \-\-fail\-on\-scan\-error fails incomplete
+scans. Requires a Pro license.
 .SS "Messages options"
 See \fBskarn\-messages\fR(1).
 .TP
@@ -1244,6 +1516,42 @@ addresses, where an id matches exactly and an email address matches
 case\-insensitively. Only a session read from a Compliance API export carries
 either, so on a machine without an export, or without the Enterprise license
 that reading one needs, every \-\-user value matches nothing.
+.TP
+\fB\-\-evidence\-home\fR \fIdir\fR
+Read a copied home's default session stores (Pro). For configuration
+discovery, Skarn reads the copied home's own assistant configuration. Skarn
+looks where this machine's operating system keeps each store, so a copy taken
+on another operating system can show fewer session or configuration rows. The
+Compliance API export root resolves under dir too, and reading it still needs
+Enterprise. Session discovery ignores store overrides, XDG_DATA_HOME,
+XDG_CONFIG_HOME and SKARN_COMPLIANCE_EXPORT_DIR. The license, EULA record,
+~/.skarn.json, caches and outputs stay with the examiner. Skarn ignores the
+copied .skarn.json. Skarn resolves ~/ in sessions_path under dir and reports
+skipped absolute paths. All history is in scope unless you specify \-\-hours,
+\-\-since or \-\-until. Only an explicit \-\-baseline applies. Assess reads
+the copied home's saved permission rules for saved_approvals when in scope.
+Vet reads only home\-layer configuration and refuses \-\-all\-projects and
+\-\-project\-only. Inventory reads sessions and home\-layer configuration. Its
+\-\-project filter applies only to sessions. Check writes the same
+skarn.inventory line with \-\-format ndjson and refuses \-\-drop,
+\-\-audit\-verify and \-\-baseline\-merge. Restore omits cd and names the
+evidence machine's unchecked directory on stderr. The session scan skips
+transcript path checks, reads derived metadata only under dir and follows no
+link below the evidence home: each refused link counts once as an unreadable
+store, and one stderr line per reason gives the count. Configuration discovery
+in vet and inventory follows no symbolic link below dir either. Both accept a
+plain UNC share as the evidence home and exit 6 for a refused network or
+device spelling or a control character. Skarn refuses outputs under dir and
+homes that contain the examiner's home or overlap Skarn's config or cache
+directories (exit 1). Missing, unreadable or non\-directory paths, paths
+containing *, and paths that pass through a link to a network path, a link
+Skarn cannot resolve or a component Skarn cannot check for links cause exit 6;
+the stderr line names the link. Licensing failures exit 7 (no usable license)
+or 5 (insufficient tier) before evidence access. Input files can reside
+anywhere. JSON, SARIF, NDJSON and the audit record have no dedicated
+evidence\-home field. Finding paths show the directory. The evidence pack
+names it on one line. For check, \-\-fail\-on\-scan\-error fails incomplete
+scans. Requires a Pro license.
 .SS "Search options"
 See \fBskarn\-search\fR(1).
 .TP
@@ -1340,12 +1648,84 @@ addresses, where an id matches exactly and an email address matches
 case\-insensitively. Only a session read from a Compliance API export carries
 either, so on a machine without an export, or without the Enterprise license
 that reading one needs, every \-\-user value matches nothing.
+.TP
+\fB\-\-evidence\-home\fR \fIdir\fR
+Read a copied home's default session stores (Pro). For configuration
+discovery, Skarn reads the copied home's own assistant configuration. Skarn
+looks where this machine's operating system keeps each store, so a copy taken
+on another operating system can show fewer session or configuration rows. The
+Compliance API export root resolves under dir too, and reading it still needs
+Enterprise. Session discovery ignores store overrides, XDG_DATA_HOME,
+XDG_CONFIG_HOME and SKARN_COMPLIANCE_EXPORT_DIR. The license, EULA record,
+~/.skarn.json, caches and outputs stay with the examiner. Skarn ignores the
+copied .skarn.json. Skarn resolves ~/ in sessions_path under dir and reports
+skipped absolute paths. All history is in scope unless you specify \-\-hours,
+\-\-since or \-\-until. Only an explicit \-\-baseline applies. Assess reads
+the copied home's saved permission rules for saved_approvals when in scope.
+Vet reads only home\-layer configuration and refuses \-\-all\-projects and
+\-\-project\-only. Inventory reads sessions and home\-layer configuration. Its
+\-\-project filter applies only to sessions. Check writes the same
+skarn.inventory line with \-\-format ndjson and refuses \-\-drop,
+\-\-audit\-verify and \-\-baseline\-merge. Restore omits cd and names the
+evidence machine's unchecked directory on stderr. The session scan skips
+transcript path checks, reads derived metadata only under dir and follows no
+link below the evidence home: each refused link counts once as an unreadable
+store, and one stderr line per reason gives the count. Configuration discovery
+in vet and inventory follows no symbolic link below dir either. Both accept a
+plain UNC share as the evidence home and exit 6 for a refused network or
+device spelling or a control character. Skarn refuses outputs under dir and
+homes that contain the examiner's home or overlap Skarn's config or cache
+directories (exit 1). Missing, unreadable or non\-directory paths, paths
+containing *, and paths that pass through a link to a network path, a link
+Skarn cannot resolve or a component Skarn cannot check for links cause exit 6;
+the stderr line names the link. Licensing failures exit 7 (no usable license)
+or 5 (insufficient tier) before evidence access. Input files can reside
+anywhere. JSON, SARIF, NDJSON and the audit record have no dedicated
+evidence\-home field. Finding paths show the directory. The evidence pack
+names it on one line. For check, \-\-fail\-on\-scan\-error fails incomplete
+scans. Requires a Pro license.
 .SS "Restore options"
 See \fBskarn\-restore\fR(1).
 .TP
 \fB\-\-session\fR \fIid\fR
 Session id to operate on (prefix\-matched); equivalent to the positional
 argument.
+.TP
+\fB\-\-evidence\-home\fR \fIdir\fR
+Read a copied home's default session stores (Pro). For configuration
+discovery, Skarn reads the copied home's own assistant configuration. Skarn
+looks where this machine's operating system keeps each store, so a copy taken
+on another operating system can show fewer session or configuration rows. The
+Compliance API export root resolves under dir too, and reading it still needs
+Enterprise. Session discovery ignores store overrides, XDG_DATA_HOME,
+XDG_CONFIG_HOME and SKARN_COMPLIANCE_EXPORT_DIR. The license, EULA record,
+~/.skarn.json, caches and outputs stay with the examiner. Skarn ignores the
+copied .skarn.json. Skarn resolves ~/ in sessions_path under dir and reports
+skipped absolute paths. All history is in scope unless you specify \-\-hours,
+\-\-since or \-\-until. Only an explicit \-\-baseline applies. Assess reads
+the copied home's saved permission rules for saved_approvals when in scope.
+Vet reads only home\-layer configuration and refuses \-\-all\-projects and
+\-\-project\-only. Inventory reads sessions and home\-layer configuration. Its
+\-\-project filter applies only to sessions. Check writes the same
+skarn.inventory line with \-\-format ndjson and refuses \-\-drop,
+\-\-audit\-verify and \-\-baseline\-merge. Restore omits cd and names the
+evidence machine's unchecked directory on stderr. The session scan skips
+transcript path checks, reads derived metadata only under dir and follows no
+link below the evidence home: each refused link counts once as an unreadable
+store, and one stderr line per reason gives the count. Configuration discovery
+in vet and inventory follows no symbolic link below dir either. Both accept a
+plain UNC share as the evidence home and exit 6 for a refused network or
+device spelling or a control character. Skarn refuses outputs under dir and
+homes that contain the examiner's home or overlap Skarn's config or cache
+directories (exit 1). Missing, unreadable or non\-directory paths, paths
+containing *, and paths that pass through a link to a network path, a link
+Skarn cannot resolve or a component Skarn cannot check for links cause exit 6;
+the stderr line names the link. Licensing failures exit 7 (no usable license)
+or 5 (insufficient tier) before evidence access. Input files can reside
+anywhere. JSON, SARIF, NDJSON and the audit record have no dedicated
+evidence\-home field. Finding paths show the directory. The evidence pack
+names it on one line. For check, \-\-fail\-on\-scan\-error fails incomplete
+scans. Requires a Pro license.
 .SS "Stats options"
 See \fBskarn\-stats\fR(1).
 .TP
@@ -1430,6 +1810,42 @@ addresses, where an id matches exactly and an email address matches
 case\-insensitively. Only a session read from a Compliance API export carries
 either, so on a machine without an export, or without the Enterprise license
 that reading one needs, every \-\-user value matches nothing.
+.TP
+\fB\-\-evidence\-home\fR \fIdir\fR
+Read a copied home's default session stores (Pro). For configuration
+discovery, Skarn reads the copied home's own assistant configuration. Skarn
+looks where this machine's operating system keeps each store, so a copy taken
+on another operating system can show fewer session or configuration rows. The
+Compliance API export root resolves under dir too, and reading it still needs
+Enterprise. Session discovery ignores store overrides, XDG_DATA_HOME,
+XDG_CONFIG_HOME and SKARN_COMPLIANCE_EXPORT_DIR. The license, EULA record,
+~/.skarn.json, caches and outputs stay with the examiner. Skarn ignores the
+copied .skarn.json. Skarn resolves ~/ in sessions_path under dir and reports
+skipped absolute paths. All history is in scope unless you specify \-\-hours,
+\-\-since or \-\-until. Only an explicit \-\-baseline applies. Assess reads
+the copied home's saved permission rules for saved_approvals when in scope.
+Vet reads only home\-layer configuration and refuses \-\-all\-projects and
+\-\-project\-only. Inventory reads sessions and home\-layer configuration. Its
+\-\-project filter applies only to sessions. Check writes the same
+skarn.inventory line with \-\-format ndjson and refuses \-\-drop,
+\-\-audit\-verify and \-\-baseline\-merge. Restore omits cd and names the
+evidence machine's unchecked directory on stderr. The session scan skips
+transcript path checks, reads derived metadata only under dir and follows no
+link below the evidence home: each refused link counts once as an unreadable
+store, and one stderr line per reason gives the count. Configuration discovery
+in vet and inventory follows no symbolic link below dir either. Both accept a
+plain UNC share as the evidence home and exit 6 for a refused network or
+device spelling or a control character. Skarn refuses outputs under dir and
+homes that contain the examiner's home or overlap Skarn's config or cache
+directories (exit 1). Missing, unreadable or non\-directory paths, paths
+containing *, and paths that pass through a link to a network path, a link
+Skarn cannot resolve or a component Skarn cannot check for links cause exit 6;
+the stderr line names the link. Licensing failures exit 7 (no usable license)
+or 5 (insufficient tier) before evidence access. Input files can reside
+anywhere. JSON, SARIF, NDJSON and the audit record have no dedicated
+evidence\-home field. Finding paths show the directory. The evidence pack
+names it on one line. For check, \-\-fail\-on\-scan\-error fails incomplete
+scans. Requires a Pro license.
 .SS "Export options"
 See \fBskarn\-export\fR(1).
 .TP
@@ -1507,6 +1923,42 @@ addresses, where an id matches exactly and an email address matches
 case\-insensitively. Only a session read from a Compliance API export carries
 either, so on a machine without an export, or without the Enterprise license
 that reading one needs, every \-\-user value matches nothing.
+.TP
+\fB\-\-evidence\-home\fR \fIdir\fR
+Read a copied home's default session stores (Pro). For configuration
+discovery, Skarn reads the copied home's own assistant configuration. Skarn
+looks where this machine's operating system keeps each store, so a copy taken
+on another operating system can show fewer session or configuration rows. The
+Compliance API export root resolves under dir too, and reading it still needs
+Enterprise. Session discovery ignores store overrides, XDG_DATA_HOME,
+XDG_CONFIG_HOME and SKARN_COMPLIANCE_EXPORT_DIR. The license, EULA record,
+~/.skarn.json, caches and outputs stay with the examiner. Skarn ignores the
+copied .skarn.json. Skarn resolves ~/ in sessions_path under dir and reports
+skipped absolute paths. All history is in scope unless you specify \-\-hours,
+\-\-since or \-\-until. Only an explicit \-\-baseline applies. Assess reads
+the copied home's saved permission rules for saved_approvals when in scope.
+Vet reads only home\-layer configuration and refuses \-\-all\-projects and
+\-\-project\-only. Inventory reads sessions and home\-layer configuration. Its
+\-\-project filter applies only to sessions. Check writes the same
+skarn.inventory line with \-\-format ndjson and refuses \-\-drop,
+\-\-audit\-verify and \-\-baseline\-merge. Restore omits cd and names the
+evidence machine's unchecked directory on stderr. The session scan skips
+transcript path checks, reads derived metadata only under dir and follows no
+link below the evidence home: each refused link counts once as an unreadable
+store, and one stderr line per reason gives the count. Configuration discovery
+in vet and inventory follows no symbolic link below dir either. Both accept a
+plain UNC share as the evidence home and exit 6 for a refused network or
+device spelling or a control character. Skarn refuses outputs under dir and
+homes that contain the examiner's home or overlap Skarn's config or cache
+directories (exit 1). Missing, unreadable or non\-directory paths, paths
+containing *, and paths that pass through a link to a network path, a link
+Skarn cannot resolve or a component Skarn cannot check for links cause exit 6;
+the stderr line names the link. Licensing failures exit 7 (no usable license)
+or 5 (insufficient tier) before evidence access. Input files can reside
+anywhere. JSON, SARIF, NDJSON and the audit record have no dedicated
+evidence\-home field. Finding paths show the directory. The evidence pack
+names it on one line. For check, \-\-fail\-on\-scan\-error fails incomplete
+scans. Requires a Pro license.
 .SS "Cmds options"
 See \fBskarn\-cmds\fR(1).
 .TP
@@ -1580,6 +2032,42 @@ addresses, where an id matches exactly and an email address matches
 case\-insensitively. Only a session read from a Compliance API export carries
 either, so on a machine without an export, or without the Enterprise license
 that reading one needs, every \-\-user value matches nothing.
+.TP
+\fB\-\-evidence\-home\fR \fIdir\fR
+Read a copied home's default session stores (Pro). For configuration
+discovery, Skarn reads the copied home's own assistant configuration. Skarn
+looks where this machine's operating system keeps each store, so a copy taken
+on another operating system can show fewer session or configuration rows. The
+Compliance API export root resolves under dir too, and reading it still needs
+Enterprise. Session discovery ignores store overrides, XDG_DATA_HOME,
+XDG_CONFIG_HOME and SKARN_COMPLIANCE_EXPORT_DIR. The license, EULA record,
+~/.skarn.json, caches and outputs stay with the examiner. Skarn ignores the
+copied .skarn.json. Skarn resolves ~/ in sessions_path under dir and reports
+skipped absolute paths. All history is in scope unless you specify \-\-hours,
+\-\-since or \-\-until. Only an explicit \-\-baseline applies. Assess reads
+the copied home's saved permission rules for saved_approvals when in scope.
+Vet reads only home\-layer configuration and refuses \-\-all\-projects and
+\-\-project\-only. Inventory reads sessions and home\-layer configuration. Its
+\-\-project filter applies only to sessions. Check writes the same
+skarn.inventory line with \-\-format ndjson and refuses \-\-drop,
+\-\-audit\-verify and \-\-baseline\-merge. Restore omits cd and names the
+evidence machine's unchecked directory on stderr. The session scan skips
+transcript path checks, reads derived metadata only under dir and follows no
+link below the evidence home: each refused link counts once as an unreadable
+store, and one stderr line per reason gives the count. Configuration discovery
+in vet and inventory follows no symbolic link below dir either. Both accept a
+plain UNC share as the evidence home and exit 6 for a refused network or
+device spelling or a control character. Skarn refuses outputs under dir and
+homes that contain the examiner's home or overlap Skarn's config or cache
+directories (exit 1). Missing, unreadable or non\-directory paths, paths
+containing *, and paths that pass through a link to a network path, a link
+Skarn cannot resolve or a component Skarn cannot check for links cause exit 6;
+the stderr line names the link. Licensing failures exit 7 (no usable license)
+or 5 (insufficient tier) before evidence access. Input files can reside
+anywhere. JSON, SARIF, NDJSON and the audit record have no dedicated
+evidence\-home field. Finding paths show the directory. The evidence pack
+names it on one line. For check, \-\-fail\-on\-scan\-error fails incomplete
+scans. Requires a Pro license.
 .SS "Mcps options"
 See \fBskarn\-mcps\fR(1).
 .TP
@@ -1653,6 +2141,42 @@ addresses, where an id matches exactly and an email address matches
 case\-insensitively. Only a session read from a Compliance API export carries
 either, so on a machine without an export, or without the Enterprise license
 that reading one needs, every \-\-user value matches nothing.
+.TP
+\fB\-\-evidence\-home\fR \fIdir\fR
+Read a copied home's default session stores (Pro). For configuration
+discovery, Skarn reads the copied home's own assistant configuration. Skarn
+looks where this machine's operating system keeps each store, so a copy taken
+on another operating system can show fewer session or configuration rows. The
+Compliance API export root resolves under dir too, and reading it still needs
+Enterprise. Session discovery ignores store overrides, XDG_DATA_HOME,
+XDG_CONFIG_HOME and SKARN_COMPLIANCE_EXPORT_DIR. The license, EULA record,
+~/.skarn.json, caches and outputs stay with the examiner. Skarn ignores the
+copied .skarn.json. Skarn resolves ~/ in sessions_path under dir and reports
+skipped absolute paths. All history is in scope unless you specify \-\-hours,
+\-\-since or \-\-until. Only an explicit \-\-baseline applies. Assess reads
+the copied home's saved permission rules for saved_approvals when in scope.
+Vet reads only home\-layer configuration and refuses \-\-all\-projects and
+\-\-project\-only. Inventory reads sessions and home\-layer configuration. Its
+\-\-project filter applies only to sessions. Check writes the same
+skarn.inventory line with \-\-format ndjson and refuses \-\-drop,
+\-\-audit\-verify and \-\-baseline\-merge. Restore omits cd and names the
+evidence machine's unchecked directory on stderr. The session scan skips
+transcript path checks, reads derived metadata only under dir and follows no
+link below the evidence home: each refused link counts once as an unreadable
+store, and one stderr line per reason gives the count. Configuration discovery
+in vet and inventory follows no symbolic link below dir either. Both accept a
+plain UNC share as the evidence home and exit 6 for a refused network or
+device spelling or a control character. Skarn refuses outputs under dir and
+homes that contain the examiner's home or overlap Skarn's config or cache
+directories (exit 1). Missing, unreadable or non\-directory paths, paths
+containing *, and paths that pass through a link to a network path, a link
+Skarn cannot resolve or a component Skarn cannot check for links cause exit 6;
+the stderr line names the link. Licensing failures exit 7 (no usable license)
+or 5 (insufficient tier) before evidence access. Input files can reside
+anywhere. JSON, SARIF, NDJSON and the audit record have no dedicated
+evidence\-home field. Finding paths show the directory. The evidence pack
+names it on one line. For check, \-\-fail\-on\-scan\-error fails incomplete
+scans. Requires a Pro license.
 .SS "Tools options"
 See \fBskarn\-tools\fR(1).
 .TP
@@ -1726,6 +2250,42 @@ addresses, where an id matches exactly and an email address matches
 case\-insensitively. Only a session read from a Compliance API export carries
 either, so on a machine without an export, or without the Enterprise license
 that reading one needs, every \-\-user value matches nothing.
+.TP
+\fB\-\-evidence\-home\fR \fIdir\fR
+Read a copied home's default session stores (Pro). For configuration
+discovery, Skarn reads the copied home's own assistant configuration. Skarn
+looks where this machine's operating system keeps each store, so a copy taken
+on another operating system can show fewer session or configuration rows. The
+Compliance API export root resolves under dir too, and reading it still needs
+Enterprise. Session discovery ignores store overrides, XDG_DATA_HOME,
+XDG_CONFIG_HOME and SKARN_COMPLIANCE_EXPORT_DIR. The license, EULA record,
+~/.skarn.json, caches and outputs stay with the examiner. Skarn ignores the
+copied .skarn.json. Skarn resolves ~/ in sessions_path under dir and reports
+skipped absolute paths. All history is in scope unless you specify \-\-hours,
+\-\-since or \-\-until. Only an explicit \-\-baseline applies. Assess reads
+the copied home's saved permission rules for saved_approvals when in scope.
+Vet reads only home\-layer configuration and refuses \-\-all\-projects and
+\-\-project\-only. Inventory reads sessions and home\-layer configuration. Its
+\-\-project filter applies only to sessions. Check writes the same
+skarn.inventory line with \-\-format ndjson and refuses \-\-drop,
+\-\-audit\-verify and \-\-baseline\-merge. Restore omits cd and names the
+evidence machine's unchecked directory on stderr. The session scan skips
+transcript path checks, reads derived metadata only under dir and follows no
+link below the evidence home: each refused link counts once as an unreadable
+store, and one stderr line per reason gives the count. Configuration discovery
+in vet and inventory follows no symbolic link below dir either. Both accept a
+plain UNC share as the evidence home and exit 6 for a refused network or
+device spelling or a control character. Skarn refuses outputs under dir and
+homes that contain the examiner's home or overlap Skarn's config or cache
+directories (exit 1). Missing, unreadable or non\-directory paths, paths
+containing *, and paths that pass through a link to a network path, a link
+Skarn cannot resolve or a component Skarn cannot check for links cause exit 6;
+the stderr line names the link. Licensing failures exit 7 (no usable license)
+or 5 (insufficient tier) before evidence access. Input files can reside
+anywhere. JSON, SARIF, NDJSON and the audit record have no dedicated
+evidence\-home field. Finding paths show the directory. The evidence pack
+names it on one line. For check, \-\-fail\-on\-scan\-error fails incomplete
+scans. Requires a Pro license.
 .SS "License options"
 See \fBskarn\-license\fR(1).
 .TP
@@ -1802,6 +2362,42 @@ comma\-separated list, as check matches it.
 \fB\-\-rules\fR \fIpath\fR
 Mask names with this detection rule pack, applied to session\-derived and
 configuration\-derived names alike; a missing or malformed pack exits 6.
+.TP
+\fB\-\-evidence\-home\fR \fIdir\fR
+Read a copied home's default session stores (Pro). For configuration
+discovery, Skarn reads the copied home's own assistant configuration. Skarn
+looks where this machine's operating system keeps each store, so a copy taken
+on another operating system can show fewer session or configuration rows. The
+Compliance API export root resolves under dir too, and reading it still needs
+Enterprise. Session discovery ignores store overrides, XDG_DATA_HOME,
+XDG_CONFIG_HOME and SKARN_COMPLIANCE_EXPORT_DIR. The license, EULA record,
+~/.skarn.json, caches and outputs stay with the examiner. Skarn ignores the
+copied .skarn.json. Skarn resolves ~/ in sessions_path under dir and reports
+skipped absolute paths. All history is in scope unless you specify \-\-hours,
+\-\-since or \-\-until. Only an explicit \-\-baseline applies. Assess reads
+the copied home's saved permission rules for saved_approvals when in scope.
+Vet reads only home\-layer configuration and refuses \-\-all\-projects and
+\-\-project\-only. Inventory reads sessions and home\-layer configuration. Its
+\-\-project filter applies only to sessions. Check writes the same
+skarn.inventory line with \-\-format ndjson and refuses \-\-drop,
+\-\-audit\-verify and \-\-baseline\-merge. Restore omits cd and names the
+evidence machine's unchecked directory on stderr. The session scan skips
+transcript path checks, reads derived metadata only under dir and follows no
+link below the evidence home: each refused link counts once as an unreadable
+store, and one stderr line per reason gives the count. Configuration discovery
+in vet and inventory follows no symbolic link below dir either. Both accept a
+plain UNC share as the evidence home and exit 6 for a refused network or
+device spelling or a control character. Skarn refuses outputs under dir and
+homes that contain the examiner's home or overlap Skarn's config or cache
+directories (exit 1). Missing, unreadable or non\-directory paths, paths
+containing *, and paths that pass through a link to a network path, a link
+Skarn cannot resolve or a component Skarn cannot check for links cause exit 6;
+the stderr line names the link. Licensing failures exit 7 (no usable license)
+or 5 (insufficient tier) before evidence access. Input files can reside
+anywhere. JSON, SARIF, NDJSON and the audit record have no dedicated
+evidence\-home field. Finding paths show the directory. The evidence pack
+names it on one line. For check, \-\-fail\-on\-scan\-error fails incomplete
+scans. Requires a Pro license.
 .SH "EXIT STATUS"
 .TP
 \fB0\fR
@@ -1823,7 +2419,16 @@ was refused or did not complete, for example because an argument was invalid,
 a license did not verify, a replacement was declined, there was no license to
 renew, the renewal endpoint was refused or could not be reached, or a file
 could not be read or written. A failure before the new license is written
-leaves the installed license as it was.
+leaves the installed license as it was. Skarn refuses an empty
+\-\-evidence\-home value. The evidence home cannot contain the examiner's own
+home or Skarn's config or cache directory, or lie inside either Skarn
+directory. Skarn refuses any named or default output under the evidence home
+and any existing output file with a second hard link. On Linux and macOS it
+also refuses an output path with .. in a part that does not yet exist; Windows
+resolves .. before the lookup, so there Skarn checks the resolved path. Vet
+refuses \-\-evidence\-home with \-\-all\-projects or \-\-project\-only. Guard,
+mcp and serve refuse \-\-evidence\-home. Check refuses it with \-\-drop,
+\-\-audit\-verify or \-\-baseline\-merge.
 .TP
 \fB2\fR
 The session risk score exceeded the \-\-fail\-on\-risk threshold. For setup:
@@ -1848,6 +2453,8 @@ loaded is never quietly replaced by the embedded default, which gates nothing.
 A requested paid feature is not covered by the active license (a Pro or
 Enterprise flag without a license that covers it). Refused before any scan.
 With no usable license at all, check exits 7 before this gate is consulted.
+With \-\-evidence\-home, check, assess, vet, inventory and the recall commands
+exit 5 if the installed license does not cover Pro.
 .TP
 \fB6\fR
 The scan could not complete: session discovery or the scan itself failed,
@@ -1879,11 +2486,27 @@ a valid empty chain and exits 0). For vet: the home directory could not be
 resolved outside \-\-project\-only (so the configuration was never located at
 all), or a config file that exists was not read \- it could not be read, or it
 was skipped because it is not that assistant's live configuration \- so the
-configuration was only partly seen. For doctor: the home directory could not
-be resolved, so every per\-assistant check would have read an empty machine \-
-a diagnostic that could not be produced is never reported as a healthy one.
-Fail\-closed \- the result is not trustworthy, so it is never reported as
-clean.
+configuration was only partly seen, or a file that was read was not fully
+scanned, because a detection rule stopped at its regex work limit or the
+command\-line password detector reached its 64\-value limit on one permission
+rule. For doctor: the home directory could not be resolved, so every
+per\-assistant check would have read an empty machine \- a diagnostic that
+could not be produced is never reported as a healthy one. Fail\-closed \- the
+result is not trustworthy, so it is never reported as clean. Skarn exits 6 if
+the \-\-evidence\-home path is missing, contains *, does not name a directory,
+names a directory Skarn cannot read, or names a directory whose real path
+Skarn cannot resolve. If a session scan finds a readable directory with no
+session store, Skarn names the evidence home in the zero\-session message and
+exits 0 by default. Vet and inventory exit 6 before opening an evidence home
+whose absolute path is a namespace or device path (\e\e?\e or \e\e.\e, with
+either separator), a server without a share, a pipe, mailslot or IPC$ share,
+or a . or .. component after the share. A value that starts with one separator
+on Windows, such as \e??\e or \eDevice\e, is first made a path on the working
+drive, and a relative value on macOS and Linux a path under the working
+directory; that local path is what Skarn judges and opens. They print `error:
+\-\-evidence\-home <path>: this spelling of a network or device path is not
+read`. For a control character, the message ends with `a path that holds a
+control character is not read`.
 .TP
 \fB7\fR
 No usable license is present \- none was found via SKARN_LICENSE,
@@ -1891,10 +2514,15 @@ SKARN_LICENSE_FILE, or the installed file \- so check, baseline audit, fleet
 aggregate or fleet readout refused before scanning or reading a file. The free
 license is issued at https://getskarn.com/free after a quick email
 confirmation and is verified offline. Also used when a license IS present but
-cannot be used at all (revoked, tampered, or signed by an untrusted key).
-assess, baseline accept, guard accept, the recall commands, guard, setup,
-doctor, vet, mcp, license, taxonomies and check \-\-audit\-verify never exit
-7.
+cannot be used at all (revoked, tampered, or signed by an untrusted key). With
+\-\-evidence\-home, assess, vet, inventory and the recall commands exit 7 only
+when no usable license is present. Skarn checks the license before accessing
+the evidence home. Without a usable license, check prints its usual refusal.
+For assess, vet, inventory and recall, the refusal names the verb and its Pro
+requirement, explains the license problem, gives the editions URL and says the
+verb runs without a license without the option. The commands baseline accept,
+guard accept, guard, setup, doctor, mcp, license, taxonomies and check
+\-\-audit\-verify never exit 7.
 .SH ENVIRONMENT
 .TP
 \fBSKARN_SCAN_THREADS\fR
@@ -1906,7 +2534,8 @@ identical for any value; only latency changes.
 Colon\-separated list of additional Claude Code config directories to scan
 beyond the default ~/.claude. Each entry is the dir that contains projects/.
 Roots are de\-duplicated. skarn vet \-\-all\-projects also reads the projects
-keys of each entry's .claude.json, and none of its other content. The colon
+keys of each entry's .claude.json, and none of its other content. skarn assess
+reads the same projects keys for its saved permission rules section. The colon
 separator cannot carry a Windows drive path, for either session scans or vet.
 .TP
 \fBSKARN_TZ_OFFSET\fR
@@ -1982,7 +2611,8 @@ Path to a file containing a license token.
 A Claude Code config directory visible in Skarn's environment; folded into the
 claude source like an SKARN_CLAUDE_DIRS entry. skarn vet \-\-all\-projects
 also reads the projects keys of that directory's .claude.json, and none of its
-other content.
+other content. skarn assess reads the same projects keys for its saved
+permission rules section.
 .TP
 \fBCOPILOT_HOME\fR
 GitHub Copilot CLI config directory visible in Skarn's environment. The CLI
@@ -2005,7 +2635,8 @@ source scans it and the copilot source does not, and vet reads it as that
 profile and reads ~/.copilot as the Copilot CLI root. Any other value that is
 neither ~/.copilot nor ~/.scout/copilot is split per session between the two
 sources by the client_name in each session's workspace.yaml, as the
-CopilotCodingHome entry under FILES describes.
+CopilotCodingHome entry under FILES describes. skarn assess follows it the
+same way for its saved permission rules section.
 .TP
 \fBGROK_HOME\fR
 Grok Build config directory visible in Skarn's environment; replaces the
@@ -2036,7 +2667,17 @@ sessions/ child.
 A Codex CLI data directory visible in Skarn's environment; folded into the
 codex source alongside the default ~/.codex, de\-duplicated, resolved via
 expandPath. Each root contributes its sessions/ and archived_sessions/
-children.
+children. For Codex configuration, vet, assess, inventory and the MCP
+vet_configs tool use it in place of ~/.codex when it is nonempty: they read
+config.toml, hooks.json and the rules/ directory only under it, with no
+fallback. A value that names no existing directory reads nothing, because
+Codex CLI refuses to start then. Vet resolves . and .. components and reads a
+relative value from the working directory. The CLI commands accept a plain UNC
+path. The MCP tool refuses a network path named in the variable itself. A
+refused network or device spelling produces a NetworkPathRefused coverage gap
+at the directory itself, and a control character in a local path produces
+ControlCharacterInPath there. With \-\-evidence\-home, the commands ignore it.
+Setup and doctor still read ~/.codex.
 .TP
 \fBSKARN_MANAGED_ROOT\fR
 Prefix prepended to every managed (MDM/fleet) config path skarn reads, so a
@@ -2044,10 +2685,11 @@ fleet admin can validate a staged payload directory before pushing it to a
 single machine (SKARN_MANAGED_ROOT=/tmp/stage skarn doctor). Empty or unset
 means the live system paths. Doctor applies it to every managed hook config it
 inspects, and vet applies it to the system Grok Build layers it reads at
-/etc/grok. Whenever it is active, doctor echoes the root in the report header
-and emits it as managed_root in \-\-json, so a staged report can never pass as
-a report about the live machine. It is a filesystem prefix and cannot re\-root
-a registry key; SKARN_MANAGED_REGISTRY_ROOT does that.
+/etc/grok. skarn assess applies it to the same layers for its saved permission
+rules section. Whenever it is active, doctor echoes the root in the report
+header and emits it as managed_root in \-\-json, so a staged report can never
+pass as a report about the live machine. It is a filesystem prefix and cannot
+re\-root a registry key; SKARN_MANAGED_REGISTRY_ROOT does that.
 .TP
 \fBSKARN_MANAGED_REGISTRY_ROOT\fR
 Registry key doctor reads the Windows managed policy keys under, so an
@@ -2066,7 +2708,8 @@ Grok Build's data and configuration directory, default ~/.grok. It relocates
 the whole Grok home surface that vet reads \- config.toml,
 managed_config.toml, requirements.toml, the hooks/ directory, and the
 hooks\-paths registry \- so a relocated Grok home is examined rather than
-reported clean over an unexamined one.
+reported clean over an unexamined one. skarn assess reads the same relocated
+surface for its saved permission rules section.
 .TP
 \fBXDG_CACHE_HOME\fR
 Base directory for the rule and feed cache. Defaults to ~/.cache, so the cache
@@ -2164,14 +2807,105 @@ unless CLINE_DATA_DIR selects another. Setup uses this directory for Cline
 detection but still writes user hooks only to ~/Documents/Cline/Hooks/, with
 Documents joined literally to HOME. Doctor reads the CLI's SDK\-only hooks
 directory under this root and its data/globalState.json unless CLINE_DATA_DIR
-selects another data directory.
+selects another data directory. Vet reads hooks under <CLINE_DIR>/hooks and
+the five data files under <CLINE_DIR>/data unless CLINE_DATA_DIR selects
+another data directory or a per\-file override replaces a path. For vet,
+surrounding whitespace is trimmed, and a value that names something other than
+a directory is the NotADirectory coverage gap. skarn assess follows it the
+same way for its saved permission rules section.
 .TP
 \fBCLINE_DATA_DIR\fR
 Cline data directory in place of CLINE_DIR/data or ~/.cline/data, for session
 discovery and the globalState.json whose hooksEnabled setting doctor reads.
 That setting silences only the extension, not the CLI. Setup uses this
 directory for Cline detection; it does not move the user hook destination
-~/Documents/Cline/Hooks/.
+~/Documents/Cline/Hooks/. Vet reads the five Cline data files under this
+directory, unless a per\-file override replaces a path; this variable does not
+move the hook directories. For vet, surrounding whitespace is trimmed, and a
+value that names something other than a directory is the NotADirectory
+coverage gap. skarn assess follows it the same way for its saved permission
+rules section.
+.TP
+\fBKIRO_HOME\fR
+The Kiro CLI's configuration directory, default ~/.kiro. It relocates the
+whole Kiro configuration surface that vet reads: agents/, hooks/,
+settings/mcp.json, mcp.json, settings/permissions.yaml, and workspace\-roots/,
+so vet examines a relocated home rather than reporting it clean without
+examining it. Under Kiro's own fallback, a relative path, a filesystem root,
+the home directory, or an ancestor of the home directory falls back to
+~/.kiro. Vet accepts a plain UNC path and reports a coverage gap for any other
+network or device spelling or a control character. Vet never reads session
+stores or the account database, and never parses a Markdown profile's body.
+skarn assess reads the same relocated surface for its saved permission rules
+section.
+.TP
+\fBCLINE_MCP_SETTINGS_PATH\fR
+Surrounding whitespace is trimmed and a blank value is unset, as Cline reads
+it. Replaces only the path to Cline's settings/cline_mcp_settings.json under
+its data directory. skarn vet, skarn assess for its saved permission rules
+section, the MCP vet_configs tool, and skarn inventory follow it; inventory
+names the path $CLINE_MCP_SETTINGS_PATH. Configuration discovery accepts plain
+UNC paths except in vet_configs, which refuses every network path. All four
+refuse other network or device spellings. ClineOverrideAlias reports an
+override that names a file another vetted row reads: vet skips the override
+and reads the other row as usual, unless that row is also an override, in
+which case vet skips both.
+.TP
+\fBCLINE_PROVIDER_SETTINGS_PATH\fR
+Surrounding whitespace is trimmed and a blank value is unset, as Cline reads
+it. Replaces only the path to Cline's settings/providers.json under its data
+directory. skarn vet, skarn assess for its saved permission rules section, the
+MCP vet_configs tool, and skarn inventory follow it; inventory names the path
+$CLINE_PROVIDER_SETTINGS_PATH. Configuration discovery accepts plain UNC paths
+except in vet_configs, which refuses every network path. All four refuse other
+network or device spellings. ClineOverrideAlias reports an override that names
+a file another vetted row reads: vet skips the override and reads the other
+row as usual, unless that row is also an override, in which case vet skips
+both.
+.TP
+\fBCLINE_GLOBAL_SETTINGS_PATH\fR
+Surrounding whitespace is trimmed and a blank value is unset, as Cline reads
+it. Replaces only the path to Cline's settings/global\-settings.json under its
+data directory. skarn vet, skarn assess for its saved permission rules
+section, the MCP vet_configs tool, and skarn inventory follow it; inventory
+names the path $CLINE_GLOBAL_SETTINGS_PATH. Configuration discovery accepts
+plain UNC paths except in vet_configs, which refuses every network path. All
+four refuse other network or device spellings. ClineOverrideAlias reports an
+override that names a file another vetted row reads: vet skips the override
+and reads the other row as usual, unless that row is also an override, in
+which case vet skips both.
+.TP
+\fBVSCODE_APPDATA\fR
+VS Code's user data root. When it is set and not empty, vet, assess,
+inventory, the inventory record check \-\-format ndjson writes, and the MCP
+vet_configs tool read VS Code's user settings and profiles and the legacy copy
+of Cline's MCP settings under $VSCODE_APPDATA/Code/User on every platform, and
+the legacy copy of Cline's MCP settings that Cursor holds under
+$VSCODE_APPDATA/Cursor/User, because Cursor is built from VS Code and inherits
+the variable. When it is unset or empty they read %APPDATA%\eCode\eUser on
+Windows (falling back to %USERPROFILE%\eAppData\eRoaming\eCode\eUser),
+~/Library/Application Support/Code/User on macOS, and
+$XDG_CONFIG_HOME/Code/User on Linux (falling back to ~/.config/Code/User), and
+the same directories with Cursor in place of Code for Cursor. Configuration
+discovery accepts a plain UNC root except in vet_configs. A relative path, any
+other network or device spelling, or a control character gives one coverage
+gap per directory. For a plain UNC root, vet_configs also reports those gaps.
+Under \-\-evidence\-home it is ignored: the VS Code and Cursor user
+directories resolve under the copied home. Session recall does not read it.
+.TP
+\fBGEMINI_CLI_HOME\fR
+Gemini CLI uses $GEMINI_CLI_HOME/.gemini as its home when GEMINI_CLI_HOME is
+nonempty and ~/.gemini otherwise. Vet resolves . and .. components the way
+Gemini CLI joins the path, and reads a relative value from the working
+directory, as Gemini CLI does. For Gemini user configuration, vet, assess,
+inventory, and the MCP vet_configs tool read settings.json and the policies/
+directory only under the selected home, with no fallback. The CLI commands
+accept a plain UNC path. The MCP tool refuses a network path named in the
+variable itself. A refused network or device spelling produces a
+NetworkPathRefused coverage gap at the override directory itself. A control
+character in a local path produces ControlCharacterInPath there. With
+\-\-evidence\-home, the commands ignore the override. Setup and doctor use
+~/.gemini for user settings, and session discovery ignores GEMINI_CLI_HOME.
 .SH FILES
 .TP
 \fB/Library/Application Support/ClaudeCode/managed\-settings.json, /etc/claude\-code/managed\-settings.json, C:\eProgram Files\eClaudeCode\emanaged\-settings.json\fR
@@ -2279,8 +3013,10 @@ it and every matching file in the directory is read. Relocate the whole data
 root with $XDG_DATA_HOME, which OpenCode honours on macOS and Windows too \-
 it uses the XDG path on every platform, not Application Support or %APPDATA%.
 The store is WAL\-mode and OpenCode holds it open while running, so skarn
-reads it read\-only inside one transaction and never writes to it; a store it
-cannot read is reported as an incomplete scan rather than counted clean.
+reads the database and its \-wal into an in\-memory image and opens that image
+read\-only; nothing is written beside the store. A store that cannot be read
+consistently is reported as unreadable, which makes the scan incomplete rather
+than clean.
 .TP
 \fB~/.local/share/opencode/storage/\fR
 OpenCode's pre\-v1.2 session tree, one JSON record per session, message and
@@ -2420,16 +3156,35 @@ is scanned as injected context, and a credential inside a
 $COPILOT_HOME that names a Copilot in Code profile is not one of these roots,
 and a session that Copilot in Code wrote under any other $COPILOT_HOME is
 reported by the copilot\-code source instead; the CopilotCodingHome entry
-describes both.
+describes both. Skarn reads a session's token totals and cost from what the
+CLI records, never from its own price table. A run of the CLI that closes
+normally writes one session.shutdown record. Current versions write the totals
+since the session started, and earlier versions wrote each run's own totals.
+Skarn takes the last running total and adds per\-run records, so each request
+counts once when the transcript shows which kind a record is: the usage
+records, the output tokens that assistant messages state or the record's
+request count settle it. A record they do not settle shows its own totals and
+no cost, and the runs before it drop out of the totals. Skarn then adds the
+readable session.usage_record records written after the last session.shutdown
+record it could read. A usage record holds one model request; a usage record
+written before a readable session.shutdown record is left out, so that a
+request the shutdown record counts is not counted twice. A session that is
+still open, or that ended without a session.shutdown record, therefore reports
+the requests its usage records hold. Without a readable usage record, Skarn
+counts instead the output tokens that assistant messages state after the last
+session.shutdown record, or in the whole transcript when there is none. The
+cost is the AI credits those records state; when a usage record after the last
+session.shutdown record states no AI credits or carries malformed usage
+fields, the session shows no cost rather than an estimate.
 .TP
 \fB~/.claude/settings.json, ~/.claude/settings.local.json, ./.claude/settings.json, ./.claude/settings.local.json\fR
-See \fBskarn\-vet\fR(1).
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
 .TP
 \fB~/.claude.json, ~/.mcp.json, ./.mcp.json\fR
-See \fBskarn\-vet\fR(1).
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
 .TP
 \fB~/.claude/plugins/, ~/.claude/skills/\fR
-See \fBskarn\-vet\fR(1).
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
 .TP
 \fB~/.codex/sessions/, ~/.codex/archived_sessions/\fR
 Default Codex CLI session roots, scanned automatically and extendable with
@@ -2440,34 +3195,35 @@ preferred. Only rollout\-* files are parsed as sessions, so
 session_index.jsonl is never scanned.
 .TP
 \fB~/.codex/config.toml, ~/.codex/hooks.json\fR
-See \fBskarn\-vet\fR(1).
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
 .TP
 \fB~/.cursor/mcp.json, ~/.cursor/hooks.json\fR
-See \fBskarn\-vet\fR(1).
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
 .TP
 \fB~/.copilot/mcp\-config.json, ~/.copilot/config.json, ~/.copilot/settings.json\fR
-See \fBskarn\-vet\fR(1).
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
 .TP
 \fB~/.scout/m\-settings.json\fR
-See \fBskarn\-vet\fR(1).
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
 .TP
 \fB~/.scout/m\-mcp\-servers.json\fR
-See \fBskarn\-vet\fR(1).
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
 .TP
 \fB~/.copilot/data.db\fR
-See \fBskarn\-vet\fR(1).
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
 .TP
 \fB~/Library/Application Support/Grok Bot/sand\-secrets.json\fR
-See \fBskarn\-vet\fR(1).
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
 .TP
 \fB~/.grokbot/settings.json\fR
-See \fBskarn\-vet\fR(1).
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
 .TP
 \fB~/.grokbot/local\-exec\-daemon\-connection.json\fR
-See \fBskarn\-vet\fR(1).
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
 .TP
 \fB~/.gemini/settings.json\fR
-See \fBskarn\-setup\fR(1), \fBskarn\-doctor\fR(1), \fBskarn\-vet\fR(1).
+See \fBskarn\-setup\fR(1), \fBskarn\-doctor\fR(1), \fBskarn\-vet\fR(1),
+\fBskarn\-assess\fR(1).
 .TP
 \fB~/.grok/hooks/skarn.json\fR
 See \fBskarn\-setup\fR(1), \fBskarn\-doctor\fR(1).
@@ -2488,16 +3244,16 @@ See \fBskarn\-doctor\fR(1).
 See \fBskarn\-doctor\fR(1).
 .TP
 \fB~/.grok/config.toml, ~/.grok/managed_config.toml, ~/.grok/requirements.toml\fR
-See \fBskarn\-vet\fR(1).
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
 .TP
 \fB/etc/grok/managed_config.toml, /etc/grok/requirements.toml\fR
-See \fBskarn\-vet\fR(1).
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
 .TP
 \fB~/.grok/hooks/, ~/.grok/hooks\-paths\fR
-See \fBskarn\-vet\fR(1).
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
 .TP
 \fB./.grok/config.toml, ./.grok/hooks/\fR
-See \fBskarn\-vet\fR(1).
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
 .TP
 \fB~/.local/share/skarn/compliance\-export/\fR
 Compliance API transcript export written by
@@ -2526,22 +3282,24 @@ guide to capture coverage and the data\-protection facts.
 .TP
 \fB%LOCALAPPDATA%\eMicrosoft\eCopilot\eUser Data\eCopilotCodingHome\e, %LOCALAPPDATA%\ePackages\eMicrosoft.MicrosoftOfficeHub_8wekyb3d8bbwe\eLocalCache\eLocal\eMicrosoft\eCopilot\eUser Data\eCopilotCodingHome\e (Windows)\fR
 Copilot in Code session roots. Copilot in Code is the coding workspace of the
-Microsoft Copilot app on Windows; it runs the GitHub Copilot CLI agent, which
-writes one events.jsonl per session under <profile>\esession\-state\e<session
-id>\e in the format the copilot source already reads, and Skarn reports these
-sessions under the separate copilot\-code source. Skarn reads both
-CopilotCodingHome directories when LOCALAPPDATA is an absolute path with a
-drive letter or a UNC prefix; otherwise the source is dropped and counted as
-one dropped source. The second directory is where an MSIX install of the app
-would keep the first; it was absent on the verified install and is read when
-it exists. Every directory inside a CopilotCodingHome directory is a profile
-when it has a session\-state child, whatever its name. Discovery does not
-count or open a session\-state or a profile folder that is a link, a junction
-included. A $COPILOT_HOME that names a Code profile can still name a linked
-folder, unless the link points at a network path, and that profile's
-session\-state still must not be a link. A coding home reached through a link
-is read too, unless the link points at a network path. Inside session\-state
-only a directory whose name is a canonical UUID is read, so the
+Microsoft Copilot app on Windows and macOS; it runs the GitHub Copilot CLI
+agent, which writes one events.jsonl per session under
+<profile>\esession\-state\e<session id>\e in the format the copilot source
+already reads, and Skarn reports these sessions under the separate
+copilot\-code source. On Windows Skarn reads both CopilotCodingHome
+directories when LOCALAPPDATA is an absolute path with a drive letter or a UNC
+prefix; otherwise the source is dropped and counted as one dropped source. The
+second directory is where an MSIX install of the app would keep the first; it
+was absent on the verified install and is read when it exists. Every directory
+inside a CopilotCodingHome directory is a profile when it has a session\-state
+child, whatever its name. Discovery does not count or open a session\-state or
+a profile folder that is a link, a junction included. A $COPILOT_HOME that
+names a Code profile can still name a linked folder, unless the link points at
+a network path or, under \-\-evidence\-home, lies below the evidence home, and
+that profile's session\-state still must not be a link. A coding home reached
+through a link is read too, unless the link points at a network path or, under
+\-\-evidence\-home, lies below the evidence home. Inside session\-state only a
+directory whose name is a canonical UUID is read, so the
 \&.session\-operation\-locks folder and the inuse.<pid>.lock, inuse.<pid>.hold
 and .workspace\-fork.lock files are skipped without being opened and without a
 coverage count. A $COPILOT_HOME that names a directory directly inside a
@@ -2553,18 +3311,28 @@ workspace.yaml whose session.start names the producer copilot\-agent and whose
 first system message opens with You are Copilot in Code; every other session
 stays with the copilot source. This source reads no such root when the root, a
 folder on the way to it, or its session\-state is a link whose target is a
-network path. On macOS and Linux there is no default directory; set
-tools.copilot\-code.sessions_path in ~/.skarn.json to one CopilotCodingHome
-directory to scan a copy of it, which is then the only directory read, and set
-it to null to turn the source off on every platform, including the sessions a
-$COPILOT_HOME reaches. Select the source with \-\-cli copilot\-code; stats
-counts it under copilot_code_count and in the copilot_code column. On Windows
-a session is attributed to the project folder its session.start context names.
-Copilot in Code writes no session.shutdown record, so a session carries no
-recorded cost and shows a dash. Copilot in Code has no resume command, so
-skarn restore prints a comment that names the session and the Code tab of the
-app. Verified against Copilot app `156.0.4314.58` with GitHub Copilot CLI
-`1.0.93`.
+network path; each such link counts once as an unreadable store, while a
+session\-state link inside a profile, including a profile a $COPILOT_HOME
+names, and a linked candidate folder are skipped uncounted, live and under
+\-\-evidence\-home. A session\-state that Skarn cannot classify at all, such
+as one whose probe is refused with access denied on Windows, counts once as a
+component that could not be checked for links. On macOS Skarn reads
+~/Library/Application Support/Microsoft/CopilotAppHost/CopilotCodingHome/,
+which the macOS entry under FILES describes. On Linux there is no default
+directory; set tools.copilot\-code.sessions_path in ~/.skarn.json to one
+CopilotCodingHome directory to scan a copy of it, which is then the only
+directory read on any platform, and set it to null to turn the source off on
+every platform, including the sessions a $COPILOT_HOME reaches. Select the
+source with \-\-cli copilot\-code; stats counts it under copilot_code_count
+and in the copilot_code column. On Windows a session is attributed to the
+project folder its session.start context names. With GitHub Copilot CLI
+`1.0.93` Copilot in Code wrote no session.shutdown record, so a session
+carries no recorded cost and shows a dash; on macOS with GitHub Copilot CLI
+`1.0.108` a session that was closed wrote one holding its totals since it
+started, and a session continued after that wrote another, so Skarn reads the
+totals from the last one. Copilot in Code has no resume command, so skarn
+restore prints a comment that names the session and the Code tab of the app.
+Verified against Copilot app `156.0.4314.58` with GitHub Copilot CLI `1.0.93`.
 .TP
 \fB%LOCALAPPDATA%\eMicrosoft\eCopilot\eUser Data\eCopilotCodingHome\e<profile>\esession\-state\e<session id>\efiles\e, ...\eresearch\e, ...\echeckpoints\e (Windows)\fR
 Copilot in Code session artifacts: the files, research and checkpoints folders
@@ -2580,60 +3348,67 @@ a session with more than 512 files stops at that cap and counts one more such
 record. A finding in one of these files carries the content source artifact
 and the folder name, files, research or checkpoints, as its tool name. Only
 the copilot\-code source reads these folders; the session folders of the
-standalone Copilot CLI are not read. On macOS and Linux the same folders are
-read in the copy that tools.copilot\-code.sessions_path names. The recall
-commands never show this text. The cached scan of skarn serve is not refreshed
-when only one of these files changes; a change to the transcript, or a
-session\-store.db row change that moves the session's updated time, refreshes
-it. Verified against Copilot app `156.0.4314.58` with GitHub Copilot CLI
-`1.0.93`.
+standalone Copilot CLI are not read. On macOS the same folders are read under
+~/Library/Application
+Support/Microsoft/CopilotAppHost/CopilotCodingHome/<profile>/session\-state/<session
+id>/, and on Linux in the copy that tools.copilot\-code.sessions_path names.
+The recall commands never show this text. The cached scan of skarn serve is
+not refreshed when only one of these files changes; a change to the
+transcript, or a session\-store.db row change that moves the session's updated
+time, refreshes it. Verified against Copilot app `156.0.4314.58` with GitHub
+Copilot CLI `1.0.93`.
 .TP
 \fB%LOCALAPPDATA%\eMicrosoft\eCopilot\eUser Data\eCopilotCodingHome\e<profile>\esession\-store.db (Windows)\fR
 Copilot in Code session index, a SQLite database the app keeps in each
 profile. Skarn reads it for every profile under a CopilotCodingHome directory
 and for a $COPILOT_HOME that names a Code profile, never for any other
-$COPILOT_HOME; on macOS and Linux it is read in the copy that
-tools.copilot\-code.sessions_path names. Nothing is written under the profile
-or under the temporary directory, and SQLite never opens a file of the store,
-because it creates a missing session\-store.db\-wal or session\-store.db\-shm
-even for a read\-only connection. Skarn reads the database and its
-write\-ahead log into memory, applies the committed write\-ahead log frames
-the way SQLite's own recovery does, and opens the resulting image read\-only
-in memory. On Windows it opens the files with shared access and takes no lock
-on them. A frame that fails its salt or checksum ends the replay, and frames
-after the last commit are ignored. Skarn refuses a store when the database and
-its write\-ahead log together exceed 192 MiB, and when the database they
-describe would exceed that size; a store near that size holds its image in
-memory while its rows are read. A store that keeps changing during the read, a
-page that neither the database nor its write\-ahead log holds, and a
-non\-empty session\-store.db\-journal, a rollback journal, each make the store
-unreadable. The tables read are sessions (id, cwd, repository, branch,
-summary, and the created and updated times), turns, checkpoints,
-forge_trajectory_events (command, output and event value) and the full\-text
-rows of search_index, which are read from its plain search_index_content
-table. A full\-text row of type turn is skipped when the store has a turns
-table, whose rows already hold its text, and read when the store has none.
-Skarn does not read session_files, session_refs, assistant_usage_events,
-dynamic_context_items or forge_skill_proposals. Only live rows are read: text
-that a deleted session leaves outside the live rows, in superseded
-write\-ahead log frames or in freelist pages, is not read, and this is a known
-gap. Rows of a session whose folder exists attach to that session: turn text
-is scanned as user message and assistant message, checkpoint fields and
-full\-text rows as artifact, commands as tool input, outputs as tool result,
-and the summary, cwd, branch and repository as user message, each with the
-tool name `session\-store.db <table>`, for example `session\-store.db turns`.
-These rows never change that session's message counts or what the recall
-commands show for it, and the cached scan of skarn serve is not refreshed by a
-row change that leaves the session's updated time unchanged. A session whose
-folder is gone is reported as its own copilot\-code session whose file is the
-session\-store.db path; skarn recent, messages, search and export list it,
-masked as every recall command masks, and it moves no coverage count. A store
-that cannot be opened or has an unknown schema counts as one unreadable store,
-and the transcripts are scanned as before. Rows whose session id is not a
-UUID, and a cell over 16 MiB of a session with no folder, count as one
-incomplete session per database; a cell over 16 MiB of a session whose folder
-exists counts as a record that could not be read. Verified against Copilot app
-`156.0.4314.58` with GitHub Copilot CLI `1.0.93`.
+$COPILOT_HOME; on macOS it is read at ~/Library/Application
+Support/Microsoft/CopilotAppHost/CopilotCodingHome/<profile>/session\-store.db,
+and on Linux in the copy that tools.copilot\-code.sessions_path names. Nothing
+is written under the profile or under the temporary directory, and SQLite
+never opens a file of the store, because it creates a missing
+session\-store.db\-wal or session\-store.db\-shm even for a read\-only
+connection. Skarn reads the database and its write\-ahead log into memory,
+applies the committed write\-ahead log frames the way SQLite's own recovery
+does, and opens the resulting image read\-only in memory. On Windows it opens
+the files with shared access and takes no lock on them. A frame that fails its
+salt or checksum ends the replay, and frames after the last commit are
+ignored. A store whose database and write\-ahead log together exceed 192 MiB,
+whose described database would, or whose in\-memory image cannot be allocated,
+is read in place from the same files through read\-only handles Skarn holds
+itself, with its write\-ahead log rows; its index rows count against 192 MiB
+per store and 384 MiB across profiles, and a store over either limit, or whose
+read in place would track more than 524,288 pages, is unreadable. Any other
+store holds its image in memory while its rows are read. A store that keeps
+changing during the read, a page that neither the database nor its
+write\-ahead log holds, and a non\-empty session\-store.db\-journal, a
+rollback journal, each make the store unreadable. The tables read are sessions
+(id, cwd, repository, branch, summary, and the created and updated times),
+turns, checkpoints, forge_trajectory_events (command, output and event value)
+and the full\-text rows of search_index, which are read from its plain
+search_index_content table. A full\-text row of type turn is skipped when the
+store has a turns table, whose rows already hold its text, and read when the
+store has none. Skarn does not read session_files, session_refs,
+assistant_usage_events, dynamic_context_items or forge_skill_proposals. Only
+live rows are read: text that a deleted session leaves outside the live rows,
+in superseded write\-ahead log frames or in freelist pages, is not read, and
+this is a known gap. Rows of a session whose folder exists attach to that
+session: turn text is scanned as user message and assistant message,
+checkpoint fields and full\-text rows as artifact, commands as tool input,
+outputs as tool result, and the summary, cwd, branch and repository as user
+message, each with the tool name `session\-store.db <table>`, for example
+`session\-store.db turns`. These rows never change that session's message
+counts or what the recall commands show for it, and the cached scan of skarn
+serve is not refreshed by a row change that leaves the session's updated time
+unchanged. A session whose folder is gone is reported as its own copilot\-code
+session whose file is the session\-store.db path; skarn recent, messages,
+search and export list it, masked as every recall command masks, and it moves
+no coverage count. A store that cannot be opened or has an unknown schema
+counts as one unreadable store, and the transcripts are scanned as before.
+Rows whose session id is not a UUID, and a cell over 16 MiB of a session with
+no folder, count as one incomplete session per database; a cell over 16 MiB of
+a session whose folder exists counts as a record that could not be read.
+Verified against Copilot app `156.0.4314.58` with GitHub Copilot CLI `1.0.93`.
 .TP
 \fB%LOCALAPPDATA%\ecopilot\-tmp\e, %LOCALAPPDATA%\ePackages\eMicrosoft.MicrosoftOfficeHub_8wekyb3d8bbwe\eLocalCache\eLocal\ecopilot\-tmp\e (Windows)\fR
 Copilot in Code tool\-output spill files. Skarn follows at most one spill file
@@ -2648,27 +3423,34 @@ missing file, a link, a file whose first 8 KiB holds a zero byte and a path
 that fails a check are ignored; a file that cannot be read or is over 16 MiB
 counts as a record that could not be read. The recall commands never show
 spill text. These directories are read on Windows only, and only when
-LOCALAPPDATA is an absolute path with a drive letter or a UNC prefix. No spill
-file was observed on Copilot app `156.0.4314.58` with GitHub Copilot CLI
-`1.0.93`.
+LOCALAPPDATA is an absolute path with a drive letter or a UNC prefix. On macOS
+the spilled part of a result is not read: Copilot app `158.0.4370.33` saved an
+oversized result as a file directly in the per\-user temporary directory, and
+a tool result that holds a recognized spill reference counts as one record
+that could not be read, a coverage gap. A recognized reference is a line that
+is `Saved to: ` and an absolute path, or a line that opens with `Output too
+large to read at once (` and ends with `). Saved to: ` and an absolute path,
+where the file name contains copilot\-tool\-output\- and the path ends in
+\&.txt. No spill file was observed on Copilot app `156.0.4314.58` with GitHub
+Copilot CLI `1.0.93`.
 .TP
 \fB%LOCALAPPDATA%\eMicrosoft\eCopilot\eUser Data\eCopilotCodingHome\e<profile>\ehooks\eskarn.json, the same file under the MSIX twin of that directory (Windows)\fR
 See \fBskarn\-setup\fR(1), \fBskarn\-doctor\fR(1).
 .TP
 \fB%LOCALAPPDATA%\eMicrosoft\eCopilot\eUser Data\eCopilotCodingHome\e<profile>\emcp\-config.json, %LOCALAPPDATA%\eMicrosoft\eCopilot\eUser Data\eCopilotCodingHome\e<profile>\econfig.json, %LOCALAPPDATA%\eMicrosoft\eCopilot\eUser Data\eCopilotCodingHome\e<profile>\esettings.json (Windows)\fR
-See \fBskarn\-vet\fR(1).
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
 .TP
 \fB%LOCALAPPDATA%\eMicrosoft\eCopilot\eUser Data\eCopilotCodingHome\e<profile>\edata.db (Windows)\fR
-See \fBskarn\-vet\fR(1).
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
 .TP
 \fB%LOCALAPPDATA%\eMicrosoft\eCopilot\eUser Data\eCopilotCodingHome\e<profile>\ehooks\e (Windows)\fR
-See \fBskarn\-vet\fR(1).
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
 .TP
 \fB~/.copilot/hooks/\fR
-See \fBskarn\-vet\fR(1).
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
 .TP
 \fB./.github/hooks/\fR
-See \fBskarn\-vet\fR(1).
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
 .TP
 \fB~/.cursor/projects/<workspace>/terminals/<id>.txt, ~/.cursor/projects/<workspace>/agent\-tools/<id>.txt\fR
 Cursor agent terminal and tool output files. Cursor writes one text file under
@@ -2778,6 +3560,164 @@ See \fBskarn\-setup\fR(1), \fBskarn\-doctor\fR(1).
 .TP
 \fB.amazonq/cli\-agents/\fR
 See \fBskarn\-doctor\fR(1).
+.TP
+\fB~/.kiro/settings/mcp.json\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB~/.kiro/mcp.json\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB./.kiro/settings/mcp.json\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB~/.kiro/hooks/\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB./.kiro/hooks/\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB~/.kiro/settings/permissions.yaml\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB~/.kiro/workspace\-roots/<key>/permissions.yaml\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB~/.aws/amazonq/settings/mcp.json\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB~/.aws/amazonq/agents/\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB~/.aws/amazonq/cli\-agents/\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB~/.kiro/agents/\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB./.kiro/agents/\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB./.amazonq/cli\-agents/\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB./.amazonq/mcp.json\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB~/.cline/data/settings/cline_mcp_settings.json\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB~/.cline/data/globalState.json\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB~/.cline/data/settings/global\-settings.json\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB~/.cline/data/secrets.json\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB~/.cline/data/settings/providers.json\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB./.clinerules/hooks/\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB./.cline/hooks/\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB~/Documents/Cline/Hooks/\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB~/.cline/hooks/\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB./.codex/config.toml, ./.codex/hooks.json\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB./.cursor/mcp.json, ./.cursor/hooks.json\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB./.github/mcp.json\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB./.gemini/settings.json\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB~/Library/Application Support/Code/User/settings.json (macOS), ~/.config/Code/User/settings.json (Linux), %APPDATA%\eCode\eUser\esettings.json (Windows), ~/Library/Application Support/Code/User/profiles/<key>/settings.json (macOS), ~/.config/Code/User/profiles/<key>/settings.json (Linux), %APPDATA%\eCode\eUser\eprofiles\e<key>\esettings.json (Windows)\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB./.vscode/settings.json\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB~/Library/Application Support/Microsoft/CopilotAppHost/CopilotCodingHome/ (macOS)\fR
+Copilot in Code session roots on macOS. The Microsoft Copilot app on macOS
+keeps each profile in this directory, with one events.jsonl per session under
+<profile>/session\-state/<session id>/, and Skarn reads it with no environment
+variable set, by the rules the Windows CopilotCodingHome entry states for
+profiles, links, canonical UUID session folders and $COPILOT_HOME. Session
+discovery reads this directory when the home directory is an absolute path, a
+network spelling included; setup, doctor's hook check and vet still read it
+only when the home directory is not spelled as a network path. With no
+absolute home it is not read, and the source counts as one dropped source
+unless a $COPILOT_HOME names a profile or another root that Skarn reads. No
+second directory was found on the verified install. The app closed a session
+after 10 minutes without a request, and the session then wrote a
+session.shutdown record holding its totals since it started; a session
+continued after that wrote another, and Skarn reads the token totals from the
+last one. Before its first close, a session's transcript held one
+session.usage_record per request and no session.shutdown record, and Skarn
+reads an open session's token totals from those records; a continued session
+shows its last session.shutdown record's totals plus the usage records written
+since. On the verified install those records stated no AI credits for the
+bring\-your\-own\-key model in use, so an open session shows no cost until it
+closes. Verified against Copilot app `158.0.4370.33` with GitHub Copilot CLI
+`1.0.108`.
+.TP
+\fB~/Library/Application Support/Microsoft/CopilotAppHost/CopilotCodingHome/<profile>/session\-state/<session id>/files/, .../research/, .../checkpoints/ (macOS)\fR
+Copilot in Code session artifacts on macOS: the files, research and
+checkpoints folders inside a session folder, read by the bounds and rules the
+Windows entry for these folders states. The verified session held all three
+folders. Verified against Copilot app `158.0.4370.33` with GitHub Copilot CLI
+`1.0.108`.
+.TP
+\fB~/Library/Application Support/Microsoft/CopilotAppHost/CopilotCodingHome/<profile>/session\-store.db (macOS)\fR
+Copilot in Code session index on macOS, read as the Windows entry for
+session\-store.db states. Copilot app `158.0.4370.33` kept it at schema
+version 9 with the sessions, turns and checkpoints tables, and Skarn read it
+without counting an unreadable store. Verified against Copilot app
+`158.0.4370.33` with GitHub Copilot CLI `1.0.108`.
+.TP
+\fB~/Library/Application Support/Microsoft/CopilotAppHost/CopilotCodingHome/<profile>/hooks/skarn.json (macOS)\fR
+See \fBskarn\-setup\fR(1), \fBskarn\-doctor\fR(1).
+.TP
+\fB~/Library/Application Support/Microsoft/CopilotAppHost/CopilotCodingHome/<profile>/mcp\-config.json, ~/Library/Application Support/Microsoft/CopilotAppHost/CopilotCodingHome/<profile>/config.json, ~/Library/Application Support/Microsoft/CopilotAppHost/CopilotCodingHome/<profile>/settings.json (macOS)\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB~/Library/Application Support/Microsoft/CopilotAppHost/CopilotCodingHome/<profile>/data.db (macOS)\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB~/Library/Application Support/Microsoft/CopilotAppHost/CopilotCodingHome/<profile>/hooks/ (macOS)\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude\-dev/settings/cline_mcp_settings.json (macOS), ~/.config/Code/User/globalStorage/saoudrizwan.claude\-dev/settings/cline_mcp_settings.json (Linux), %APPDATA%\eCode\eUser\eglobalStorage\esaoudrizwan.claude\-dev\esettings\ecline_mcp_settings.json (Windows)\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB~/Library/Application Support/Cursor/User/globalStorage/saoudrizwan.claude\-dev/settings/cline_mcp_settings.json (macOS), ~/.config/Cursor/User/globalStorage/saoudrizwan.claude\-dev/settings/cline_mcp_settings.json (Linux), %APPDATA%\eCursor\eUser\eglobalStorage\esaoudrizwan.claude\-dev\esettings\ecline_mcp_settings.json (Windows)\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB~/.cursor/cli\-config.json\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB./.cursor/cli.json\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB~/.gemini/policies/\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB~/.codex/rules/\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
+.TP
+\fB./.codex/rules/\fR
+See \fBskarn\-vet\fR(1), \fBskarn\-assess\fR(1).
 .SH EXAMPLES
 Show which license this machine is using, where it came from, and when it
 expires.
@@ -3044,6 +3984,43 @@ project counts.
 skarn vet \-\-all\-projects \-\-format json
 .EE
 .RE
+.PP
+List recent sessions from Alice's copied home.
+.RS 4
+.EX
+skarn recent \-\-evidence\-home /cases/alice/home
+.EE
+.RE
+.PP
+Scan Alice's copied home, write JSON and return a failure if coverage is
+incomplete.
+.RS 4
+.EX
+skarn check \-\-evidence\-home /cases/alice/home \-\-fail\-on\-scan\-error \-\-format json
+.EE
+.RE
+.PP
+Write a redacted Markdown report beside Alice's copied home.
+.RS 4
+.EX
+skarn assess \-\-evidence\-home /cases/alice/home \-o /cases/alice/report.md
+.EE
+.RE
+.PP
+Check the assistant configuration in Alice's copied home.
+.RS 4
+.EX
+skarn vet \-\-evidence\-home /cases/alice/home
+.EE
+.RE
+.PP
+Print one inventory record for the sessions and configuration in Alice's
+copied home.
+.RS 4
+.EX
+skarn inventory \-\-evidence\-home /cases/alice/home \-\-format ndjson
+.EE
+.RE
 .SH SECURITY
 Skarn scans locally and makes no network connection by default. Secrets are
 redacted in check's reports, in everything the recall commands print (search,
@@ -3074,7 +4051,8 @@ skarn vet reads the AI assistant configuration files listed under FILES
 read\-only: it opens each one for reading, never writes, rewrites, or removes
 one, and makes no network call. It reports what it finds and leaves every
 decision about the configuration to you. \-\-offline is accepted for parity
-and changes nothing.
+and changes nothing. skarn assess reads the same files the same way for its
+saved permission rules section.
 .PP
 skarn mcp reads the same session stores as assess and the same configuration
 files as vet, read\-only and with no network call, and answers only the AI
